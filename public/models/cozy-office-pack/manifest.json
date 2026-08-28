@@ -1,0 +1,487 @@
+{
+  "sourcePack": "/Users/ata/Downloads/Office Pack-zip",
+  "style": "original cozy low-poly procedural OBJ interpretations",
+  "count": 120,
+  "assets": [
+    {
+      "name": "Adjustable Desk",
+      "file": "adjustable-desk.obj"
+    },
+    {
+      "name": "Air Vent",
+      "file": "air-vent.obj"
+    },
+    {
+      "name": "Analog clock",
+      "file": "analog-clock.obj"
+    },
+    {
+      "name": "Bathroom Sink",
+      "file": "bathroom-sink.obj"
+    },
+    {
+      "name": "Bathroom Toilet Paper",
+      "file": "bathroom-toilet-paper.obj"
+    },
+    {
+      "name": "Binder",
+      "file": "binder.obj"
+    },
+    {
+      "name": "Bins",
+      "file": "bins.obj"
+    },
+    {
+      "name": "Blank Picture Frame",
+      "file": "blank-picture-frame.obj"
+    },
+    {
+      "name": "Book Stack",
+      "file": "book-stack.obj"
+    },
+    {
+      "name": "Briefcase",
+      "file": "briefcase.obj"
+    },
+    {
+      "name": "CCTV Camera",
+      "file": "cctv-camera.obj"
+    },
+    {
+      "name": "Cabinet",
+      "file": "cabinet.obj"
+    },
+    {
+      "name": "Cabinet Bed Drawer Tabl",
+      "file": "cabinet-bed-drawer-tabl.obj"
+    },
+    {
+      "name": "Calendar",
+      "file": "calendar.obj"
+    },
+    {
+      "name": "Cardboard Box",
+      "file": "cardboard-box.obj"
+    },
+    {
+      "name": "Cardboard Boxes",
+      "file": "cardboard-boxes.obj"
+    },
+    {
+      "name": "Cardboard Boxes-pMdXdrUHvX",
+      "file": "cardboard-boxes-pmdxdruhvx.obj"
+    },
+    {
+      "name": "Ceiling Fan",
+      "file": "ceiling-fan.obj"
+    },
+    {
+      "name": "Ceiling Light",
+      "file": "ceiling-light.obj"
+    },
+    {
+      "name": "Chair",
+      "file": "chair.obj"
+    },
+    {
+      "name": "Coat rack",
+      "file": "coat-rack.obj"
+    },
+    {
+      "name": "Coffee Table",
+      "file": "coffee-table.obj"
+    },
+    {
+      "name": "Coffee cup",
+      "file": "coffee-cup.obj"
+    },
+    {
+      "name": "Computer",
+      "file": "computer.obj"
+    },
+    {
+      "name": "Computer Screen",
+      "file": "computer-screen.obj"
+    },
+    {
+      "name": "Computer mouse",
+      "file": "computer-mouse.obj"
+    },
+    {
+      "name": "Couch Medium",
+      "file": "couch-medium.obj"
+    },
+    {
+      "name": "Couch Small",
+      "file": "couch-small.obj"
+    },
+    {
+      "name": "Couch | Wide",
+      "file": "couch-wide.obj"
+    },
+    {
+      "name": "Crushed Soda Can",
+      "file": "crushed-soda-can.obj"
+    },
+    {
+      "name": "Cup",
+      "file": "cup.obj"
+    },
+    {
+      "name": "Curtains Double",
+      "file": "curtains-double.obj"
+    },
+    {
+      "name": "Cushions",
+      "file": "cushions.obj"
+    },
+    {
+      "name": "Dartboard",
+      "file": "dartboard.obj"
+    },
+    {
+      "name": "Darts",
+      "file": "darts.obj"
+    },
+    {
+      "name": "Desk",
+      "file": "desk.obj"
+    },
+    {
+      "name": "Desk Toy",
+      "file": "desk-toy.obj"
+    },
+    {
+      "name": "Desk-7ban171PzCS",
+      "file": "desk-7ban171pzcs.obj"
+    },
+    {
+      "name": "Desk-EtJlOllzbf",
+      "file": "desk-etjlollzbf.obj"
+    },
+    {
+      "name": "Desk-ISpMh81QGq",
+      "file": "desk-ispmh81qgq.obj"
+    },
+    {
+      "name": "Doorway",
+      "file": "doorway.obj"
+    },
+    {
+      "name": "Doorway Front",
+      "file": "doorway-front.obj"
+    },
+    {
+      "name": "Dual Monitors on sit-stand arm",
+      "file": "dual-monitors-on-sit-stand-arm.obj"
+    },
+    {
+      "name": "Electrical outlet",
+      "file": "electrical-outlet.obj"
+    },
+    {
+      "name": "File Cabinet",
+      "file": "file-cabinet.obj"
+    },
+    {
+      "name": "Fire Exit Sign",
+      "file": "fire-exit-sign.obj"
+    },
+    {
+      "name": "Fire Exit Sign-0ywPpb36cyK",
+      "file": "fire-exit-sign-0ywppb36cyk.obj"
+    },
+    {
+      "name": "Fire Extinguisher",
+      "file": "fire-extinguisher.obj"
+    },
+    {
+      "name": "Houseplant",
+      "file": "houseplant.obj"
+    },
+    {
+      "name": "Houseplant-VtJh4Irl4w",
+      "file": "houseplant-vtjh4irl4w.obj"
+    },
+    {
+      "name": "Houseplant-bfLOqIV5uP",
+      "file": "houseplant-bfloqiv5up.obj"
+    },
+    {
+      "name": "Houseplant-e9oRt-Ct6js",
+      "file": "houseplant-e9ort-ct6js.obj"
+    },
+    {
+      "name": "Keyboard",
+      "file": "keyboard.obj"
+    },
+    {
+      "name": "Keyboard-fOy2zvPJAj-",
+      "file": "keyboard-foy2zvpjaj.obj"
+    },
+    {
+      "name": "Ladder",
+      "file": "ladder.obj"
+    },
+    {
+      "name": "Lamp",
+      "file": "lamp.obj"
+    },
+    {
+      "name": "Laptop ",
+      "file": "laptop.obj"
+    },
+    {
+      "name": "Laptop bag",
+      "file": "laptop-bag.obj"
+    },
+    {
+      "name": "Light Cube",
+      "file": "light-cube.obj"
+    },
+    {
+      "name": "Light Desk",
+      "file": "light-desk.obj"
+    },
+    {
+      "name": "Light Floor",
+      "file": "light-floor.obj"
+    },
+    {
+      "name": "Light Icosahedron",
+      "file": "light-icosahedron.obj"
+    },
+    {
+      "name": "Light Switch",
+      "file": "light-switch.obj"
+    },
+    {
+      "name": "MS Gundam RX-78-2 with weapons",
+      "file": "ms-gundam-rx78-with-weapons.obj"
+    },
+    {
+      "name": "Magazine",
+      "file": "magazine.obj"
+    },
+    {
+      "name": "Manhole cover",
+      "file": "manhole-cover.obj"
+    },
+    {
+      "name": "Medium Book Shelf",
+      "file": "medium-book-shelf.obj"
+    },
+    {
+      "name": "Message board",
+      "file": "message-board.obj"
+    },
+    {
+      "name": "Monitor",
+      "file": "monitor.obj"
+    },
+    {
+      "name": "Mouse",
+      "file": "mouse.obj"
+    },
+    {
+      "name": "Mousepad",
+      "file": "mousepad.obj"
+    },
+    {
+      "name": "Mug",
+      "file": "mug.obj"
+    },
+    {
+      "name": "Mug With Office Tool",
+      "file": "mug-with-office-tool.obj"
+    },
+    {
+      "name": "Night Stand",
+      "file": "night-stand.obj"
+    },
+    {
+      "name": "Notebook",
+      "file": "notebook.obj"
+    },
+    {
+      "name": "Office Chair",
+      "file": "office-chair.obj"
+    },
+    {
+      "name": "Office Phone",
+      "file": "office-phone.obj"
+    },
+    {
+      "name": "Office Printer ",
+      "file": "office-printer.obj"
+    },
+    {
+      "name": "Pens",
+      "file": "pens.obj"
+    },
+    {
+      "name": "Phone",
+      "file": "phone.obj"
+    },
+    {
+      "name": "Plant - White Pot",
+      "file": "plant-white-pot.obj"
+    },
+    {
+      "name": "Polaroids",
+      "file": "polaroids.obj"
+    },
+    {
+      "name": "Potted Plant",
+      "file": "potted-plant.obj"
+    },
+    {
+      "name": "Printer",
+      "file": "printer.obj"
+    },
+    {
+      "name": "Rubik's cube",
+      "file": "rubik-s-cube.obj"
+    },
+    {
+      "name": "Rug",
+      "file": "rug.obj"
+    },
+    {
+      "name": "Rug Round",
+      "file": "rug-round.obj"
+    },
+    {
+      "name": "Shelf",
+      "file": "shelf.obj"
+    },
+    {
+      "name": "Shelf Small",
+      "file": "shelf-small.obj"
+    },
+    {
+      "name": "Skateboard",
+      "file": "skateboard.obj"
+    },
+    {
+      "name": "Small Stack of Paper",
+      "file": "small-stack-of-paper.obj"
+    },
+    {
+      "name": "Soda",
+      "file": "soda.obj"
+    },
+    {
+      "name": "Soda Can",
+      "file": "soda-can.obj"
+    },
+    {
+      "name": "Standing Desk",
+      "file": "standing-desk.obj"
+    },
+    {
+      "name": "Stapler",
+      "file": "stapler.obj"
+    },
+    {
+      "name": "Sticky Notes",
+      "file": "sticky-notes.obj"
+    },
+    {
+      "name": "Table",
+      "file": "table.obj"
+    },
+    {
+      "name": "Table Large Circular",
+      "file": "table-large-circular.obj"
+    },
+    {
+      "name": "Table Tennis Paddle",
+      "file": "table-tennis-paddle.obj"
+    },
+    {
+      "name": "Table tennis table",
+      "file": "table-tennis-table.obj"
+    },
+    {
+      "name": "Tissue Box",
+      "file": "tissue-box.obj"
+    },
+    {
+      "name": "Toilet",
+      "file": "toilet.obj"
+    },
+    {
+      "name": "Toilet Paper stack",
+      "file": "toilet-paper-stack.obj"
+    },
+    {
+      "name": "Towel Rack",
+      "file": "towel-rack.obj"
+    },
+    {
+      "name": "Trash Bin",
+      "file": "trash-bin.obj"
+    },
+    {
+      "name": "Trashcan",
+      "file": "trashcan.obj"
+    },
+    {
+      "name": "Trashcan Small",
+      "file": "trashcan-small.obj"
+    },
+    {
+      "name": "Trophy",
+      "file": "trophy.obj"
+    },
+    {
+      "name": "Various Stacks of Paper",
+      "file": "various-stacks-of-paper.obj"
+    },
+    {
+      "name": "Vending Machine",
+      "file": "vending-machine.obj"
+    },
+    {
+      "name": "Wall Art 02",
+      "file": "wall-art-02.obj"
+    },
+    {
+      "name": "Wall Art 03",
+      "file": "wall-art-03.obj"
+    },
+    {
+      "name": "Wall Art 05",
+      "file": "wall-art-05.obj"
+    },
+    {
+      "name": "Wall Art 06",
+      "file": "wall-art-06.obj"
+    },
+    {
+      "name": "Wall Shelf",
+      "file": "wall-shelf.obj"
+    },
+    {
+      "name": "Water Cooler",
+      "file": "water-cooler.obj"
+    },
+    {
+      "name": "Webcam",
+      "file": "webcam.obj"
+    },
+    {
+      "name": "Whiteboard",
+      "file": "whiteboard.obj"
+    },
+    {
+      "name": "Window Blinds",
+      "file": "window-blinds.obj"
+    },
+    {
+      "name": "clipboard",
+      "file": "clipboard.obj"
+    }
+  ]
+}

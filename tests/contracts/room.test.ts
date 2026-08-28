@@ -38,7 +38,8 @@ describe("canonical room contract", () => {
 
     expect(view.roomId).toBe("demo");
     expect(view.phase).toBe("input");
-    expect(view.participants).toHaveLength(3);
+    expect(view.participants).toHaveLength(4);
     expect(view.recentActivity[0]?.action).toBe("room.created");
+    expect(view.constraints).toHaveLength(6);
   });
 });
