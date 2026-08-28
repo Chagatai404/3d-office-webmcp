@@ -92,6 +92,78 @@ h1 {
   font-weight: 800;
 }
 
+.metric.small {
+  font-size: 1.15rem;
+}
+
+.room-shell h1 {
+  max-width: 18ch;
+  font-size: clamp(2.4rem, 6vw, 4.5rem);
+}
+
+.workspace-section {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #2a3745;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+}
+
+.card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem;
+  border: 1px solid #2a3745;
+  border-radius: 0.8rem;
+  background: var(--surface);
+}
+
+button,
+input,
+select {
+  min-height: 2.5rem;
+  border: 1px solid #3a4b5d;
+  border-radius: 0.55rem;
+  font: inherit;
+}
+
+button {
+  padding: 0.6rem 0.8rem;
+  background: var(--accent);
+  color: #07251d;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+input,
+select {
+  padding: 0.6rem;
+  background: #0c1118;
+  color: var(--text);
+}
+
+.form {
+  display: grid;
+  gap: 1rem;
+  max-width: 42rem;
+}
+
+.form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+}
+
+.button.secondary {
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+}
+
 .note {
   color: var(--muted);
   font-size: 0.9rem;

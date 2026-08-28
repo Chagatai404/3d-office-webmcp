@@ -39,6 +39,7 @@ export const participantSchema = z
     name: z.string().min(1),
     role: z.string().min(1),
     kind: z.enum(["human", "simulation"]),
+    isClaimed: z.boolean(),
     requiredForApproval: z.boolean(),
     createdAt: timestampSchema,
   })

@@ -9,6 +9,7 @@ export interface VisualParticipant {
   name: string;
   role: string;
   kind: "human" | "simulation";
+  isClaimed: boolean;
   isSelf: boolean;
   vote: VoteChoice | null;
   hasApprovedCurrentDecision: boolean;
@@ -86,6 +87,7 @@ export function createRoomVisualizationState(
       name: participant.name,
       role: participant.role,
       kind: participant.kind,
+      isClaimed: participant.isClaimed,
       isSelf: participant.id === room.selfParticipantId,
       vote: votesByParticipant.get(participant.id) ?? null,
       hasApprovedCurrentDecision: approvals.has(participant.id),
