@@ -2,12 +2,14 @@ import {
   addPositionInputSchema,
   claimSeatInputSchema,
   raiseObjectionInputSchema,
+  proposeTradeoffInputSchema,
   roomPhaseSchema,
   submitProposalInputSchema,
   type ActionResult,
   type AddPositionInput,
   type ClaimSeatInput,
   type RaiseObjectionInput,
+  type ProposeTradeoffInput,
   type RoomPhase,
   type RoomState,
   type SubmitProposalInput,
@@ -129,6 +131,25 @@ export async function raiseParticipantObjection(
   const room = await prepareMutation(repository, roomId, context, ["deliberation"]);
   if ("ok" in room) return room;
   return repository.raiseObjection(roomId, parsed.data, context);
+}
+
+export async function proposeParticipantTradeoff(
+  repository: RoomRepository,
+  roomId: string,
+  input: ProposeTradeoffInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = proposeTradeoffInputSchema.safeParse(input);
+  if (!parsed.success || parsed.data.revisedProposal === null) {
+    return failure(
+      "VALIDATION_ERROR",
+      "A trade-off must include a revised proposal in this milestone.",
+      context.expectedRoomVersion,
+    );
+  }
+  const room = await prepareMutation(repository, roomId, context, ["deliberation"]);
+  if ("ok" in room) return room;
+  return repository.proposeTradeoff(roomId, parsed.data, context);
 }
 
 export async function advanceDemoRoomPhase(

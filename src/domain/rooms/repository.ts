@@ -4,6 +4,7 @@ import type {
   AddPositionInput,
   ClaimSeatInput,
   RaiseObjectionInput,
+  ProposeTradeoffInput,
   RoomPhase,
   RoomState,
   SubmitProposalInput,
@@ -39,6 +40,11 @@ export interface RoomRepository {
   raiseObjection(
     roomId: string,
     input: RaiseObjectionInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  proposeTradeoff(
+    roomId: string,
+    input: ProposeTradeoffInput,
     context: MutationContext,
   ): Promise<ActionResult>;
   advanceDemoPhase(

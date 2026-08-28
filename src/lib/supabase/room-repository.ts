@@ -5,6 +5,7 @@ import {
   type AddPositionInput,
   type ClaimSeatInput,
   type RaiseObjectionInput,
+  type ProposeTradeoffInput,
   type RoomPhase,
   type SubmitProposalInput,
 } from "@/contracts/room";
@@ -49,6 +50,26 @@ export class SupabaseRoomRepository implements RoomRepository {
       p_room_id: roomId, p_expected_version: context.expectedRoomVersion,
       p_proposal_id: input.proposalId, p_constraint_id: input.constraintId,
       p_reason: input.reason, p_severity: input.severity, p_origin: context.actor.origin,
+    });
+  }
+
+  proposeTradeoff(roomId: string, input: ProposeTradeoffInput, context: MutationContext) {
+    const revisedProposal = input.revisedProposal;
+    if (!revisedProposal) {
+      throw new Error("A revised proposal is required for participant trade-offs.");
+    }
+    return this.call("propose_participant_tradeoff", {
+      p_room_id: roomId,
+      p_expected_version: context.expectedRoomVersion,
+      p_conflict_ids: input.conflictIds,
+      p_description: input.description,
+      p_expected_effect: input.expectedEffect,
+      p_revised_title: revisedProposal.title,
+      p_revised_summary: revisedProposal.summary,
+      p_revised_rationale: revisedProposal.rationale,
+      p_expected_outcomes: revisedProposal.expectedOutcomes,
+      p_referenced_constraint_ids: revisedProposal.referencedConstraintIds,
+      p_origin: context.actor.origin,
     });
   }
 

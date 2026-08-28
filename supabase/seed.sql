@@ -79,3 +79,19 @@ insert into public.constraints (
 insert into public.proposals (
   id, room_id, participant_id, title, summary, rationale, status, created_at
 ) values ('authorization-proposal', 'authorization-fixture', 'authorization-participant', 'Private proposal', 'Cross-room proposal.', 'Test fixture.', 'candidate', '2026-08-28T12:00:00Z');
+
+insert into public.conflicts (
+  id, room_id, proposal_id, constraint_id, raised_by_actor_type,
+  raised_by_actor_id, severity, reason, status, created_at, resolved_at
+) values
+  (
+    'seed-conflict-resolved', 'demo', 'seed-proposal-full-rebuild',
+    'constraint-design-consistency', 'system', null, 'warning',
+    'Resolved fixture that must not appear in open issues.', 'resolved',
+    '2026-08-28T12:04:00Z', '2026-08-28T12:05:00Z'
+  ),
+  (
+    'authorization-conflict', 'authorization-fixture', 'authorization-proposal',
+    'authorization-constraint', 'system', null, 'blocking',
+    'Cross-room conflict.', 'open', '2026-08-28T12:04:00Z', null
+  );

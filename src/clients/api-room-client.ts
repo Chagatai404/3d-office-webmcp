@@ -78,9 +78,8 @@ export class ApiRoomClient implements RoomClient {
     return this.mutate(roomId, "objections", input);
   }
 
-  proposeTradeoff(roomId: string, _input: ProposeTradeoffInput): Promise<ActionResult> {
-    void _input;
-    return Promise.resolve(this.notAvailable(roomId, "Trade-offs"));
+  proposeTradeoff(roomId: string, input: ProposeTradeoffInput): Promise<ActionResult> {
+    return this.mutate(roomId, "tradeoffs", input);
   }
 
   castMyVote(roomId: string, _input: CastVoteInput): Promise<ActionResult> {
