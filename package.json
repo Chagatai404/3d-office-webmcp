@@ -19,7 +19,9 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
-    "check": "npm run lint && npm run typecheck && npm run test"
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "test:unit": "vitest run tests/contracts tests/decision tests/webmcp tests/components tests/floorplan tests/visualization tests/room-client",
+    "test:all": "npm run test:unit && npm run test:domain && npm run test:e2e"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",

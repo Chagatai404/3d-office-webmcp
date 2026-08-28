@@ -499,4 +499,9 @@ export interface RoomClient {
     roomId: string,
     input: StartDemoScenarioInput,
   ): Promise<ActionResult>;
+
+  advanceDemoPhase(
+    roomId: string,
+    phase: RoomPhase,
+  ): Promise<ActionResult>;
 }

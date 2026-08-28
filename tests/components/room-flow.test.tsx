@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ParticipantPanel } from "@/components/room/participant-panel";
 import { PositionsPanel } from "@/components/room/positions-panel";
 import { RoomProvider, useRoom } from "@/components/room/room-provider";
-import { resetRoomClient } from "@/room-client/room-client";
+import { setRoomClientForTests } from "@/room-client/room-client";
+import { MockRoomClient } from "@/room-client/mock-room-client";
+import { demoRoom } from "@/fixtures/demo-room";
 import type { RoomVisualizationState } from "@/visualization/room-view-model";
 
 /**
@@ -90,7 +92,7 @@ async function submitForm() {
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   seenVisualizations.length = 0;
-  resetRoomClient();
+  setRoomClientForTests(new MockRoomClient(demoRoom));
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);

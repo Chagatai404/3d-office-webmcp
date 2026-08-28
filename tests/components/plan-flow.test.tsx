@@ -8,7 +8,9 @@ import {
   createFloorPlanState,
   type FloorPlanState,
 } from "@/floorplan/floorplan-view-model";
-import { resetRoomClient } from "@/room-client/room-client";
+import { setRoomClientForTests } from "@/room-client/room-client";
+import { MockRoomClient } from "@/room-client/mock-room-client";
+import { demoRoom } from "@/fixtures/demo-room";
 
 /**
  * Proves the 2D surface rides the same architecture as the 3D one:
@@ -101,7 +103,7 @@ async function submitDialog() {
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   seen.length = 0;
-  resetRoomClient();
+  setRoomClientForTests(new MockRoomClient(demoRoom));
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);

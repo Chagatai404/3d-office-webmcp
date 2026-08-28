@@ -12,8 +12,11 @@ import {
   type JsonValue,
   type Participant,
   type Position,
+  type ResolveObjectionInput,
   type RoomClient,
+  type RoomPhase,
   type RoomState,
+  type StartDemoScenarioInput,
 } from "@/contracts/room";
 
 /**
@@ -139,6 +142,10 @@ export class MockRoomClient implements RoomClient {
     return this.#commit({
       apply: (draft) => {
         draft.selfParticipantId = seat.id;
+        const claimedSeat = draft.participants.find(
+          (participant) => participant.id === seat.id,
+        );
+        if (claimedSeat) claimedSeat.isClaimed = true;
       },
       actor: seat,
       origin: "manual_ui",
@@ -248,6 +255,18 @@ export class MockRoomClient implements RoomClient {
     );
   }
 
+  async resolveObjection(
+    roomId: string,
+    input: ResolveObjectionInput,
+  ): Promise<ActionResult> {
+    void input;
+    return this.#notInThisMilestone(
+      roomId,
+      "deliberation",
+      "Resolving an objection",
+    );
+  }
+
   async proposeTradeoff(roomId: string): Promise<ActionResult> {
     return this.#notInThisMilestone(
       roomId,
@@ -281,6 +300,39 @@ export class MockRoomClient implements RoomClient {
       roomId,
       "finalized",
       "Reading the decision record",
+    );
+  }
+
+  async startDemoScenario(
+    roomId: string,
+    input: StartDemoScenarioInput,
+  ): Promise<ActionResult> {
+    void input;
+    const roomError = this.#requireRoom(roomId);
+    if (roomError) return roomError;
+
+    return fail(
+      "VALIDATION_ERROR",
+      "Starting a demo scenario is not implemented in the mock client.",
+      this.#state.version,
+      "Use ApiRoomClient for backend-backed demo scenario orchestration.",
+    );
+  }
+
+  async advanceDemoPhase(
+    roomId: string,
+    phase: RoomPhase,
+  ): Promise<ActionResult> {
+    void phase;
+
+    const roomError = this.#requireRoom(roomId);
+    if (roomError) return roomError;
+
+    return fail(
+      "VALIDATION_ERROR",
+      "Advancing demo phases is not implemented in the mock client.",
+      this.#state.version,
+      "Use ApiRoomClient for backend-backed demo phase progression.",
     );
   }
 

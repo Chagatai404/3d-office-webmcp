@@ -7,7 +7,9 @@ import { Dock } from "@/components/shell/dock";
 import { OsWindow } from "@/components/shell/os-window";
 import { useShell, WorldShellProvider } from "@/components/shell/shell-provider";
 import { layoutWindows } from "@/components/shell/window-state";
-import { resetRoomClient } from "@/room-client/room-client";
+import { setRoomClientForTests } from "@/room-client/room-client";
+import { MockRoomClient } from "@/room-client/mock-room-client";
+import { demoRoom } from "@/fixtures/demo-room";
 import type { SceneZoneId } from "@/visualization/scene/scene-focus";
 
 /**
@@ -95,7 +97,7 @@ async function click(element: HTMLElement) {
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   visit = null;
-  resetRoomClient();
+  setRoomClientForTests(new MockRoomClient(demoRoom));
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);

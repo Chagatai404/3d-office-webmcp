@@ -21,6 +21,7 @@ import type {
   ProposeTradeoffInput,
   RaiseObjectionInput,
   ResolveObjectionInput,
+  RoomPhase,
   RoomState,
   SubmitProposalInput,
 } from "@/contracts/room";
@@ -79,6 +80,9 @@ export interface RoomActions {
   getDecisionRecord(): Promise<
     ActionResult<DecisionRecord>
   >;
+
+  /** Demo-only phase transition used by the isolated browser integration harness. */
+  advanceDemoPhase(phase: RoomPhase): Promise<ActionResult>;
 }
 
 export interface RoomContextValue {
@@ -220,6 +224,9 @@ export function RoomProvider({
 
       getDecisionRecord: () =>
         client.getDecisionRecord(roomId),
+
+      advanceDemoPhase: (phase) =>
+        client.advanceDemoPhase(roomId, phase),
     }),
     [client, roomId],
   );
