@@ -21,6 +21,17 @@ export const roomPhaseSchema = z.enum([
 ]);
 export type RoomPhase = z.infer<typeof roomPhaseSchema>;
 
+export const demoModeSchema = z.enum(["multi_user", "solo_judge"]);
+export type DemoMode = z.infer<typeof demoModeSchema>;
+
+export const demoHumanRoleSchema = z.enum([
+  "product",
+  "engineer",
+  "designer",
+  "marketing",
+]);
+export type DemoHumanRole = z.infer<typeof demoHumanRoleSchema>;
+
 export const actorTypeSchema = z.enum(["participant", "expert", "system"]);
 export type ActorType = z.infer<typeof actorTypeSchema>;
 
@@ -39,6 +50,7 @@ export const participantSchema = z
     name: z.string().min(1),
     role: z.string().min(1),
     kind: z.enum(["human", "simulation"]),
+    isClaimed: z.boolean(),
     requiredForApproval: z.boolean(),
     createdAt: timestampSchema,
   })
@@ -103,6 +115,9 @@ export const conflictSchema = z
     severity: z.enum(["blocking", "warning"]),
     reason: z.string().min(1),
     status: z.enum(["open", "resolved"]),
+    resolvedByActorType: actorTypeSchema.nullable(),
+    resolvedByActorId: idSchema.nullable(),
+    resolutionNote: nullableTextSchema,
     createdAt: timestampSchema,
     resolvedAt: timestampSchema.nullable(),
   })
@@ -189,28 +204,6 @@ export const activityEventSchema = z
   .strict();
 export type ActivityEvent = z.infer<typeof activityEventSchema>;
 
-export const roomStateSchema = z
-  .object({
-    id: idSchema,
-    title: z.string().min(1),
-    brief: z.string().min(1),
-    phase: roomPhaseSchema,
-    version: z.number().int().nonnegative(),
-    selfParticipantId: idSchema.nullable(),
-    activeProposalId: idSchema.nullable(),
-    participants: z.array(participantSchema),
-    positions: z.array(positionSchema),
-    constraints: z.array(constraintSchema),
-    proposals: z.array(proposalSchema),
-    conflicts: z.array(conflictSchema),
-    tradeoffs: z.array(tradeoffSchema),
-    votes: z.array(voteSchema),
-    approvals: z.array(approvalSchema),
-    activity: z.array(activityEventSchema),
-  })
-  .strict();
-export type RoomState = z.infer<typeof roomStateSchema>;
-
 export const claimSeatInputSchema = z
   .object({
     seatId: idSchema,
@@ -258,6 +251,14 @@ export const raiseObjectionInputSchema = z
   .strict();
 export type RaiseObjectionInput = z.infer<typeof raiseObjectionInputSchema>;
 
+export const resolveObjectionInputSchema = z
+  .object({
+    conflictId: idSchema,
+    resolutionNote: z.string().min(1),
+  })
+  .strict();
+export type ResolveObjectionInput = z.infer<typeof resolveObjectionInputSchema>;
+
 const revisedProposalSchema = submitProposalInputSchema.omit({
   parentProposalId: true,
 });
@@ -282,6 +283,25 @@ export const castVoteInputSchema = z
   })
   .strict();
 export type CastVoteInput = z.infer<typeof castVoteInputSchema>;
+
+export const approveFinalDecisionInputSchema = z
+  .object({ decisionHash: z.string().min(1) })
+  .strict();
+export type ApproveFinalDecisionInput = z.infer<
+  typeof approveFinalDecisionInputSchema
+>;
+
+export const startDemoScenarioInputSchema = z.discriminatedUnion("mode", [
+  z
+    .object({ mode: z.literal("multi_user"), humanRole: z.null() })
+    .strict(),
+  z
+    .object({ mode: z.literal("solo_judge"), humanRole: demoHumanRoleSchema })
+    .strict(),
+]);
+export type StartDemoScenarioInput = z.infer<
+  typeof startDemoScenarioInputSchema
+>;
 
 export const decisionOwnerSchema = z
   .object({
@@ -309,17 +329,29 @@ export const decisionActionItemSchema = z
   .strict();
 export type DecisionActionItem = z.infer<typeof decisionActionItemSchema>;
 
-export const finalDecisionPreviewSchema = z
+export const finalDecisionCandidateSchema = z
   .object({
     proposal: proposalSchema,
     rationale: z.string().min(1),
+    acceptedTradeoffs: z.array(tradeoffSchema),
     unresolvedWarnings: z.array(conflictSchema),
+    votes: z.array(voteSchema),
     owners: z.array(decisionOwnerSchema),
     deadlines: z.array(decisionDeadlineSchema),
     actionItems: z.array(decisionActionItemSchema),
     dissent: z.array(z.string().min(1)),
     requiredApprovalParticipantIds: z.array(idSchema),
+  })
+  .strict();
+export type FinalDecisionCandidate = z.infer<
+  typeof finalDecisionCandidateSchema
+>;
+
+export const finalDecisionPreviewSchema = finalDecisionCandidateSchema
+  .extend({
     decisionHash: z.string().min(1),
+    approvals: z.array(approvalSchema),
+    missingApprovalParticipantIds: z.array(idSchema),
   })
   .strict();
 export type FinalDecisionPreview = z.infer<
@@ -338,6 +370,31 @@ export const decisionRecordSchema = z
   })
   .strict();
 export type DecisionRecord = z.infer<typeof decisionRecordSchema>;
+
+export const roomStateSchema = z
+  .object({
+    id: idSchema,
+    title: z.string().min(1),
+    brief: z.string().min(1),
+    demoMode: demoModeSchema.nullable(),
+    phase: roomPhaseSchema,
+    version: z.number().int().nonnegative(),
+    selfParticipantId: idSchema.nullable(),
+    activeProposalId: idSchema.nullable(),
+    finalizedAt: timestampSchema.nullable(),
+    finalDecisionPreview: finalDecisionPreviewSchema.nullable(),
+    participants: z.array(participantSchema),
+    positions: z.array(positionSchema),
+    constraints: z.array(constraintSchema),
+    proposals: z.array(proposalSchema),
+    conflicts: z.array(conflictSchema),
+    tradeoffs: z.array(tradeoffSchema),
+    votes: z.array(voteSchema),
+    approvals: z.array(approvalSchema),
+    activity: z.array(activityEventSchema),
+  })
+  .strict();
+export type RoomState = z.infer<typeof roomStateSchema>;
 
 export const actionErrorCodeSchema = z.enum([
   "VALIDATION_ERROR",
@@ -415,6 +472,11 @@ export interface RoomClient {
     input: RaiseObjectionInput,
   ): Promise<ActionResult>;
 
+  resolveObjection(
+    roomId: string,
+    input: ResolveObjectionInput,
+  ): Promise<ActionResult>;
+
   proposeTradeoff(
     roomId: string,
     input: ProposeTradeoffInput,
@@ -428,8 +490,13 @@ export interface RoomClient {
 
   approveFinalDecision(
     roomId: string,
-    input: { decisionHash: string },
+    input: ApproveFinalDecisionInput,
   ): Promise<ActionResult>;
 
   getDecisionRecord(roomId: string): Promise<ActionResult<DecisionRecord>>;
+
+  startDemoScenario(
+    roomId: string,
+    input: StartDemoScenarioInput,
+  ): Promise<ActionResult>;
 }

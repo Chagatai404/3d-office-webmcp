@@ -8,8 +8,6 @@ export default async function RoomPage({
 }) {
   const { roomId } = await params;
 
-  // Room existence is a server concern. The provider surfaces a load failure
-  // rather than the page guessing which rooms exist.
   return (
     <RoomProvider roomId={roomId}>
       <DesktopShell />

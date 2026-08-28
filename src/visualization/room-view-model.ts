@@ -50,6 +50,7 @@ export interface VisualParticipant {
   name: string;
   role: string;
   kind: "human" | "simulation";
+  isClaimed: boolean;
   isSelf: boolean;
   /** Deterministic office assignment, stable for a given participant order. */
   officeSlot: number;
@@ -205,6 +206,7 @@ export function createRoomVisualizationState(
       name: participant.name,
       role: participant.role,
       kind: participant.kind,
+      isClaimed: participant.isClaimed,
       isSelf: participant.id === room.selfParticipantId,
       officeSlot: index,
       presence: participantPresence(

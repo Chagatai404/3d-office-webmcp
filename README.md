@@ -13,6 +13,14 @@ Requirements: Node.js 20.9 or newer.
 
 ```bash
 npm install
+npm run supabase:start
+npx supabase status -o env
+```
+
+Copy the reported `API_URL` and `PUBLISHABLE_KEY` into `.env.local` using
+[`.env.example`](.env.example), then run:
+
+```bash
 npm run dev
 ```
 
@@ -24,6 +32,16 @@ Run all baseline checks with:
 npm run check
 npm run build
 ```
+
+Backend verification with the local Docker-based Supabase stack:
+
+```bash
+npm run test:domain
+npx playwright install chromium
+npm run test:e2e
+```
+
+Both integration commands reset and reseed the local database first.
 
 ## Architectural boundary
 
@@ -82,6 +100,8 @@ place that names a concrete implementation. Swapping `MockRoomClient` for
 model, or the scene.
 
 See [`docs/branching.md`](docs/branching.md) before creating workstream branches.
+See [`docs/backend-integration.md`](docs/backend-integration.md) for the API,
+identity, realtime, and `ApiRoomClient` handoff.
 
 ## Source documents
 

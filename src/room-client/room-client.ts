@@ -1,26 +1,39 @@
-import type { RoomClient } from "@/contracts/room";
-import { demoRoom } from "@/fixtures/demo-room";
-import { MockRoomClient } from "./mock-room-client";
+"use client";
+
+import type {
+  RoomClient,
+} from "@/contracts/room";
+
+import {
+  ApiRoomClient,
+} from "@/clients/api-room-client";
 
 /**
- * Single place where the frontend chooses its `RoomClient` implementation.
+ * Single place where the frontend chooses its RoomClient implementation.
  *
- * BACKEND CONTRACT:
- * Milestone I replaces the constructed implementation here with
- * `ApiRoomClient`. No provider, panel, view model, or 3D component may import
- * a concrete client, so that swap stays local to this module.
+ * The entire frontend depends only on the canonical RoomClient contract.
+ *
+ * MockRoomClient has now been replaced by ApiRoomClient at this boundary.
+ * Providers, panels, view models, and 3D components remain unchanged.
  */
 
-export type { RoomClient } from "@/contracts/room";
+export type {
+  RoomClient,
+} from "@/contracts/room";
 
 let client: RoomClient | null = null;
 
 export function getRoomClient(): RoomClient {
-  client ??= new MockRoomClient(demoRoom);
+  client ??= new ApiRoomClient();
+
   return client;
 }
 
-/** Test seam: drops the memoized client so each test starts from the seed. */
+/**
+ * Test seam.
+ *
+ * Drops the memoized client so a future call creates a fresh instance.
+ */
 export function resetRoomClient(): void {
   client = null;
 }
