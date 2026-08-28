@@ -2,8 +2,13 @@ import type {
   ActionOrigin,
   ActionResult,
   AddPositionInput,
+  ApproveFinalDecisionInput,
+  CastVoteInput,
   ClaimSeatInput,
+  DecisionRecord,
+  FinalDecisionPreview,
   RaiseObjectionInput,
+  ResolveObjectionInput,
   ProposeTradeoffInput,
   RoomPhase,
   RoomState,
@@ -18,6 +23,7 @@ export interface DomainActor {
 export interface MutationContext {
   actor: DomainActor;
   expectedRoomVersion: number;
+  humanConfirmed?: boolean;
 }
 
 export interface RoomRepository {
@@ -42,11 +48,34 @@ export interface RoomRepository {
     input: RaiseObjectionInput,
     context: MutationContext,
   ): Promise<ActionResult>;
+  resolveObjection(
+    roomId: string,
+    input: ResolveObjectionInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
   proposeTradeoff(
     roomId: string,
     input: ProposeTradeoffInput,
     context: MutationContext,
   ): Promise<ActionResult>;
+  castVote(
+    roomId: string,
+    input: CastVoteInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  previewFinalDecision(
+    roomId: string,
+    authUserId: string,
+  ): Promise<ActionResult<FinalDecisionPreview>>;
+  approveFinalDecision(
+    roomId: string,
+    input: ApproveFinalDecisionInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  getDecisionRecord(
+    roomId: string,
+    authUserId: string,
+  ): Promise<ActionResult<DecisionRecord>>;
   advanceDemoPhase(
     roomId: string,
     nextPhase: RoomPhase,

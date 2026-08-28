@@ -1,10 +1,15 @@
 import { z } from "zod";
 import {
   actionResultSchema,
+  decisionRecordSchema,
+  finalDecisionPreviewSchema,
   type ActionResult,
   type AddPositionInput,
+  type ApproveFinalDecisionInput,
+  type CastVoteInput,
   type ClaimSeatInput,
   type RaiseObjectionInput,
+  type ResolveObjectionInput,
   type ProposeTradeoffInput,
   type RoomPhase,
   type SubmitProposalInput,
@@ -53,6 +58,16 @@ export class SupabaseRoomRepository implements RoomRepository {
     });
   }
 
+  resolveObjection(roomId: string, input: ResolveObjectionInput, context: MutationContext) {
+    return this.call("resolve_participant_objection", {
+      p_room_id: roomId,
+      p_expected_version: context.expectedRoomVersion,
+      p_conflict_id: input.conflictId,
+      p_resolution_note: input.resolutionNote,
+      p_origin: context.actor.origin,
+    });
+  }
+
   proposeTradeoff(roomId: string, input: ProposeTradeoffInput, context: MutationContext) {
     const revisedProposal = input.revisedProposal;
     if (!revisedProposal) {
@@ -73,6 +88,49 @@ export class SupabaseRoomRepository implements RoomRepository {
     });
   }
 
+  castVote(roomId: string, input: CastVoteInput, context: MutationContext) {
+    return this.call("cast_participant_vote", {
+      p_room_id: roomId,
+      p_expected_version: context.expectedRoomVersion,
+      p_proposal_id: input.proposalId,
+      p_choice: input.choice,
+      p_comment: input.comment,
+      p_origin: context.actor.origin,
+    });
+  }
+
+  previewFinalDecision(roomId: string, authUserId: string) {
+    void authUserId;
+    return this.callWithData(
+      "get_final_decision_preview",
+      { p_room_id: roomId },
+      finalDecisionPreviewSchema,
+    );
+  }
+
+  approveFinalDecision(
+    roomId: string,
+    input: ApproveFinalDecisionInput,
+    context: MutationContext,
+  ) {
+    return this.call("approve_participant_final_decision", {
+      p_room_id: roomId,
+      p_expected_version: context.expectedRoomVersion,
+      p_decision_hash: input.decisionHash,
+      p_human_confirmed: context.humanConfirmed === true,
+      p_origin: context.actor.origin,
+    });
+  }
+
+  getDecisionRecord(roomId: string, authUserId: string) {
+    void authUserId;
+    return this.callWithData(
+      "get_persisted_decision_record",
+      { p_room_id: roomId },
+      decisionRecordSchema,
+    );
+  }
+
   advanceDemoPhase(roomId: string, nextPhase: RoomPhase, context: MutationContext) {
     return this.call("advance_demo_room_phase", {
       p_room_id: roomId, p_expected_version: context.expectedRoomVersion,
@@ -84,5 +142,15 @@ export class SupabaseRoomRepository implements RoomRepository {
     const { data, error } = await this.client.rpc(functionName, args);
     if (error) throw new Error(error.message);
     return actionResultSchema(z.null()).parse(data) as ActionResult;
+  }
+
+  private async callWithData<T>(
+    functionName: string,
+    args: Record<string, unknown>,
+    dataSchema: z.ZodType<T>,
+  ): Promise<ActionResult<T>> {
+    const { data, error } = await this.client.rpc(functionName, args);
+    if (error) throw new Error(error.message);
+    return actionResultSchema(dataSchema).parse(data) as ActionResult<T>;
   }
 }

@@ -75,7 +75,7 @@ export function createRoomVisualizationState(
       .map((vote) => [vote.participantId, vote.choice]),
   );
   const approvals = new Set(
-    room.approvals
+    (room.finalDecisionPreview?.approvals ?? [])
       .map((approval) => approval.participantId),
   );
 

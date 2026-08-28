@@ -1,10 +1,17 @@
 import { z } from "zod";
-import { roomStateSchema, type RoomState } from "@/contracts/room";
+import {
+  finalDecisionPreviewSchema,
+  roomStateSchema,
+  type Approval,
+  type RoomState,
+} from "@/contracts/room";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const roomRowSchema = z.object({
   id: z.string(), title: z.string(), brief: z.string(), phase: z.string(),
   version: z.number(), active_proposal_id: z.string().nullable(),
+  finalized_at: z.string().nullable(), decision_candidate: z.unknown().nullable(),
+  decision_hash: z.string().nullable(),
 });
 
 function requireRows<T>(result: { data: T | null; error: { message: string } | null }): T {
@@ -20,7 +27,7 @@ export async function loadRoomState(
 ): Promise<RoomState | null> {
   const roomResult = await client
     .from("rooms")
-    .select("id,title,brief,phase,version,active_proposal_id")
+    .select("id,title,brief,phase,version,active_proposal_id,finalized_at,decision_candidate,decision_hash")
     .eq("id", roomId)
     .maybeSingle();
   if (roomResult.error) throw new Error(roomResult.error.message);
@@ -33,7 +40,7 @@ export async function loadRoomState(
       client.from("positions").select("id,participant_id,summary,category,priority,created_at").eq("room_id", roomId).order("created_at"),
       client.from("constraints").select("id,participant_id,category,text,priority,created_at").eq("room_id", roomId).order("created_at"),
       client.from("proposals").select("id,participant_id,title,summary,rationale,expected_outcomes,referenced_constraint_ids,parent_proposal_id,status,created_at").eq("room_id", roomId).order("created_at"),
-      client.from("conflicts").select("id,proposal_id,constraint_id,raised_by_actor_type,raised_by_actor_id,severity,reason,status,created_at,resolved_at").eq("room_id", roomId).order("created_at"),
+      client.from("conflicts").select("id,proposal_id,constraint_id,raised_by_actor_type,raised_by_actor_id,severity,reason,status,resolved_by_actor_type,resolved_by_actor_id,resolution_note,created_at,resolved_at").eq("room_id", roomId).order("created_at"),
       client.from("tradeoffs").select("id,conflict_ids,created_by_actor_type,created_by_actor_id,description,expected_effect,resulting_proposal_id,created_at").eq("room_id", roomId).order("created_at"),
       client.from("votes").select("proposal_id,participant_id,choice,comment,updated_at").eq("room_id", roomId).order("updated_at"),
       client.from("approvals").select("participant_id,decision_hash,approved_at").eq("room_id", roomId).order("approved_at"),
@@ -41,6 +48,30 @@ export async function loadRoomState(
     ]);
 
   const participantRows = requireRows(participants) as Array<Record<string, unknown>>;
+  const approvalValues: Approval[] = (requireRows(approvals) as Array<Record<string, unknown>>).map((row) => ({
+    participantId: row.participant_id as string,
+    decisionHash: row.decision_hash as string,
+    approvedAt: row.approved_at as string,
+  }));
+  const matchingApprovals = room.decision_hash
+    ? approvalValues.filter((approval) => approval.decisionHash === room.decision_hash)
+    : [];
+  const requiredApprovalParticipantIds = participantRows
+    .filter((participant) => participant.kind === "human" && participant.required_for_approval === true)
+    .map((participant) => participant.id as string)
+    .sort();
+  const finalDecisionPreview = room.decision_candidate && room.decision_hash
+    ? finalDecisionPreviewSchema.parse({
+        ...(room.decision_candidate as Record<string, unknown>),
+        decisionHash: room.decision_hash,
+        approvals: matchingApprovals,
+        missingApprovalParticipantIds: requiredApprovalParticipantIds.filter(
+          (participantId) => !matchingApprovals.some(
+            (approval) => approval.participantId === participantId,
+          ),
+        ),
+      })
+    : null;
   return roomStateSchema.parse({
     id: room.id,
     title: room.title,
@@ -50,6 +81,8 @@ export async function loadRoomState(
     selfParticipantId:
       (participantRows.find((participant) => participant.user_id === authUserId)?.id as string | undefined) ?? null,
     activeProposalId: room.active_proposal_id,
+    finalizedAt: room.finalized_at,
+    finalDecisionPreview,
     participants: participantRows.map((participant) => ({
       id: participant.id,
       name: participant.name,
@@ -78,6 +111,9 @@ export async function loadRoomState(
       id: row.id, proposalId: row.proposal_id, constraintId: row.constraint_id,
       raisedByActorType: row.raised_by_actor_type, raisedByActorId: row.raised_by_actor_id,
       severity: row.severity, reason: row.reason, status: row.status,
+      resolvedByActorType: row.resolved_by_actor_type,
+      resolvedByActorId: row.resolved_by_actor_id,
+      resolutionNote: row.resolution_note,
       createdAt: row.created_at, resolvedAt: row.resolved_at,
     })),
     tradeoffs: (requireRows(tradeoffs) as Array<Record<string, unknown>>).map((row) => ({
@@ -90,10 +126,7 @@ export async function loadRoomState(
       proposalId: row.proposal_id, participantId: row.participant_id,
       choice: row.choice, comment: row.comment, updatedAt: row.updated_at,
     })),
-    approvals: (requireRows(approvals) as Array<Record<string, unknown>>).map((row) => ({
-      participantId: row.participant_id, decisionHash: row.decision_hash,
-      approvedAt: row.approved_at,
-    })),
+    approvals: approvalValues,
     activity: (requireRows(activity) as Array<Record<string, unknown>>).map((row) => ({
       id: row.id, actorType: row.actor_type, actorId: row.actor_id, origin: row.origin,
       action: row.action, entityType: row.entity_type, entityId: row.entity_id,

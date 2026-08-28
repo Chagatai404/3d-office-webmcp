@@ -21,14 +21,19 @@ export function mutationContext(
   request: Request,
   userId: string,
   origin: ActionOrigin = "manual_ui",
+  humanConfirmed = false,
 ): MutationContext | null {
   const raw = request.headers.get("if-match")?.replaceAll('"', "");
   const expectedRoomVersion = raw === undefined ? Number.NaN : Number(raw);
   if (!Number.isSafeInteger(expectedRoomVersion) || expectedRoomVersion < 0) return null;
-  return { actor: { authUserId: userId, origin }, expectedRoomVersion };
+  return {
+    actor: { authUserId: userId, origin },
+    expectedRoomVersion,
+    humanConfirmed,
+  };
 }
 
-export function actionResponse(result: ActionResult) {
+export function actionResponse<T>(result: ActionResult<T>) {
   const status = result.ok
     ? 200
     : result.error.code === "NOT_AUTHORIZED"

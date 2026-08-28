@@ -2,13 +2,22 @@ import { createClient } from "@supabase/supabase-js";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   addParticipantPosition,
+  approveParticipantFinalDecision,
   advanceDemoRoomPhase,
+  castParticipantVote,
   claimParticipantSeat,
+  getFinalDecisionRecord,
   getMeetingContext,
   proposeParticipantTradeoff,
   raiseParticipantObjection,
+  resolveParticipantObjection,
+  previewFinalDecision,
   submitParticipantProposal,
 } from "@/domain/rooms/operations";
+import {
+  decisionCandidateFromPreview,
+  hashDecisionCandidate,
+} from "@/domain/rooms/decision";
 import { getOpenIssues } from "@/domain/rooms/queries";
 import type { MutationContext } from "@/domain/rooms/repository";
 import { SupabaseRoomRepository } from "@/lib/supabase/room-repository";
@@ -335,6 +344,327 @@ describe.sequential("Supabase-backed room domain operations", () => {
 
     const issues = await getOpenIssues(designer.repository, designer.userId, "demo");
     expect(issues[0]?.latestRelatedProposalId).toBe(child.id);
+  });
+
+  it("requires explicit conflict resolution before voting", async () => {
+    const wrongPhaseVote = await castParticipantVote(
+      engineer.repository,
+      "demo",
+      { proposalId: "not-active", choice: "support", comment: null },
+      context(engineer.userId, 8, "webmcp"),
+    );
+    expect(wrongPhaseVote).toMatchObject({ ok: false, error: { code: "WRONG_PHASE" }, roomVersion: 8 });
+
+    const blocked = await advanceDemoRoomPhase(
+      engineer.repository, "demo", "voting", context(engineer.userId, 8),
+    );
+    expect(blocked).toMatchObject({
+      ok: false,
+      error: { code: "UNRESOLVED_BLOCKING_CONFLICT" },
+      roomVersion: 8,
+    });
+  });
+
+  it("resolves an open conflict explicitly with participant provenance", async () => {
+    const stale = await resolveParticipantObjection(
+      designer.repository,
+      "demo",
+      { conflictId, resolutionNote: "Stale resolution" },
+      context(designer.userId, 7),
+    );
+    expect(stale).toMatchObject({ ok: false, error: { code: "STALE_ROOM_STATE" }, roomVersion: 8 });
+
+    for (const invalidConflictId of ["seed-conflict-resolved", "authorization-conflict"]) {
+      const invalid = await resolveParticipantObjection(
+        designer.repository,
+        "demo",
+        { conflictId: invalidConflictId, resolutionNote: "Invalid resolution" },
+        context(designer.userId, 8),
+      );
+      expect(invalid).toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" }, roomVersion: 8 });
+    }
+
+    const resolved = await resolveParticipantObjection(
+      designer.repository,
+      "demo",
+      {
+        conflictId,
+        resolutionNote: "The revised proposal now specifies accessible focus order.",
+      },
+      context(designer.userId, 8),
+    );
+    expect(resolved).toMatchObject({ ok: true, roomVersion: 9 });
+    const room = await getMeetingContext(engineer.repository, engineer.userId, "demo");
+    expect(room?.conflicts.find((conflict) => conflict.id === conflictId)).toMatchObject({
+      status: "resolved",
+      resolvedByActorType: "participant",
+      resolvedByActorId: "demo-designer",
+      resolutionNote: "The revised proposal now specifies accessible focus order.",
+    });
+    expect(room?.activity.at(-1)).toMatchObject({
+      action: "conflict.resolved",
+      actorType: "participant",
+      actorId: "demo-designer",
+      origin: "manual_ui",
+      previousRoomVersion: 8,
+      resultingRoomVersion: 9,
+    });
+  });
+
+  it("supports participant-scoped vote creation and same-row updates", async () => {
+    const voting = await advanceDemoRoomPhase(
+      engineer.repository, "demo", "voting", context(engineer.userId, 9),
+    );
+    expect(voting).toMatchObject({ ok: true, roomVersion: 10 });
+    const roomAtVoting = await getMeetingContext(engineer.repository, engineer.userId, "demo");
+    const activeProposalId = roomAtVoting!.activeProposalId!;
+
+    const staleVote = await castParticipantVote(
+      engineer.repository,
+      "demo",
+      { proposalId: activeProposalId, choice: "support", comment: null },
+      context(engineer.userId, 9, "webmcp"),
+    );
+    expect(staleVote).toMatchObject({ ok: false, error: { code: "STALE_ROOM_STATE" }, roomVersion: 10 });
+
+    const crossRoom = await castParticipantVote(
+      engineer.repository,
+      "demo",
+      { proposalId: "authorization-proposal", choice: "support", comment: null },
+      context(engineer.userId, 10, "webmcp"),
+    );
+    expect(crossRoom).toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" }, roomVersion: 10 });
+
+    for (const forbiddenOrigin of ["expert_service", "simulation"] as const) {
+      const forbidden = await castParticipantVote(
+        engineer.repository,
+        "demo",
+        { proposalId: activeProposalId, choice: "support", comment: null },
+        context(engineer.userId, 10, forbiddenOrigin),
+      );
+      expect(forbidden).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" }, roomVersion: 10 });
+    }
+
+    const unclaimed = await anonymousActor();
+    const noMembership = await castParticipantVote(
+      unclaimed.repository,
+      "demo",
+      { proposalId: activeProposalId, choice: "support", comment: null },
+      context(unclaimed.userId, 10, "webmcp"),
+    );
+    expect(noMembership).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" }, roomVersion: 10 });
+
+    const firstVote = await castParticipantVote(
+      engineer.repository,
+      "demo",
+      { proposalId: activeProposalId, choice: "support", comment: null },
+      context(engineer.userId, 10, "webmcp"),
+    );
+    expect(firstVote).toMatchObject({ ok: true, roomVersion: 11 });
+
+    const missingVote = await advanceDemoRoomPhase(
+      engineer.repository, "demo", "approval", context(engineer.userId, 11),
+    );
+    expect(missingVote).toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" }, roomVersion: 11 });
+
+    const updatedVote = await castParticipantVote(
+      engineer.repository,
+      "demo",
+      { proposalId: activeProposalId, choice: "support", comment: "Confirmed feasible." },
+      context(engineer.userId, 11, "webmcp"),
+    );
+    expect(updatedVote).toMatchObject({ ok: true, roomVersion: 12 });
+    const designerVote = await castParticipantVote(
+      designer.repository,
+      "demo",
+      { proposalId: activeProposalId, choice: "support", comment: "Accessibility is addressed." },
+      context(designer.userId, 12),
+    );
+    expect(designerVote).toMatchObject({ ok: true, roomVersion: 13 });
+
+    const room = await getMeetingContext(engineer.repository, engineer.userId, "demo");
+    expect(room?.votes).toHaveLength(2);
+    expect(room?.votes.filter((vote) => vote.participantId === "demo-engineer")).toHaveLength(1);
+    expect(room?.votes.find((vote) => vote.participantId === "demo-engineer")?.comment).toBe("Confirmed feasible.");
+    expect(room?.approvals).toHaveLength(0);
+    expect(room?.activity.at(-2)).toMatchObject({ action: "vote.updated", origin: "webmcp" });
+    expect(room?.activity.at(-1)).toMatchObject({ action: "vote.cast", origin: "manual_ui" });
+  });
+
+  it("builds one deterministic exact approval candidate and hash", async () => {
+    const approval = await advanceDemoRoomPhase(
+      engineer.repository, "demo", "approval", context(engineer.userId, 13),
+    );
+    expect(approval).toMatchObject({ ok: true, roomVersion: 14 });
+
+    const engineerPreview = await previewFinalDecision(
+      engineer.repository, engineer.userId, "demo",
+    );
+    const designerPreview = await previewFinalDecision(
+      designer.repository, designer.userId, "demo",
+    );
+    expect(engineerPreview.ok).toBe(true);
+    expect(designerPreview.ok).toBe(true);
+    if (!engineerPreview.ok || !designerPreview.ok) throw new Error("Preview unavailable.");
+    expect(engineerPreview.data).toEqual(designerPreview.data);
+    expect(engineerPreview.data.approvals).toEqual([]);
+    expect(engineerPreview.data.missingApprovalParticipantIds).toEqual([
+      "demo-designer",
+      "demo-engineer",
+    ]);
+    expect(await hashDecisionCandidate(
+      decisionCandidateFromPreview(engineerPreview.data),
+    )).toBe(engineerPreview.data.decisionHash);
+
+    const room = await getMeetingContext(designer.repository, designer.userId, "demo");
+    expect(room?.finalDecisionPreview?.decisionHash).toBe(engineerPreview.data.decisionHash);
+    expect(room?.approvals).toHaveLength(0);
+  });
+
+  it("enforces exact participant approval and human confirmation", async () => {
+    const initialPreview = await previewFinalDecision(
+      engineer.repository, engineer.userId, "demo",
+    );
+    if (!initialPreview.ok) throw new Error("Preview unavailable.");
+    const decisionHash = initialPreview.data.decisionHash;
+
+    const product = await anonymousActor();
+    const productClaim = await claimParticipantSeat(
+      product.repository,
+      "demo",
+      { seatId: "demo-product" },
+      context(product.userId, 14),
+    );
+    expect(productClaim).toMatchObject({ ok: true, roomVersion: 15 });
+    const nonRequired = await approveParticipantFinalDecision(
+      product.repository,
+      "demo",
+      { decisionHash },
+      { ...context(product.userId, 15), humanConfirmed: true },
+    );
+    expect(nonRequired).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" }, roomVersion: 15 });
+
+    const changed = await approveParticipantFinalDecision(
+      engineer.repository,
+      "demo",
+      { decisionHash: `stale-${decisionHash}` },
+      { ...context(engineer.userId, 15), humanConfirmed: true },
+    );
+    expect(changed).toMatchObject({
+      ok: false,
+      error: { code: "DECISION_CHANGED" },
+      roomVersion: 15,
+    });
+
+    const requested = await approveParticipantFinalDecision(
+      engineer.repository,
+      "demo",
+      { decisionHash },
+      context(engineer.userId, 15, "webmcp"),
+    );
+    expect(requested).toMatchObject({
+      ok: false,
+      error: { code: "HUMAN_CONFIRMATION_REQUIRED" },
+      roomVersion: 15,
+    });
+    let room = await getMeetingContext(designer.repository, designer.userId, "demo");
+    expect(room?.approvals).toHaveLength(0);
+    expect(room?.activity.at(-1)).toMatchObject({
+      action: "approval.requested",
+      actorId: "demo-engineer",
+      origin: "webmcp",
+      confirmationRequired: true,
+      previousRoomVersion: 15,
+      resultingRoomVersion: 15,
+    });
+
+    const engineerApproval = await approveParticipantFinalDecision(
+      engineer.repository,
+      "demo",
+      { decisionHash },
+      { ...context(engineer.userId, 15), humanConfirmed: true },
+    );
+    expect(engineerApproval).toMatchObject({ ok: true, roomVersion: 16 });
+    room = await getMeetingContext(designer.repository, designer.userId, "demo");
+    expect(room?.phase).toBe("approval");
+    expect(room?.approvals).toHaveLength(1);
+    expect(room?.finalDecisionPreview?.missingApprovalParticipantIds).toEqual(["demo-designer"]);
+
+    const designerApproval = await approveParticipantFinalDecision(
+      designer.repository,
+      "demo",
+      { decisionHash },
+      { ...context(designer.userId, 16), humanConfirmed: true },
+    );
+    expect(designerApproval).toMatchObject({ ok: true, roomVersion: 17 });
+  });
+
+  it("atomically finalizes, persists an immutable record, and rejects later mutations", async () => {
+    const room = await getMeetingContext(engineer.repository, engineer.userId, "demo");
+    expect(room).toMatchObject({ phase: "finalized", version: 17 });
+    expect(room?.finalizedAt).toBeTruthy();
+    expect(room?.proposals.find((proposal) => proposal.id === room.activeProposalId)?.status).toBe("accepted");
+    expect(room?.approvals).toHaveLength(2);
+    expect(room?.activity.at(-1)).toMatchObject({
+      action: "decision.finalized",
+      previousRoomVersion: 16,
+      resultingRoomVersion: 17,
+    });
+
+    const engineerRecord = await getFinalDecisionRecord(
+      engineer.repository, engineer.userId, "demo",
+    );
+    const designerRecord = await getFinalDecisionRecord(
+      designer.repository, designer.userId, "demo",
+    );
+    expect(engineerRecord.ok).toBe(true);
+    expect(designerRecord).toEqual(engineerRecord);
+    if (!engineerRecord.ok) throw new Error("Decision record unavailable.");
+    expect(engineerRecord.data.roomId).toBe("demo");
+    expect(engineerRecord.data.approvals).toHaveLength(2);
+    expect(engineerRecord.data.decision.missingApprovalParticipantIds).toEqual([]);
+    expect(engineerRecord.data.provenance.at(-1)?.action).toBe("decision.finalized");
+
+    const previewAfterFinalization = await previewFinalDecision(
+      engineer.repository, engineer.userId, "demo",
+    );
+    expect(previewAfterFinalization).toMatchObject({ ok: false, error: { code: "ALREADY_FINALIZED" }, roomVersion: 17 });
+
+    const mutationResults = await Promise.all([
+      addParticipantPosition(engineer.repository, "demo", {
+        summary: "Too late", category: null, priority: null, constraints: [],
+      }, context(engineer.userId, 17)),
+      submitParticipantProposal(engineer.repository, "demo", {
+        title: "Too late", summary: "Too late", rationale: "Too late",
+        expectedOutcomes: [], referencedConstraintIds: [], parentProposalId: null,
+      }, context(engineer.userId, 17)),
+      raiseParticipantObjection(engineer.repository, "demo", {
+        proposalId: room!.activeProposalId!, constraintId: engineerConstraintId,
+        reason: "Too late", severity: "warning",
+      }, context(engineer.userId, 17)),
+      resolveParticipantObjection(engineer.repository, "demo", {
+        conflictId, resolutionNote: "Too late",
+      }, context(engineer.userId, 17)),
+      proposeParticipantTradeoff(engineer.repository, "demo", {
+        conflictIds: [conflictId], description: "Too late", expectedEffect: "Too late",
+        revisedProposal: {
+          title: "Too late", summary: "Too late", rationale: "Too late",
+          expectedOutcomes: [], referencedConstraintIds: [],
+        },
+      }, context(engineer.userId, 17)),
+      castParticipantVote(engineer.repository, "demo", {
+        proposalId: room!.activeProposalId!, choice: "oppose", comment: "Too late",
+      }, context(engineer.userId, 17, "webmcp")),
+      approveParticipantFinalDecision(engineer.repository, "demo", {
+        decisionHash: room!.finalDecisionPreview!.decisionHash,
+      }, { ...context(engineer.userId, 17), humanConfirmed: true }),
+      advanceDemoRoomPhase(engineer.repository, "demo", "approval", context(engineer.userId, 17)),
+    ]);
+    for (const result of mutationResults) {
+      expect(result).toMatchObject({ ok: false, error: { code: "ALREADY_FINALIZED" }, roomVersion: 17 });
+    }
+    const unchanged = await getMeetingContext(engineer.repository, engineer.userId, "demo");
+    expect(unchanged?.version).toBe(17);
   });
 
   it("does not expose or permit reads from an unrelated room", async () => {

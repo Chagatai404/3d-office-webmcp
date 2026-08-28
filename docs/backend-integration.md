@@ -7,10 +7,11 @@ rows are mapped to `RoomState` in `src/lib/supabase/room-state.ts`; `user_id`
 is used to derive `selfParticipantId` and `isClaimed`, then discarded.
 
 The browser implementation is `ApiRoomClient` in
-`src/clients/api-room-client.ts`. It implements the same `RoomClient` interface
-as the frontend mock. The current milestone implements room loading, seat
-claiming, position/constraint creation, proposal submission, objections, and
-snapshot subscriptions. Later methods return a structured not-available result.
+`src/clients/api-room-client.ts`. It implements the canonical `RoomClient`
+interface. The implemented flow covers room loading, seat claiming,
+position and constraint creation, proposal submission, deliberation, voting,
+exact-decision preview, human approval, finalization, and snapshot
+subscriptions.
 
 ## Authentication
 
@@ -34,7 +35,19 @@ and cross-room checks before writing.
 
 Every successful mutation increments `rooms.version` and inserts its audit event
 in the same transaction. A stale version returns `STALE_ROOM_STATE` without a
-write.
+write. Once finalized, every room mutation returns `ALREADY_FINALIZED`.
+
+Participant votes are upserted by participant and proposal. Only the required
+human participants count toward approval readiness. The demo transition into
+approval requires one active proposal, no open blocking conflict, a vote from
+every required participant, no `request_changes` vote, and a strict majority of
+required participants supporting the proposal.
+
+The approval candidate is stored as canonical JSON and hashed with SHA-256.
+Approvals are participant-scoped and bound to that exact hash. A changed hash
+returns `DECISION_CHANGED`; the final required approval atomically stores the
+last approval, immutable decision record, final audit event, and finalized room
+state.
 
 ## HTTP adapter
 
@@ -43,13 +56,25 @@ write.
 - `POST /api/rooms/:roomId/positions`
 - `POST /api/rooms/:roomId/proposals`
 - `POST /api/rooms/:roomId/objections`
+- `POST /api/rooms/:roomId/resolve-objection`
+- `POST /api/rooms/:roomId/votes`
+- `GET /api/rooms/:roomId/final-decision`
+- `POST /api/rooms/:roomId/approval`
+- `GET /api/rooms/:roomId/decision-record`
 
 Mutation routes require `Authorization: Bearer <access-token>` and
 `If-Match: <room-version>`. Bodies use the canonical contract schemas.
 
-The isolated `POST /api/dev/rooms/:roomId/phase` route exists only for the early
-demo flow. It requires `ALLOW_DEMO_PHASE_TRANSITIONS=true`, a claimed participant,
-the current version, the literal `demo` room, and a one-step early transition.
+The isolated `POST /api/dev/rooms/:roomId/phase` route exists only for the demo
+flow. It requires `ALLOW_DEMO_PHASE_TRANSITIONS=true`, a claimed participant,
+the current version, the literal `demo` room, and the next deliberate phase in
+the sequence.
+
+WebMCP exposes phase-scoped voting, preview, approval-request, and finalized
+record tools. `approve_final_decision` never records an approval directly: it
+returns `HUMAN_CONFIRMATION_REQUIRED`. The visible room UI displays the exact
+candidate and hash, requires an explicit confirmation checkbox, and then sends
+the approval through `ApiRoomClient`.
 
 ## Realtime
 

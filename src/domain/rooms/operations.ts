@@ -1,27 +1,36 @@
 import {
   addPositionInputSchema,
+  approveFinalDecisionInputSchema,
+  castVoteInputSchema,
   claimSeatInputSchema,
   raiseObjectionInputSchema,
   proposeTradeoffInputSchema,
+  resolveObjectionInputSchema,
   roomPhaseSchema,
   submitProposalInputSchema,
+  type ActionErrorCode,
   type ActionResult,
   type AddPositionInput,
+  type ApproveFinalDecisionInput,
+  type CastVoteInput,
   type ClaimSeatInput,
+  type DecisionRecord,
+  type FinalDecisionPreview,
   type RaiseObjectionInput,
   type ProposeTradeoffInput,
+  type ResolveObjectionInput,
   type RoomPhase,
   type RoomState,
   type SubmitProposalInput,
 } from "@/contracts/room";
 import type { MutationContext, RoomRepository } from "./repository";
 
-function failure(
-  code: "VALIDATION_ERROR" | "NOT_AUTHORIZED" | "WRONG_PHASE" | "STALE_ROOM_STATE",
+function failure<T = null>(
+  code: ActionErrorCode,
   message: string,
   roomVersion: number,
   recovery?: string,
-): ActionResult {
+): ActionResult<T> {
   return {
     ok: false,
     error: { code, message, ...(recovery ? { recovery } : {}) },
@@ -47,6 +56,13 @@ async function prepareMutation(
       "The room changed before this action completed.",
       room.version,
       "Review the latest room state and retry if the action is still appropriate.",
+    );
+  }
+  if (room.phase === "finalized") {
+    return failure(
+      "ALREADY_FINALIZED",
+      "The finalized decision is immutable.",
+      room.version,
     );
   }
   if (!allowedPhases.includes(room.phase)) {
@@ -152,6 +168,107 @@ export async function proposeParticipantTradeoff(
   return repository.proposeTradeoff(roomId, parsed.data, context);
 }
 
+export async function resolveParticipantObjection(
+  repository: RoomRepository,
+  roomId: string,
+  input: ResolveObjectionInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = resolveObjectionInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Conflict resolution input is invalid.", context.expectedRoomVersion);
+  }
+  const room = await prepareMutation(repository, roomId, context, ["deliberation"]);
+  if ("ok" in room) return room;
+  return repository.resolveObjection(roomId, parsed.data, context);
+}
+
+export async function castParticipantVote(
+  repository: RoomRepository,
+  roomId: string,
+  input: CastVoteInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = castVoteInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Vote input is invalid.", context.expectedRoomVersion);
+  }
+  if (!["manual_ui", "webmcp"].includes(context.actor.origin)) {
+    return failure(
+      "NOT_AUTHORIZED",
+      "Only an authenticated human participant may use this voting operation.",
+      context.expectedRoomVersion,
+    );
+  }
+  const room = await prepareMutation(repository, roomId, context, ["voting"]);
+  if ("ok" in room) return room;
+  return repository.castVote(roomId, parsed.data, context);
+}
+
+export async function previewFinalDecision(
+  repository: RoomRepository,
+  actorUserId: string,
+  roomId: string,
+): Promise<ActionResult<FinalDecisionPreview>> {
+  if (!actorUserId) {
+    return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
+  }
+  const room = await repository.getRoom(roomId, actorUserId);
+  if (!room) return failure("VALIDATION_ERROR", "Room not found.", 0);
+  if (room.phase !== "approval") {
+    return failure(
+      room.phase === "finalized" ? "ALREADY_FINALIZED" : "WRONG_PHASE",
+      room.phase === "finalized"
+        ? "The decision is already finalized; read its immutable record."
+        : "Final decision preview is available only during approval.",
+      room.version,
+    );
+  }
+  return repository.previewFinalDecision(roomId, actorUserId);
+}
+
+export async function approveParticipantFinalDecision(
+  repository: RoomRepository,
+  roomId: string,
+  input: ApproveFinalDecisionInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = approveFinalDecisionInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Approval input is invalid.", context.expectedRoomVersion);
+  }
+  if (!["manual_ui", "webmcp"].includes(context.actor.origin)) {
+    return failure(
+      "NOT_AUTHORIZED",
+      "Only an authenticated human participant may approve a decision.",
+      context.expectedRoomVersion,
+    );
+  }
+  const room = await prepareMutation(repository, roomId, context, ["approval"]);
+  if ("ok" in room) return room;
+  return repository.approveFinalDecision(roomId, parsed.data, context);
+}
+
+export async function getFinalDecisionRecord(
+  repository: RoomRepository,
+  actorUserId: string,
+  roomId: string,
+): Promise<ActionResult<DecisionRecord>> {
+  if (!actorUserId) {
+    return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
+  }
+  const room = await repository.getRoom(roomId, actorUserId);
+  if (!room) return failure("VALIDATION_ERROR", "Room not found.", 0);
+  if (room.phase !== "finalized") {
+    return failure(
+      "WRONG_PHASE",
+      "The immutable decision record is available only after finalization.",
+      room.version,
+    );
+  }
+  return repository.getDecisionRecord(roomId, actorUserId);
+}
+
 export async function advanceDemoRoomPhase(
   repository: RoomRepository,
   roomId: string,
@@ -159,10 +276,28 @@ export async function advanceDemoRoomPhase(
   context: MutationContext,
 ): Promise<ActionResult> {
   const parsed = roomPhaseSchema.safeParse(nextPhase);
-  if (!parsed.success || !["proposals", "deliberation"].includes(parsed.data)) {
-    return failure("VALIDATION_ERROR", "Invalid early demo phase.", context.expectedRoomVersion);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Invalid demo phase.", context.expectedRoomVersion);
   }
-  const room = await prepareMutation(repository, roomId, context, ["input", "proposals"]);
+  const room = await prepareMutation(repository, roomId, context, [
+    "input",
+    "proposals",
+    "deliberation",
+    "voting",
+  ]);
   if ("ok" in room) return room;
+  const expectedNextPhase: Partial<Record<RoomPhase, RoomPhase>> = {
+    input: "proposals",
+    proposals: "deliberation",
+    deliberation: "voting",
+    voting: "approval",
+  };
+  if (expectedNextPhase[room.phase] !== parsed.data) {
+    return failure(
+      "WRONG_PHASE",
+      "Only the next controlled demo phase may be selected.",
+      room.version,
+    );
+  }
   return repository.advanceDemoPhase(roomId, parsed.data, context);
 }

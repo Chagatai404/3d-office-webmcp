@@ -11,10 +11,10 @@ values (
 insert into public.participants (
   id, room_id, name, role, kind, required_for_approval, created_at
 ) values
-  ('demo-product', 'demo', 'Maya', 'Product Manager', 'human', true, '2026-08-28T12:00:00Z'),
+  ('demo-product', 'demo', 'Maya', 'Product Manager', 'human', false, '2026-08-28T12:00:00Z'),
   ('demo-engineer', 'demo', 'Emre', 'Engineer', 'human', true, '2026-08-28T12:00:00Z'),
   ('demo-designer', 'demo', 'Lina', 'Designer', 'human', true, '2026-08-28T12:00:00Z'),
-  ('demo-marketing', 'demo', 'Ari', 'Marketing Lead', 'human', true, '2026-08-28T12:00:00Z');
+  ('demo-marketing', 'demo', 'Ari', 'Marketing Lead', 'human', false, '2026-08-28T12:00:00Z');
 
 insert into public.positions (
   id, room_id, participant_id, summary, category, priority, created_at

@@ -3,6 +3,8 @@
 import { z } from "zod";
 import {
   actionResultSchema,
+  decisionRecordSchema,
+  finalDecisionPreviewSchema,
   roomStateSchema,
   type ActionResult,
   type AddPositionInput,
@@ -12,6 +14,7 @@ import {
   type FinalDecisionPreview,
   type ProposeTradeoffInput,
   type RaiseObjectionInput,
+  type ResolveObjectionInput,
   type RoomClient,
   type RoomPhase,
   type RoomState,
@@ -78,29 +81,33 @@ export class ApiRoomClient implements RoomClient {
     return this.mutate(roomId, "objections", input);
   }
 
+  resolveObjection(roomId: string, input: ResolveObjectionInput) {
+    return this.mutate(roomId, "resolve-objection", input);
+  }
+
   proposeTradeoff(roomId: string, input: ProposeTradeoffInput): Promise<ActionResult> {
     return this.mutate(roomId, "tradeoffs", input);
   }
 
-  castMyVote(roomId: string, _input: CastVoteInput): Promise<ActionResult> {
-    void _input;
-    return Promise.resolve(this.notAvailable(roomId, "Voting"));
+  castMyVote(roomId: string, input: CastVoteInput): Promise<ActionResult> {
+    return this.mutate(roomId, "votes", input);
   }
 
   previewFinalDecision(roomId: string): Promise<ActionResult<FinalDecisionPreview>> {
-    return Promise.resolve(this.notAvailable(roomId, "Final decision preview"));
+    return this.readAction(roomId, "final-decision", finalDecisionPreviewSchema);
   }
 
   approveFinalDecision(
     roomId: string,
-    _input: { decisionHash: string },
+    input: { decisionHash: string },
   ): Promise<ActionResult> {
-    void _input;
-    return Promise.resolve(this.notAvailable(roomId, "Approval"));
+    return this.mutate(roomId, "approval", input, undefined, {
+      "X-Human-Confirmed": "true",
+    });
   }
 
   getDecisionRecord(roomId: string): Promise<ActionResult<DecisionRecord>> {
-    return Promise.resolve(this.notAvailable(roomId, "Decision records"));
+    return this.readAction(roomId, "decision-record", decisionRecordSchema);
   }
 
   advanceDemoPhase(roomId: string, phase: RoomPhase) {
@@ -128,6 +135,7 @@ export class ApiRoomClient implements RoomClient {
     action: string,
     input: unknown,
     explicitUrl?: string,
+    extraHeaders?: Record<string, string>,
   ): Promise<ActionResult> {
     if (!this.versions.has(roomId)) await this.getRoom(roomId);
     const accessToken = await this.ensureAnonymousSession();
@@ -139,6 +147,7 @@ export class ApiRoomClient implements RoomClient {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
           "If-Match": String(this.versions.get(roomId) ?? 0),
+          ...extraHeaders,
         },
         body: JSON.stringify(input),
       },
@@ -149,6 +158,22 @@ export class ApiRoomClient implements RoomClient {
     this.versions.set(roomId, result.roomVersion);
     if (result.ok || result.error.code === "STALE_ROOM_STATE") await this.refresh(roomId);
     return result;
+  }
+
+  private async readAction<T>(
+    roomId: string,
+    action: string,
+    dataSchema: z.ZodType<T>,
+  ): Promise<ActionResult<T>> {
+    const accessToken = await this.ensureAnonymousSession();
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/${action}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    const parsed = actionResultSchema(dataSchema).safeParse(await response.json());
+    if (!parsed.success) throw new Error(`Room query failed with HTTP ${response.status}.`);
+    this.versions.set(roomId, parsed.data.roomVersion);
+    return parsed.data as ActionResult<T>;
   }
 
   private async refresh(roomId: string) {

@@ -11,6 +11,8 @@ export const demoRoom: RoomState = roomStateSchema.parse({
   version: 1,
   selfParticipantId: null,
   activeProposalId: null,
+  finalizedAt: null,
+  finalDecisionPreview: null,
   participants: [
     {
       id: "participant-product",
