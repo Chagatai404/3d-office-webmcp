@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ApiRoomClient } from "@/clients/api-room-client";
-import type { ActionResult, RoomState } from "@/contracts/room";
+import type { ActionResult, DemoHumanRole, RoomState } from "@/contracts/room";
 import { useRoomWebMcpTools } from "@/webmcp/register-tools";
 
 export function RoomClientView({ roomId }: { roomId: string }) {
@@ -10,6 +10,7 @@ export function RoomClientView({ roomId }: { roomId: string }) {
   const [room, setRoom] = useState<RoomState | null>(null);
   const [status, setStatus] = useState("Starting anonymous session…");
   const [confirmedDecisionHash, setConfirmedDecisionHash] = useState<string | null>(null);
+  const [soloRole, setSoloRole] = useState<DemoHumanRole>("product");
 
   useRoomWebMcpTools(roomId, room);
 
@@ -58,12 +59,51 @@ export function RoomClientView({ roomId }: { roomId: string }) {
         <div><p className="label">You</p><p className="metric small">{self?.role ?? "No seat"}</p></div>
       </section>
 
+      {roomId === "demo" ? (
+        <section className="workspace-section form" data-testid="demo-controls">
+          <h2>Demo scenario</h2>
+          <p data-testid="demo-mode">Mode: {room.demoMode ?? "none"}</p>
+          <label>
+            Judge role
+            <select
+              data-testid="demo-human-role"
+              value={soloRole}
+              onChange={(event) => setSoloRole(event.target.value as DemoHumanRole)}
+            >
+              <option value="product">Product Manager</option>
+              <option value="engineer">Engineer</option>
+              <option value="designer">Designer</option>
+              <option value="marketing">Marketing Lead</option>
+            </select>
+          </label>
+          <button
+            data-testid="start-solo-demo"
+            onClick={() => void run(client.startDemoScenario(roomId, {
+              mode: "solo_judge",
+              humanRole: soloRole,
+            }))}
+          >Start solo demo</button>
+          <button
+            className="button secondary"
+            data-testid="reset-multi-user-demo"
+            onClick={() => void run(client.startDemoScenario(roomId, {
+              mode: "multi_user",
+              humanRole: null,
+            }))}
+          >Reset multi-user demo</button>
+        </section>
+      ) : null}
+
       <section className="workspace-section">
         <h2>Participant seats</h2>
         <div className="cards">
           {room.participants.map((participant) => (
             <article className="card" key={participant.id}>
               <strong>{participant.role}</strong><span>{participant.name}</span>
+              <span data-testid={`participant-kind-${participant.id}`}>
+                {participant.kind === "simulation" ? "Simulated Participant" : "Human Participant"}
+                {participant.requiredForApproval ? " · Required approver" : ""}
+              </span>
               <span>{participant.id === room.selfParticipantId ? "Your seat" : participant.isClaimed ? "Claimed" : "Available"}</span>
               {!self && !participant.isClaimed && participant.kind === "human" ? (
                 <button data-testid={`claim-${participant.id}`} onClick={() => void run(client.claimSeat(roomId, { seatId: participant.id }))}>Claim seat</button>
@@ -123,7 +163,7 @@ export function RoomClientView({ roomId }: { roomId: string }) {
         </form>
       ) : null}
 
-      {self && room.phase === "deliberation" && room.conflicts.some((conflict) => conflict.status === "open") ? (
+      {self && room.demoMode !== "solo_judge" && room.phase === "deliberation" && room.conflicts.some((conflict) => conflict.status === "open") ? (
         <section className="workspace-section" data-testid="resolution-controls">
           <h2>Resolve objections explicitly</h2>
           {room.conflicts.filter((conflict) => conflict.status === "open").map((conflict) => (
@@ -188,7 +228,7 @@ export function RoomClientView({ roomId }: { roomId: string }) {
         </section>
       ) : null}
 
-      {self && nextPhase ? (
+      {self && room.demoMode !== "solo_judge" && nextPhase ? (
         <button className="button secondary" data-testid="advance-phase" onClick={() => void run(client.advanceDemoPhase(roomId, nextPhase))}>
           Advance demo to {nextPhase}
         </button>

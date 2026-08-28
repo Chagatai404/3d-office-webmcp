@@ -16,6 +16,11 @@ export default defineConfig({
   ],
   webServer: {
     command: "npm run dev",
+    env: {
+      ...process.env,
+      ALLOW_DEMO_PHASE_TRANSITIONS: "true",
+      ALLOW_DEMO_RESET: "true",
+    },
     url: "http://127.0.0.1:3000/room/demo",
     reuseExistingServer: false,
     timeout: 120_000,

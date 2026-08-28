@@ -12,8 +12,10 @@ import {
   type ResolveObjectionInput,
   type ProposeTradeoffInput,
   type RoomPhase,
+  type StartDemoScenarioInput,
   type SubmitProposalInput,
 } from "@/contracts/room";
+import { settleSoloDemoScenario } from "@/demo/orchestrator";
 import type { MutationContext, RoomRepository } from "@/domain/rooms/repository";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadRoomState } from "./room-state";
@@ -21,7 +23,8 @@ import { loadRoomState } from "./room-state";
 export class SupabaseRoomRepository implements RoomRepository {
   constructor(private readonly client: SupabaseClient) {}
 
-  getRoom(roomId: string, authUserId: string) {
+  async getRoom(roomId: string, authUserId: string) {
+    if (roomId === "demo") await settleSoloDemoScenario(this.client, roomId);
     return loadRoomState(this.client, roomId, authUserId);
   }
 
@@ -138,10 +141,26 @@ export class SupabaseRoomRepository implements RoomRepository {
     });
   }
 
+  startDemoScenario(
+    roomId: string,
+    input: StartDemoScenarioInput,
+    authUserId: string,
+  ) {
+    void authUserId;
+    return this.call("start_demo_scenario", {
+      p_room_id: roomId,
+      p_mode: input.mode,
+      p_human_role: input.mode === "solo_judge" ? input.humanRole : null,
+    });
+  }
+
   private async call(functionName: string, args: Record<string, unknown>): Promise<ActionResult> {
     const { data, error } = await this.client.rpc(functionName, args);
     if (error) throw new Error(error.message);
-    return actionResultSchema(z.null()).parse(data) as ActionResult;
+    const result = actionResultSchema(z.null()).parse(data) as ActionResult;
+    if (!result.ok || args.p_room_id !== "demo") return result;
+    const settled = await settleSoloDemoScenario(this.client, "demo");
+    return settled.ok ? { ...result, roomVersion: settled.roomVersion } : result;
   }
 
   private async callWithData<T>(

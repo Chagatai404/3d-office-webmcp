@@ -7,6 +7,7 @@ import {
   proposeTradeoffInputSchema,
   resolveObjectionInputSchema,
   roomPhaseSchema,
+  startDemoScenarioInputSchema,
   submitProposalInputSchema,
   type ActionErrorCode,
   type ActionResult,
@@ -21,6 +22,7 @@ import {
   type ResolveObjectionInput,
   type RoomPhase,
   type RoomState,
+  type StartDemoScenarioInput,
   type SubmitProposalInput,
 } from "@/contracts/room";
 import type { MutationContext, RoomRepository } from "./repository";
@@ -300,4 +302,23 @@ export async function advanceDemoRoomPhase(
     );
   }
   return repository.advanceDemoPhase(roomId, parsed.data, context);
+}
+
+export async function startDemoScenario(
+  repository: RoomRepository,
+  roomId: string,
+  input: StartDemoScenarioInput,
+  actorUserId: string,
+): Promise<ActionResult> {
+  const parsed = startDemoScenarioInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Demo scenario input is invalid.", 0);
+  }
+  if (!actorUserId) {
+    return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
+  }
+  if (roomId !== "demo") {
+    return failure("NOT_AUTHORIZED", "Only the shared demo room may be reset.", 0);
+  }
+  return repository.startDemoScenario(roomId, parsed.data, actorUserId);
 }

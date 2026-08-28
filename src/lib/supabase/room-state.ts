@@ -8,7 +8,7 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const roomRowSchema = z.object({
-  id: z.string(), title: z.string(), brief: z.string(), phase: z.string(),
+  id: z.string(), title: z.string(), brief: z.string(), demo_mode: z.string().nullable(), phase: z.string(),
   version: z.number(), active_proposal_id: z.string().nullable(),
   finalized_at: z.string().nullable(), decision_candidate: z.unknown().nullable(),
   decision_hash: z.string().nullable(),
@@ -27,7 +27,7 @@ export async function loadRoomState(
 ): Promise<RoomState | null> {
   const roomResult = await client
     .from("rooms")
-    .select("id,title,brief,phase,version,active_proposal_id,finalized_at,decision_candidate,decision_hash")
+    .select("id,title,brief,demo_mode,phase,version,active_proposal_id,finalized_at,decision_candidate,decision_hash")
     .eq("id", roomId)
     .maybeSingle();
   if (roomResult.error) throw new Error(roomResult.error.message);
@@ -76,6 +76,7 @@ export async function loadRoomState(
     id: room.id,
     title: room.title,
     brief: room.brief,
+    demoMode: room.demo_mode,
     phase: room.phase,
     version: room.version,
     selfParticipantId:

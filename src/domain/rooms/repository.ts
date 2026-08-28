@@ -12,6 +12,7 @@ import type {
   ProposeTradeoffInput,
   RoomPhase,
   RoomState,
+  StartDemoScenarioInput,
   SubmitProposalInput,
 } from "@/contracts/room";
 
@@ -80,5 +81,10 @@ export interface RoomRepository {
     roomId: string,
     nextPhase: RoomPhase,
     context: MutationContext,
+  ): Promise<ActionResult>;
+  startDemoScenario(
+    roomId: string,
+    input: StartDemoScenarioInput,
+    authUserId: string,
   ): Promise<ActionResult>;
 }

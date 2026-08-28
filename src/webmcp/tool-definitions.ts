@@ -89,15 +89,24 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext) {
           roomId: room.id,
           title: room.title,
           brief: room.brief,
+          demoMode: room.demoMode,
           phase: room.phase,
           roomVersion: room.version,
           currentParticipant: self
-            ? { participantId: self.id, name: self.name, role: self.role }
+              ? {
+                  participantId: self.id,
+                  name: self.name,
+                  role: self.role,
+                  kind: self.kind,
+                  requiredForApproval: self.requiredForApproval,
+                }
             : null,
           participantRoles: room.participants.map((participant) => ({
             participantId: participant.id,
             name: participant.name,
             role: participant.role,
+            kind: participant.kind,
+            requiredForApproval: participant.requiredForApproval,
           })),
           positions: room.positions.map((position) => ({
             participantId: position.participantId,

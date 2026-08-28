@@ -18,6 +18,7 @@ import {
   type RoomClient,
   type RoomPhase,
   type RoomState,
+  type StartDemoScenarioInput,
   type SubmitProposalInput,
 } from "@/contracts/room";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
@@ -108,6 +109,32 @@ export class ApiRoomClient implements RoomClient {
 
   getDecisionRecord(roomId: string): Promise<ActionResult<DecisionRecord>> {
     return this.readAction(roomId, "decision-record", decisionRecordSchema);
+  }
+
+  async startDemoScenario(
+    roomId: string,
+    input: StartDemoScenarioInput,
+  ): Promise<ActionResult> {
+    const accessToken = await this.ensureAnonymousSession();
+    const response = await fetch(
+      `/api/dev/rooms/${encodeURIComponent(roomId)}/scenario`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(input),
+      },
+    );
+    const parsed = actionResultSchema(z.null()).safeParse(await response.json());
+    if (!parsed.success) {
+      throw new Error(`Demo reset failed with HTTP ${response.status}.`);
+    }
+    const result = parsed.data as ActionResult;
+    this.versions.set(roomId, result.roomVersion);
+    await this.refresh(roomId);
+    return result;
   }
 
   advanceDemoPhase(roomId: string, phase: RoomPhase) {

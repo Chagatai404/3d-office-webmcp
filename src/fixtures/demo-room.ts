@@ -7,6 +7,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
   title: "Launch Plan Decision Room",
   brief:
     "Agree on a credible launch scope that balances customer value, delivery risk, design quality, and market timing.",
+  demoMode: "multi_user",
   phase: "input",
   version: 1,
   selfParticipantId: null,

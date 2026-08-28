@@ -21,6 +21,17 @@ export const roomPhaseSchema = z.enum([
 ]);
 export type RoomPhase = z.infer<typeof roomPhaseSchema>;
 
+export const demoModeSchema = z.enum(["multi_user", "solo_judge"]);
+export type DemoMode = z.infer<typeof demoModeSchema>;
+
+export const demoHumanRoleSchema = z.enum([
+  "product",
+  "engineer",
+  "designer",
+  "marketing",
+]);
+export type DemoHumanRole = z.infer<typeof demoHumanRoleSchema>;
+
 export const actorTypeSchema = z.enum(["participant", "expert", "system"]);
 export type ActorType = z.infer<typeof actorTypeSchema>;
 
@@ -280,6 +291,18 @@ export type ApproveFinalDecisionInput = z.infer<
   typeof approveFinalDecisionInputSchema
 >;
 
+export const startDemoScenarioInputSchema = z.discriminatedUnion("mode", [
+  z
+    .object({ mode: z.literal("multi_user"), humanRole: z.null() })
+    .strict(),
+  z
+    .object({ mode: z.literal("solo_judge"), humanRole: demoHumanRoleSchema })
+    .strict(),
+]);
+export type StartDemoScenarioInput = z.infer<
+  typeof startDemoScenarioInputSchema
+>;
+
 export const decisionOwnerSchema = z
   .object({
     participantId: idSchema,
@@ -353,6 +376,7 @@ export const roomStateSchema = z
     id: idSchema,
     title: z.string().min(1),
     brief: z.string().min(1),
+    demoMode: demoModeSchema.nullable(),
     phase: roomPhaseSchema,
     version: z.number().int().nonnegative(),
     selfParticipantId: idSchema.nullable(),
@@ -470,4 +494,9 @@ export interface RoomClient {
   ): Promise<ActionResult>;
 
   getDecisionRecord(roomId: string): Promise<ActionResult<DecisionRecord>>;
+
+  startDemoScenario(
+    roomId: string,
+    input: StartDemoScenarioInput,
+  ): Promise<ActionResult>;
 }

@@ -1,8 +1,9 @@
-insert into public.rooms (id, title, brief, phase, version, created_at)
+insert into public.rooms (id, title, brief, demo_mode, phase, version, created_at)
 values (
   'demo',
   'Two-Week Onboarding Launch',
   'Should the startup ship an onboarding feature update within two weeks, and what scope should it have?',
+  'multi_user',
   'input',
   0,
   '2026-08-28T12:00:00Z'
@@ -65,8 +66,8 @@ insert into public.audit_events (
 
 -- A non-public room used only to prove cross-room IDs cannot be smuggled into
 -- demo mutations. It is intentionally invisible to unaffiliated sessions.
-insert into public.rooms (id, title, brief, phase, version, created_at)
-values ('authorization-fixture', 'Authorization fixture', 'Cross-room test data.', 'proposals', 0, '2026-08-28T12:00:00Z');
+insert into public.rooms (id, title, brief, demo_mode, phase, version, created_at)
+values ('authorization-fixture', 'Authorization fixture', 'Cross-room test data.', null, 'proposals', 0, '2026-08-28T12:00:00Z');
 
 insert into public.participants (
   id, room_id, name, role, kind, required_for_approval, created_at
