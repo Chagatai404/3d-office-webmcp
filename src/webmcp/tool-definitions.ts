@@ -1,10 +1,14 @@
 import { z } from "zod";
 import {
   addPositionInputSchema,
+  approveFinalDecisionInputSchema,
+  castVoteInputSchema,
   type RoomPhase,
 } from "@/contracts/room";
 import {
   addParticipantPosition,
+  approveParticipantFinalDecision,
+  castParticipantVote,
   proposeParticipantTradeoff,
   raiseParticipantObjection,
   submitParticipantProposal,
@@ -22,9 +26,13 @@ export const ROOM_TOOL_NAMES_BY_PHASE = {
     "propose_tradeoff",
     "raise_objection",
   ],
-  voting: ["get_meeting_context"],
-  approval: ["get_meeting_context"],
-  finalized: ["get_meeting_context"],
+  voting: ["cast_my_vote", "get_meeting_context", "get_open_issues"],
+  approval: [
+    "approve_final_decision",
+    "get_meeting_context",
+    "preview_final_decision",
+  ],
+  finalized: ["get_decision_record"],
 } as const satisfies Record<RoomPhase, readonly string[]>;
 
 const noInputSchema = {
@@ -117,6 +125,11 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext) {
             constraintCount: room.constraints.length,
             openIssueCount: room.conflicts.filter((conflict) => conflict.status === "open").length,
             tradeoffCount: room.tradeoffs.length,
+            voteCount: room.votes.length,
+            approvalCount: room.finalDecisionPreview?.approvals.length ?? 0,
+            missingApprovalCount:
+              room.finalDecisionPreview?.missingApprovalParticipantIds.length ?? 0,
+            decisionHash: room.finalDecisionPreview?.decisionHash ?? null,
           },
         }, room.version, "Meeting context loaded.");
       }),
@@ -297,6 +310,73 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext) {
           await context.mutationContext(),
         );
       }),
+    },
+    cast_my_vote: {
+      name: "cast_my_vote",
+      description:
+        "Cast or update only the authenticated human participant's vote for the active candidate. A support vote is not final approval.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          proposalId: { type: "string", minLength: 1 },
+          choice: {
+            type: "string",
+            enum: ["support", "oppose", "abstain", "request_changes"],
+          },
+          comment: nullableString,
+        },
+        required: ["proposalId", "choice", "comment"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: false, untrustedContentHint: true },
+      execute: (rawInput) => safely(async () => {
+        const input = castVoteInputSchema.parse(rawInput);
+        return castParticipantVote(
+          context.repository,
+          context.roomId,
+          input,
+          await context.mutationContext(),
+        );
+      }),
+    },
+    preview_final_decision: {
+      name: "preview_final_decision",
+      description:
+        "Read the exact approval candidate, stable decision hash, votes, dissent, warnings, completed approvals, and missing independent approvals. Voting is not approval.",
+      inputSchema: noInputSchema,
+      annotations: { readOnlyHint: true, untrustedContentHint: true },
+      execute: () => safely(() => context.previewFinalDecision()),
+    },
+    approve_final_decision: {
+      name: "approve_final_decision",
+      description:
+        "Request approval of the exact decision hash for the authenticated human participant. This requires separate confirmation in the visible application UI and cannot approve anyone else.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          decisionHash: { type: "string", minLength: 1 },
+        },
+        required: ["decisionHash"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: false, untrustedContentHint: true },
+      execute: (rawInput) => safely(async () => {
+        const input = approveFinalDecisionInputSchema.parse(rawInput);
+        return approveParticipantFinalDecision(
+          context.repository,
+          context.roomId,
+          input,
+          await context.mutationContext(),
+        );
+      }),
+    },
+    get_decision_record: {
+      name: "get_decision_record",
+      description:
+        "Read the persisted immutable decision record after finalization, including exact decision, votes, approvals, trade-offs, and provenance.",
+      inputSchema: noInputSchema,
+      annotations: { readOnlyHint: true, untrustedContentHint: true },
+      execute: () => safely(() => context.getDecisionRecord()),
     },
   };
   return tools;

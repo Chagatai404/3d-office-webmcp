@@ -1,7 +1,11 @@
 "use client";
 
 import type { RoomState } from "@/contracts/room";
-import { getMeetingContext } from "@/domain/rooms/operations";
+import {
+  getFinalDecisionRecord,
+  getMeetingContext,
+  previewFinalDecision,
+} from "@/domain/rooms/operations";
 import { getOpenIssues } from "@/domain/rooms/queries";
 import type { MutationContext } from "@/domain/rooms/repository";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
@@ -26,6 +30,22 @@ export class RoomWebMcpContext {
 
   async getOpenIssues() {
     return getOpenIssues(this.repository, await this.getActorUserId(), this.roomId);
+  }
+
+  async previewFinalDecision() {
+    return previewFinalDecision(
+      this.repository,
+      await this.getActorUserId(),
+      this.roomId,
+    );
+  }
+
+  async getDecisionRecord() {
+    return getFinalDecisionRecord(
+      this.repository,
+      await this.getActorUserId(),
+      this.roomId,
+    );
   }
 
   async mutationContext(): Promise<MutationContext> {
