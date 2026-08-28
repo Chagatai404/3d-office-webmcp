@@ -66,6 +66,7 @@ async function executeTool(page: Page, name: string, input: unknown) {
 }
 
 test("two sessions collaborate through phase-aware WebMCP and canonical realtime state", async ({ browser }) => {
+  test.setTimeout(120_000);
   const engineerContext = await browser.newContext();
   const designerContext = await browser.newContext();
   await Promise.all([installWebMcpShim(engineerContext), installWebMcpShim(designerContext)]);
@@ -186,6 +187,125 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   await expect(designer.getByTestId("tradeoffs")).toContainText("explicitly define accessible focus order");
   await expect(designer.getByTestId("conflicts")).toContainText("The hint focus order needs an accessibility review.");
   await expect(designer.getByTestId("activity")).toContainText("tradeoff.proposed · webmcp · v8");
+
+  await designer.getByTestId("resolution-controls").getByRole("button").click();
+  await expect(engineer.getByTestId("room-version")).toHaveText("9");
+  await expect(engineer.getByTestId("conflicts")).not.toContainText("The hint focus order needs an accessibility review.");
+  await expect(engineer.getByTestId("activity")).toContainText("conflict.resolved · manual_ui · v9");
+
+  await engineer.getByTestId("advance-phase").click();
+  await expect(designer.getByTestId("room-phase")).toHaveText("voting");
+  await expect.poll(() => toolNames(engineer)).toEqual([
+    "cast_my_vote",
+    "get_meeting_context",
+    "get_open_issues",
+  ]);
+
+  const votingContext = JSON.parse(String(await executeTool(engineer, "get_meeting_context", {})));
+  const activeProposalId = votingContext.data.activeProposal.id;
+  const engineerVote = JSON.parse(String(await executeTool(engineer, "cast_my_vote", {
+    proposalId: activeProposalId,
+    choice: "support",
+    comment: "Feasible within the two-week capacity.",
+  })));
+  expect(engineerVote).toMatchObject({ ok: true, roomVersion: 11 });
+  await expect(designer.getByTestId("votes")).toContainText("demo-engineer: support");
+  await expect(designer.getByTestId("approvals")).toBeEmpty();
+  await expect(designer.getByTestId("activity")).toContainText("vote.cast · webmcp · v11");
+
+  const designerVote = JSON.parse(String(await executeTool(designer, "cast_my_vote", {
+    proposalId: activeProposalId,
+    choice: "support",
+    comment: "The revised focus order is acceptable.",
+  })));
+  expect(designerVote).toMatchObject({ ok: true, roomVersion: 12 });
+  await expect(engineer.getByTestId("votes")).toContainText("demo-designer: support");
+
+  await engineer.getByTestId("advance-phase").click();
+  await expect(designer.getByTestId("room-phase")).toHaveText("approval");
+  await expect.poll(() => toolNames(engineer)).toEqual([
+    "approve_final_decision",
+    "get_meeting_context",
+    "preview_final_decision",
+  ]);
+
+  const engineerPreview = JSON.parse(String(await executeTool(engineer, "preview_final_decision", {})));
+  const designerPreview = JSON.parse(String(await executeTool(designer, "preview_final_decision", {})));
+  expect(engineerPreview.ok).toBe(true);
+  expect(designerPreview.data).toEqual(engineerPreview.data);
+  expect(engineerPreview.data.approvals).toEqual([]);
+  expect(engineerPreview.data.missingApprovalParticipantIds).toEqual([
+    "demo-designer",
+    "demo-engineer",
+  ]);
+  const decisionHash = engineerPreview.data.decisionHash;
+  await expect(engineer.getByTestId("decision-hash")).toHaveText(decisionHash);
+  await expect(designer.getByTestId("decision-hash")).toHaveText(decisionHash);
+
+  const engineerApprovalRequest = JSON.parse(String(await executeTool(
+    engineer,
+    "approve_final_decision",
+    { decisionHash },
+  )));
+  expect(engineerApprovalRequest).toMatchObject({
+    ok: false,
+    error: { code: "HUMAN_CONFIRMATION_REQUIRED" },
+    roomVersion: 13,
+  });
+  await engineer.getByLabel("I reviewed and confirm this exact final decision.").check();
+  await engineer.getByTestId("confirm-approval").click();
+  await expect(designer.getByTestId("room-version")).toHaveText("14");
+  await expect(designer.getByTestId("approvals")).toContainText("demo-engineer");
+  await expect(designer.getByTestId("missing-approvals")).toContainText("demo-designer");
+
+  const designerApprovalRequest = JSON.parse(String(await executeTool(
+    designer,
+    "approve_final_decision",
+    { decisionHash },
+  )));
+  expect(designerApprovalRequest).toMatchObject({
+    ok: false,
+    error: { code: "HUMAN_CONFIRMATION_REQUIRED" },
+    roomVersion: 14,
+  });
+  await designer.getByLabel("I reviewed and confirm this exact final decision.").check();
+  await designer.getByTestId("confirm-approval").click();
+
+  await expect(engineer.getByTestId("room-phase")).toHaveText("finalized");
+  await expect(designer.getByTestId("room-version")).toHaveText("15");
+  await expect(engineer.getByTestId("finalized-at")).toBeVisible();
+  await expect.poll(() => toolNames(engineer)).toEqual(["get_decision_record"]);
+
+  const engineerRecord = JSON.parse(String(await executeTool(engineer, "get_decision_record", {})));
+  const designerRecord = JSON.parse(String(await executeTool(designer, "get_decision_record", {})));
+  expect(engineerRecord.ok).toBe(true);
+  expect(designerRecord.data).toEqual(engineerRecord.data);
+  expect(engineerRecord.data.decision.decisionHash).toBe(decisionHash);
+  expect(engineerRecord.data.approvals).toHaveLength(2);
+
+  const finalizedMutation = await engineer.evaluate(async ({ proposalId }) => {
+    const storedSession = Object.values(localStorage)
+      .map((value) => {
+        try { return JSON.parse(value) as { access_token?: string }; } catch { return null; }
+      })
+      .find((value) => value?.access_token);
+    if (!storedSession?.access_token) throw new Error("Supabase session not found.");
+    const response = await fetch("/api/rooms/demo/votes", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${storedSession.access_token}`,
+        "Content-Type": "application/json",
+        "If-Match": "15",
+      },
+      body: JSON.stringify({ proposalId, choice: "oppose", comment: "Too late" }),
+    });
+    return response.json();
+  }, { proposalId: activeProposalId });
+  expect(finalizedMutation).toMatchObject({
+    ok: false,
+    error: { code: "ALREADY_FINALIZED" },
+    roomVersion: 15,
+  });
 
   await engineerContext.close();
   await designerContext.close();

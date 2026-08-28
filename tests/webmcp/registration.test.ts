@@ -26,9 +26,13 @@ describe("phase-aware WebMCP registration", () => {
         "propose_tradeoff",
         "raise_objection",
       ],
-      voting: ["get_meeting_context"],
-      approval: ["get_meeting_context"],
-      finalized: ["get_meeting_context"],
+      voting: ["cast_my_vote", "get_meeting_context", "get_open_issues"],
+      approval: [
+        "approve_final_decision",
+        "get_meeting_context",
+        "preview_final_decision",
+      ],
+      finalized: ["get_decision_record"],
     } satisfies Record<RoomPhase, readonly string[]>);
   });
 
@@ -87,17 +91,50 @@ describe("phase-aware WebMCP registration", () => {
 
   it("marks query tools read-only and user-content outputs untrusted", () => {
     const tools = createRoomWebMcpTools(context);
-    for (const name of ["get_meeting_context", "list_positions", "get_open_issues"]) {
+    for (const name of [
+      "get_meeting_context",
+      "list_positions",
+      "get_open_issues",
+      "preview_final_decision",
+      "get_decision_record",
+    ]) {
       expect(tools[name]?.annotations).toEqual({
         readOnlyHint: true,
         untrustedContentHint: true,
       });
     }
-    for (const name of ["add_my_position", "submit_proposal", "raise_objection", "propose_tradeoff"]) {
+    for (const name of [
+      "add_my_position",
+      "submit_proposal",
+      "raise_objection",
+      "propose_tradeoff",
+      "cast_my_vote",
+      "approve_final_decision",
+    ]) {
       expect(tools[name]?.annotations).toEqual({
         readOnlyHint: false,
         untrustedContentHint: true,
       });
     }
+  });
+
+  it("keeps voting and approval participant-scoped", async () => {
+    const guardedContext = {
+      getObservedRoomVersion: () => 20,
+    } as RoomWebMcpContext;
+    const tools = createRoomWebMcpTools(guardedContext);
+    const vote = JSON.parse(String(await tools.cast_my_vote!.execute({
+      proposalId: "proposal-1",
+      choice: "support",
+      comment: null,
+      participantId: "demo-designer",
+    }, { signal: new AbortController().signal })));
+    const approval = JSON.parse(String(await tools.approve_final_decision!.execute({
+      decisionHash: "hash",
+      actorId: "demo-designer",
+    }, { signal: new AbortController().signal })));
+
+    expect(vote.error.code).toBe("VALIDATION_ERROR");
+    expect(approval.error.code).toBe("VALIDATION_ERROR");
   });
 });
