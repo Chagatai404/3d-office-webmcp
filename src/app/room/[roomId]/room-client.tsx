@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiRoomClient } from "@/clients/api-room-client";
 import type { ActionResult, RoomState } from "@/contracts/room";
+import { useRoomWebMcpTools } from "@/webmcp/register-tools";
 
 export function RoomClientView({ roomId }: { roomId: string }) {
   const client = useMemo(() => new ApiRoomClient(), []);
   const [room, setRoom] = useState<RoomState | null>(null);
   const [status, setStatus] = useState("Starting anonymous session…");
+
+  useRoomWebMcpTools(roomId, room);
 
   useEffect(() => client.subscribe(roomId, (state) => {
     setRoom(state);
@@ -122,11 +125,13 @@ export function RoomClientView({ roomId }: { roomId: string }) {
         <h3>Constraints</h3>
         <ul data-testid="constraints">{room.constraints.map((constraint) => <li key={constraint.id}>{constraint.text}</li>)}</ul>
         <h3>Proposals</h3>
-        <ul data-testid="proposals">{room.proposals.map((proposal) => <li key={proposal.id}>{proposal.title}: {proposal.summary}</li>)}</ul>
+        <ul data-testid="proposals">{room.proposals.map((proposal) => <li key={proposal.id}>{proposal.title}: {proposal.summary} ({proposal.status})</li>)}</ul>
         <h3>Open objections</h3>
-        <ul data-testid="conflicts">{room.conflicts.map((conflict) => <li key={conflict.id}>{conflict.severity}: {conflict.reason}</li>)}</ul>
+        <ul data-testid="conflicts">{room.conflicts.filter((conflict) => conflict.status === "open").map((conflict) => <li key={conflict.id}>{conflict.severity}: {conflict.reason}</li>)}</ul>
+        <h3>Trade-offs</h3>
+        <ul data-testid="tradeoffs">{room.tradeoffs.map((tradeoff) => <li key={tradeoff.id}>{tradeoff.description}: {tradeoff.expectedEffect}</li>)}</ul>
         <h3>Activity ledger</h3>
-        <ul data-testid="activity">{room.activity.map((event) => <li key={event.id}>{event.action} · v{event.resultingRoomVersion}</li>)}</ul>
+        <ul data-testid="activity">{room.activity.map((event) => <li key={event.id}>{event.action} · {event.origin} · v{event.resultingRoomVersion}</li>)}</ul>
       </section>
     </main>
   );
