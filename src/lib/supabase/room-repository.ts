@@ -4,6 +4,7 @@ import {
   claimInvitationResultSchema,
   decisionRecordSchema,
   finalDecisionPreviewSchema,
+  regeneratedRoomInvitationSchema,
   roomInvitePreviewSchema,
   type ActionResult,
   type AddPositionInput,
@@ -12,6 +13,7 @@ import {
   type ClaimInvitationInput,
   type ClaimSeatInput,
   type CreateRoomInput,
+  type ManageRoomInvitationInput,
   type RaiseObjectionInput,
   type ResolveObjectionInput,
   type ProposeTradeoffInput,
@@ -24,6 +26,7 @@ import type {
   CreatedRoomRecord,
   DomainActor,
   MutationContext,
+  RegeneratedRoomInvitationRecord,
   RoomRepository,
 } from "@/domain/rooms/repository";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -48,6 +51,11 @@ const createdRoomRecordSchema = z
     ),
   })
   .strict() satisfies z.ZodType<CreatedRoomRecord>;
+
+const regeneratedRoomInvitationRecordSchema = regeneratedRoomInvitationSchema
+  .omit({ inviteUrl: true })
+  .extend({ inviteToken: z.string().min(1) })
+  .strict() satisfies z.ZodType<RegeneratedRoomInvitationRecord>;
 
 export class SupabaseRoomRepository implements RoomRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -215,6 +223,36 @@ export class SupabaseRoomRepository implements RoomRepository {
       p_room_id: roomId,
       p_expected_version: context.expectedRoomVersion,
       p_next_phase: nextPhase,
+      p_origin: context.actor.origin,
+    });
+  }
+
+  regenerateInvitation(
+    roomId: string,
+    input: ManageRoomInvitationInput,
+    context: MutationContext,
+  ) {
+    return this.callWithData(
+      "regenerate_room_invitation",
+      {
+        p_room_id: roomId,
+        p_expected_version: context.expectedRoomVersion,
+        p_participant_id: input.participantId,
+        p_origin: context.actor.origin,
+      },
+      regeneratedRoomInvitationRecordSchema,
+    );
+  }
+
+  revokeInvitation(
+    roomId: string,
+    input: ManageRoomInvitationInput,
+    context: MutationContext,
+  ) {
+    return this.call("revoke_room_invitation", {
+      p_room_id: roomId,
+      p_expected_version: context.expectedRoomVersion,
+      p_participant_id: input.participantId,
       p_origin: context.actor.origin,
     });
   }

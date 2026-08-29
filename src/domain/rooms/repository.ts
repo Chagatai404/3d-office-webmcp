@@ -10,6 +10,7 @@ import type {
   CreateRoomInput,
   DecisionRecord,
   FinalDecisionPreview,
+  ManageRoomInvitationInput,
   RaiseObjectionInput,
   ResolveObjectionInput,
   ProposeTradeoffInput,
@@ -45,6 +46,13 @@ export interface CreatedRoomInvitation {
 export interface CreatedRoomRecord {
   roomId: string;
   participantInvites: CreatedRoomInvitation[];
+}
+
+/** Internal invite-management record. The public DTO adds the invite URL. */
+export interface RegeneratedRoomInvitationRecord {
+  participantId: string;
+  role: string;
+  inviteToken: string;
 }
 
 export interface RoomRepository {
@@ -116,6 +124,16 @@ export interface RoomRepository {
   advanceRoomPhase(
     roomId: string,
     nextPhase: RoomPhase,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  regenerateInvitation(
+    roomId: string,
+    input: ManageRoomInvitationInput,
+    context: MutationContext,
+  ): Promise<ActionResult<RegeneratedRoomInvitationRecord>>;
+  revokeInvitation(
+    roomId: string,
+    input: ManageRoomInvitationInput,
     context: MutationContext,
   ): Promise<ActionResult>;
   advanceDemoPhase(

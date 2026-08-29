@@ -5,6 +5,7 @@ import {
   actionResultSchema,
   decisionRecordSchema,
   finalDecisionPreviewSchema,
+  regeneratedRoomInvitationSchema,
   roomStateSchema,
   type ActionResult,
   type AddPositionInput,
@@ -12,8 +13,10 @@ import {
   type ClaimSeatInput,
   type DecisionRecord,
   type FinalDecisionPreview,
+  type ManageRoomInvitationInput,
   type ProposeTradeoffInput,
   type RaiseObjectionInput,
+  type RegeneratedRoomInvitation,
   type ResolveObjectionInput,
   type RoomClient,
   type RoomPhase,
@@ -152,6 +155,25 @@ export class ApiRoomClient implements RoomClient {
     return this.mutate(roomId, "phase", { phase });
   }
 
+  regenerateInvitation(
+    roomId: string,
+    input: ManageRoomInvitationInput,
+  ): Promise<ActionResult<RegeneratedRoomInvitation>> {
+    return this.mutateWithData(
+      roomId,
+      "invitations/regenerate",
+      input,
+      regeneratedRoomInvitationSchema,
+    );
+  }
+
+  revokeInvitation(
+    roomId: string,
+    input: ManageRoomInvitationInput,
+  ): Promise<ActionResult> {
+    return this.mutate(roomId, "invitations/revoke", input);
+  }
+
   private async ensureAnonymousSession(): Promise<string> {
     if (this.sessionPromise) return this.sessionPromise;
     this.sessionPromise = ensureAnonymousAccessToken(this.supabase);
@@ -206,6 +228,31 @@ export class ApiRoomClient implements RoomClient {
     if (!parsed.success) throw new Error(`Room query failed with HTTP ${response.status}.`);
     this.versions.set(roomId, parsed.data.roomVersion);
     return parsed.data as ActionResult<T>;
+  }
+
+  private async mutateWithData<T>(
+    roomId: string,
+    action: string,
+    input: unknown,
+    dataSchema: z.ZodType<T>,
+  ): Promise<ActionResult<T>> {
+    if (!this.versions.has(roomId)) await this.getRoom(roomId);
+    const accessToken = await this.ensureAnonymousSession();
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/${action}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "If-Match": String(this.versions.get(roomId) ?? 0),
+      },
+      body: JSON.stringify(input),
+    });
+    const parsed = actionResultSchema(dataSchema).safeParse(await response.json());
+    if (!parsed.success) throw new Error(`Room action failed with HTTP ${response.status}.`);
+    const result = parsed.data as ActionResult<T>;
+    this.versions.set(roomId, result.roomVersion);
+    if (result.ok || result.error.code === "STALE_ROOM_STATE") await this.refresh(roomId);
+    return result;
   }
 
   private async refresh(roomId: string) {

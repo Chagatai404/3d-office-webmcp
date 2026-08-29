@@ -793,25 +793,35 @@ Do not start these until all P0 gates are green.
 
 ## Invite management
 
-- [ ] **A-700 / T-700 — Regenerate invite**
-- [ ] **A-701 / T-701 — Revoke unclaimed invite**
+- [x] **A-700 / T-700 — Regenerate invite**
+- [x] **A-701 / T-701 — Revoke unclaimed invite**
 
 ## Post-hackathon unattended delegation
 
-- [ ] **A-800 / T-800 — Document WebMCP vs server-side delegation semantics**
-- [ ] **A-801 / T-801 — Design `participant_delegations` schema**
-- [ ] **A-802 / T-802 — Add distinct delegated-agent origin if needed**
-- [ ] **A-803 / T-803 — Design server-side delegate runner with expiry/revocation/action budget**
-- [ ] **A-805 / T-805 — Delegation security tests; final approval always forbidden**
+- [x] **A-800 / T-800 — Document WebMCP vs server-side delegation semantics**
+- [x] **A-801 / T-801 — Design `participant_delegations` schema**
+- [x] **A-802 / T-802 — Add distinct delegated-agent origin if needed**
+- [x] **A-803 / T-803 — Design server-side delegate runner with expiry/revocation/action budget**
+- [x] **A-805 / T-805 — Delegation security tests; final approval always forbidden**
 
 ## Documentation
 
-- [ ] **A-604 / T-604 — Update `docs/backend-integration.md`**
+- [x] **A-604 / T-604 — Update `docs/backend-integration.md`**
   - Organizer model.
   - Invitations.
   - Pre-membership boundary.
   - Production phase route.
   - WebMCP participant authority.
+
+**Delivered after A5:** invite regeneration/revocation landed in
+`supabase/migrations/20260829150000_invitation_management.sql`,
+`regenerateRoomInvitation` / `revokeRoomInvitation` in
+`src/domain/rooms/operations.ts`, the matching `RoomClient`/`ApiRoomClient`
+methods, and `src/app/api/rooms/[roomId]/invitations/{regenerate,revoke}/route.ts`.
+The same pass updated `docs/backend-integration.md` with the backend lifecycle
+handoff and post-hackathon delegation design. Covered by
+`tests/contracts/room-onboarding.test.ts` and
+`tests/domain/room-invitations.test.ts`.
 
 ---
 
@@ -819,9 +829,9 @@ Do not start these until all P0 gates are green.
 
 Before asking Person B to merge:
 
-- [ ] Push all A commits.
-- [ ] Ensure A branch is green independently.
-- [ ] Send Person B:
+- [x] Push all A commits.
+- [x] Ensure A branch is green independently.
+- [x] Send Person B:
   - branch name;
   - latest commit SHA;
   - migration list;
@@ -829,7 +839,7 @@ Before asking Person B to merge:
   - API route list;
   - onboarding-client public methods;
   - `RoomProvider.actions` additions.
-- [ ] Do **not** manually edit Person B’s UX files to “help the merge”.
+- [x] Do **not** manually edit Person B’s UX files to “help the merge”.
 
 ### Recommended A commit sequence
 
