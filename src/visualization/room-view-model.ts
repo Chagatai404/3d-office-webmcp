@@ -8,42 +8,15 @@ import type {
 } from "@/contracts/room";
 
 /**
- * Presentation model for the 3D office.
+ * Presentation model for the 3D meeting room.
  *
  * These types are derived views, not backend contracts, so they live here
  * rather than in `src/contracts/room.ts`. The scene receives this and nothing
  * else: it performs no I/O, owns no canonical state, and decides nothing.
  */
 
-/** The environment is laid out for ten offices even when fewer are seated. */
-export const OFFICE_SLOT_COUNT = 10;
-
 /** Newest activity entries handed to the scene, oldest first. */
 const RECENT_ACTIVITY_LIMIT = 12;
-
-/**
- * Where a participant is standing in the office.
- *
- * Presentation only. This says where someone is, never what they are entitled
- * to do: a participant in the meeting room holds exactly the authority they
- * held in their office, and a simulated participant walking the floor holds
- * none a human did not grant.
- */
-export type ParticipantPresence = "meeting" | "office" | "roaming";
-
-/**
- * The phases in which the room convenes.
- *
- * Deliberation onward is shared work on one candidate, so everybody is at the
- * central table. Input and proposals are separate work, so everybody is in
- * their own office or moving between them.
- */
-const CONVENING_PHASES: ReadonlySet<RoomPhase> = new Set<RoomPhase>([
-  "deliberation",
-  "voting",
-  "approval",
-  "finalized",
-]);
 
 export interface VisualParticipant {
   id: string;
@@ -52,19 +25,11 @@ export interface VisualParticipant {
   kind: "human" | "simulation";
   isClaimed: boolean;
   isSelf: boolean;
-  /** Deterministic office assignment, stable for a given participant order. */
-  officeSlot: number;
-  /** Where they are right now, derived from the phase and their own input. */
-  presence: ParticipantPresence;
+  /** Deterministic seat around the table, stable for a given participant order. */
+  seatIndex: number;
   requiredForApproval: boolean;
   vote: VoteChoice | null;
   hasApprovedCurrentDecision: boolean;
-}
-
-export interface VisualOfficeSlot {
-  index: number;
-  status: "occupied" | "reserved";
-  participantId: string | null;
 }
 
 export interface VisualConstraint {
@@ -107,7 +72,6 @@ export interface RoomVisualizationState {
   version: number;
 
   participants: VisualParticipant[];
-  officeSlots: VisualOfficeSlot[];
   constraints: VisualConstraint[];
   proposals: VisualProposal[];
   activeProposal: VisualProposal | null;
@@ -154,23 +118,6 @@ function ratio(numerator: number, denominator: number): number {
 }
 
 /**
- * Reads where a participant is from what the room has recorded.
- *
- * While the room convenes, everyone is at the table. Before that, a
- * participant who still owes the room their input is working in their own
- * office, and one who has already published is out on the floor. Nothing here
- * is a claim about the participant themselves — an empty office means an empty
- * record, not an absent person.
- */
-function participantPresence(
-  phase: RoomPhase,
-  hasPublished: boolean,
-): ParticipantPresence {
-  if (CONVENING_PHASES.has(phase)) return "meeting";
-  return hasPublished ? "roaming" : "office";
-}
-
-/**
  * Pure projection for the 3D scene. It performs no I/O and owns no canonical
  * state or business decisions.
  */
@@ -194,12 +141,7 @@ export function createRoomVisualizationState(
     room.participants.map((participant) => [participant.id, participant.name]),
   );
 
-  // Publishing either a position or a constraint counts as having spoken.
-  const hasPublished = new Set<string>([
-    ...room.positions.map((position) => position.participantId),
-    ...room.constraints.map((constraint) => constraint.participantId),
-  ]);
-
+  // Every participant has a seat at the one shared table, in join order.
   const participants: VisualParticipant[] = room.participants.map(
     (participant, index) => ({
       id: participant.id,
@@ -208,27 +150,11 @@ export function createRoomVisualizationState(
       kind: participant.kind,
       isClaimed: participant.isClaimed,
       isSelf: participant.id === room.selfParticipantId,
-      officeSlot: index,
-      presence: participantPresence(
-        room.phase,
-        hasPublished.has(participant.id),
-      ),
+      seatIndex: index,
       requiredForApproval: participant.requiredForApproval,
       vote: votesByParticipant.get(participant.id) ?? null,
       hasApprovedCurrentDecision: approvedParticipantIds.has(participant.id),
     }),
-  );
-
-  const officeSlots: VisualOfficeSlot[] = Array.from(
-    { length: OFFICE_SLOT_COUNT },
-    (_unused, index) => {
-      const occupant = participants.find(
-        (participant) => participant.officeSlot === index,
-      );
-      return occupant
-        ? { index, status: "occupied" as const, participantId: occupant.id }
-        : { index, status: "reserved" as const, participantId: null };
-    },
   );
 
   const proposals: VisualProposal[] = room.proposals.map((proposal) => ({
@@ -248,7 +174,6 @@ export function createRoomVisualizationState(
     version: room.version,
 
     participants,
-    officeSlots,
     constraints: room.constraints.map((constraint) => ({
       id: constraint.id,
       participantId: constraint.participantId,

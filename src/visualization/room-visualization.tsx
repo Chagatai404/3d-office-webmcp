@@ -2,26 +2,24 @@
 
 import { Component, memo, Suspense, type ErrorInfo, type ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OfficeScene } from "./scene/office-scene";
-import type { CameraFlight } from "./scene/god-view-controls";
+import { MeetingScene } from "./scene/meeting-scene";
+import type { CameraRequest } from "./scene/camera-controller";
+import type { WorkspaceId } from "./scene/camera-poses";
 import {
   SceneInteractionProvider,
   type SceneInteraction,
 } from "./scene/scene-interaction";
-import type {
-  RoomVisualizationState,
-  VisualParticipant,
-} from "./room-view-model";
+import type { RoomVisualizationState } from "./room-view-model";
 
 /**
- * The boundary between the application and the 3D office.
+ * The boundary between the application and the 3D meeting room.
  *
- * The office is the page now, so this fills the viewport and everything else
- * floats above it. It is still not the only way to reach anything: every place
- * you can click here has a keyboard-reachable button in the dock, and every
- * fact it shows is readable in the windows. If WebGL is unavailable or the
- * canvas throws, the room keeps working and this degrades to a text summary of
- * the same projection.
+ * The room is the page now, so this fills the viewport and everything else
+ * floats above it. It is still not the only way to reach anything: every
+ * board you can click here has a keyboard-reachable tab in the workspace
+ * dock, and every fact it shows is readable in the matching panel. If WebGL
+ * is unavailable or the canvas throws, the room keeps working and this
+ * degrades to a text summary of the same projection.
  */
 
 class SceneErrorBoundary extends Component<
@@ -50,30 +48,16 @@ function SceneSummary({
   view: RoomVisualizationState;
   reason: string;
 }) {
-  const seated = view.officeSlots.filter(
-    (slot) => slot.status === "occupied",
-  ).length;
-  const countIn = (presence: VisualParticipant["presence"]) =>
-    view.participants.filter(
-      (participant) => participant.presence === presence,
-    ).length;
-
   return (
     <div className="scene-fallback">
       <p className="panel-note">{reason}</p>
       <ul>
-        <li>
-          {seated} of {view.officeSlots.length} offices occupied
-        </li>
-        <li>
-          {countIn("meeting")} in the meeting room, {countIn("office")} at their
-          desk, {countIn("roaming")} moving about the office
-        </li>
-        <li>{view.constraints.length} constraints on the constraint wall</li>
+        <li>{view.participants.length} participants seated at the table</li>
+        <li>{view.constraints.length} constraints on the constraints board</li>
         <li>
           {view.activeProposal
             ? `Active proposal: ${view.activeProposal.title}`
-            : "No proposal on the central table"}
+            : "No proposal on the table yet"}
         </li>
         <li>
           {view.conflicts.filter((conflict) => conflict.status === "open").length}{" "}
@@ -91,11 +75,15 @@ function SceneSummary({
  */
 export const RoomVisualization = memo(function RoomVisualization({
   view,
-  focus,
+  request,
+  reducedMotion,
+  onArrive,
   interaction,
 }: {
   view: RoomVisualizationState;
-  focus: CameraFlight;
+  request: CameraRequest;
+  reducedMotion: boolean;
+  onArrive: (workspace: WorkspaceId) => void;
   interaction: SceneInteraction;
 }) {
   return (
@@ -104,28 +92,33 @@ export const RoomVisualization = memo(function RoomVisualization({
         fallback={
           <SceneSummary
             view={view}
-            reason="The 3D office could not be displayed. The room is unchanged; here is the same state in text."
+            reason="The 3D room could not be displayed. The room is unchanged; here is the same state in text."
           />
         }
       >
         <Suspense
           fallback={
-            <SceneSummary view={view} reason="Loading the 3D office…" />
+            <SceneSummary view={view} reason="Preparing the meeting room…" />
           }
         >
           <Canvas
             className="scene-canvas"
             dpr={[1, 1.75]}
-            gl={{ antialias: true }}
+            gl={{ antialias: true, alpha: true }}
+            shadows
             /* Clicking past every object steps back out of the selection. */
             onPointerMissed={() => interaction.onSelect(null)}
-            /* The windows and the dock carry the same semantics in the DOM. */
+            /* The dock carries the same semantics in the DOM. */
             aria-hidden="true"
           >
-            <color attach="background" args={["#0b1119"]} />
-            <fog attach="fog" args={["#0b1119", 60, 130]} />
+            <color attach="background" args={["#ede9e0"]} />
             <SceneInteractionProvider value={interaction}>
-              <OfficeScene view={view} focus={focus} />
+              <MeetingScene
+                view={view}
+                request={request}
+                reducedMotion={reducedMotion}
+                onArrive={onArrive}
+              />
             </SceneInteractionProvider>
           </Canvas>
         </Suspense>

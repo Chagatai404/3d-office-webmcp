@@ -4,20 +4,20 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { Group } from "three";
 import type { VisualParticipant } from "@/visualization/room-view-model";
-import { SURFACE } from "./office-layout";
-import { SceneLabel } from "./scene-label";
+import { SURFACE } from "./meeting-room-layout";
 
 /**
  * A participant, in the room.
  *
- * The figure is procedural rather than a character asset: the packs available
- * here ship no rigged people, and a handful of primitives keeps the office one
- * visual language and costs nothing to load.
+ * The figure is procedural rather than a character asset: no rigged people
+ * are available yet, and a handful of primitives keeps the room one visual
+ * language and costs nothing to load. A Blender-authored figure can replace
+ * this later without touching the seat math or the room state it reads.
  *
- * It carries identity and nothing else. The office colour says who this is,
- * the halo says the participant is simulated, the floor ring says it is you.
- * None of that is a claim about authority — the panels hold that, and the
- * canvas stays `aria-hidden` behind them.
+ * It carries identity and nothing else. The seat colour says who this is, the
+ * halo says the participant is simulated, the floor ring says it is you. None
+ * of that is a claim about authority — the panels hold that, and the canvas
+ * stays `aria-hidden` behind them.
  *
  * Unrotated, an avatar faces +Z, the same way the chair model does, so seats
  * and avatars share one set of rotations.
@@ -56,13 +56,10 @@ export function ParticipantAvatar({
   participant,
   color,
   pose,
-  showName = false,
 }: {
   participant: VisualParticipant;
   color: string;
   pose: AvatarPose;
-  /** Offices carry a nameplate already; the table and the floor do not. */
-  showName?: boolean;
 }) {
   const hips = useRef<Group>(null);
   const leftLeg = useRef<Group>(null);
@@ -84,7 +81,7 @@ export function ParticipantAvatar({
      since the resting rotation prop has not changed. */
   useFrame((state) => {
     const swing = walking
-      ? Math.sin(state.clock.elapsedTime * STRIDE_RATE + participant.officeSlot)
+      ? Math.sin(state.clock.elapsedTime * STRIDE_RATE + participant.seatIndex)
       : 0;
 
     setPitch(leftLeg.current, thighRest + swing * LEG_SWING);
@@ -202,16 +199,6 @@ export function ParticipantAvatar({
             roughness={0.4}
           />
         </mesh>
-      ) : null}
-
-      {showName ? (
-        <SceneLabel
-          position={[0, hipHeight + 1.15, 0]}
-          variant="office"
-          distanceFactor={11}
-        >
-          {participant.name}
-        </SceneLabel>
       ) : null}
     </group>
   );

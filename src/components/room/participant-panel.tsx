@@ -1,22 +1,18 @@
 "use client";
 
-import { useOptionalShell } from "@/components/shell/shell-provider";
-import { officeZoneId } from "@/visualization/scene/scene-focus";
 import { useRoom } from "./room-provider";
-import { PRESENCE_LABEL, VOTE_CHOICE_LABEL } from "./room-labels";
+import { VOTE_CHOICE_LABEL } from "./room-labels";
 
 /**
- * Participants and their offices.
+ * Participants and their seats at the one shared table.
  *
- * Separate authority is the point of this panel: every row is one participant,
- * simulated participants are labelled as such, and no control here can act on
- * another participant's behalf.
+ * Separate authority is the point of this panel: every row is one
+ * participant, simulated participants are labelled as such, and no control
+ * here can act on another participant's behalf.
  */
 export function ParticipantPanel() {
-  const { visualization } = useRoom();
-  // Present only inside the 3D shell, so this panel still renders on its own.
-  const shell = useOptionalShell();
-  const { participants, officeSlots, constraints } = visualization;
+  const { room, visualization } = useRoom();
+  const { participants, constraints } = visualization;
 
   const constraintCounts = new Map<string, number>();
   for (const constraint of constraints) {
@@ -26,14 +22,14 @@ export function ParticipantPanel() {
     );
   }
 
-  const reservedCount = officeSlots.filter(
-    (slot) => slot.status === "reserved",
+  const openSeats = room.participants.filter(
+    (participant) => participant.kind === "human" && !participant.isClaimed,
   ).length;
 
   return (
     <section className="panel-block" aria-labelledby="participants-heading">
       <h2 className="panel-heading" id="participants-heading">
-        Participants &amp; offices
+        Participants
       </h2>
 
       <ul className="participant-list">
@@ -56,20 +52,8 @@ export function ParticipantPanel() {
               <span className="participant-role">{participant.role}</span>
             </div>
 
-            {shell ? (
-              <button
-                type="button"
-                className="button-quiet participant-visit"
-                onClick={() =>
-                  shell.visitZone(officeZoneId(participant.officeSlot))
-                }
-              >
-                Visit this office
-              </button>
-            ) : null}
-
             <div className="participant-tags">
-              <span className="tag">Office {participant.officeSlot + 1}</span>
+              <span className="tag">Seat {participant.seatIndex + 1}</span>
               {participant.kind === "simulation" ? (
                 <span className="tag tag-simulation">Simulated participant</span>
               ) : (
@@ -83,10 +67,6 @@ export function ParticipantPanel() {
             </div>
 
             <dl className="participant-state">
-              <div>
-                <dt>Where</dt>
-                <dd>{PRESENCE_LABEL[participant.presence]}</dd>
-              </div>
               <div>
                 <dt>Constraints</dt>
                 <dd>{constraintCounts.get(participant.id) ?? 0}</dd>
@@ -113,8 +93,9 @@ export function ParticipantPanel() {
       </ul>
 
       <p className="panel-note">
-        {reservedCount} of {officeSlots.length} offices are reserved for
-        participants who have not joined yet.
+        {openSeats === 0
+          ? "Every seat is claimed."
+          : `${openSeats} human seat${openSeats === 1 ? "" : "s"} still open for someone to join.`}
       </p>
     </section>
   );

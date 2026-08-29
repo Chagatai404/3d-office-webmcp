@@ -1,6 +1,6 @@
 import { RoomE2EHarness } from "@/components/room/room-e2e-harness";
 import { RoomProvider } from "@/components/room/room-provider";
-import { DesktopShell } from "@/components/shell/desktop-shell";
+import { MeetingShell } from "@/components/shell/meeting-shell";
 
 export default async function RoomPage({
   params,
@@ -13,7 +13,7 @@ export default async function RoomPage({
 
   return (
     <RoomProvider roomId={roomId}>
-      {useE2EHarness ? <RoomE2EHarness /> : <DesktopShell />}
+      {useE2EHarness ? <RoomE2EHarness /> : <MeetingShell />}
     </RoomProvider>
   );
 }

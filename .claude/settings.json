@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "authoring-motion@claude-design-skillstack": true,
+    "core-3d-animation@claude-design-skillstack": true
+  }
+}

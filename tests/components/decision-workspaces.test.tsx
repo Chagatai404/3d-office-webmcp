@@ -2,7 +2,10 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DecisionPanel } from "@/components/room/decision-panel";
+import { DecisionWorkspace } from "@/components/room/decision-workspace";
+import { IssuesWorkspace } from "@/components/room/issues-workspace";
+import { ProposalsWorkspace } from "@/components/room/proposals-workspace";
+import { VoteWorkspace } from "@/components/room/vote-workspace";
 import { RoomProvider } from "@/components/room/room-provider";
 import { demoRoom, demoTimestamp } from "@/fixtures/demo-room";
 import { setRoomClientForTests } from "@/room-client/room-client";
@@ -12,7 +15,9 @@ import type {
   Conflict,
   DecisionRecord,
   FinalDecisionPreview,
+  ManageRoomInvitationInput,
   Proposal,
+  RegeneratedRoomInvitation,
   RoomClient,
   RoomPhase,
   RoomState,
@@ -33,7 +38,7 @@ let root: Root;
 
 type Listener = (state: RoomState) => void;
 
-class B5RoomClient implements RoomClient {
+class FakeRoomClient implements RoomClient {
   state: RoomState;
   readonly submitProposalCalls: Parameters<RoomClient["submitProposal"]>[1][] = [];
   readonly raiseObjectionCalls: Parameters<RoomClient["raiseObjection"]>[1][] = [];
@@ -136,6 +141,19 @@ class B5RoomClient implements RoomClient {
     });
     return this.ok(`Room phase advanced to ${phase}.`);
   };
+
+  regenerateInvitation: RoomClient["regenerateInvitation"] = async (
+    _roomId,
+    input: ManageRoomInvitationInput,
+  ) =>
+    this.ok<RegeneratedRoomInvitation>("Invitation regenerated.", {
+      participantId: input.participantId,
+      role: "Unassigned",
+      inviteUrl: `https://example.test/invite/${input.participantId}`,
+    });
+
+  revokeInvitation: RoomClient["revokeInvitation"] = async () =>
+    this.ok("Invitation revoked.");
 
   publish(apply: (draft: RoomState) => void) {
     const draft = this.snapshot();
@@ -317,14 +335,10 @@ function roomInPhase(phase: RoomPhase): RoomState {
   return room;
 }
 
-async function mount(client: B5RoomClient) {
+async function mount(client: FakeRoomClient, ui: React.ReactElement) {
   setRoomClientForTests(client);
   await act(async () => {
-    root.render(
-      <RoomProvider roomId={client.state.id}>
-        <DecisionPanel />
-      </RoomProvider>,
-    );
+    root.render(<RoomProvider roomId={client.state.id}>{ui}</RoomProvider>);
   });
   await act(async () => {});
 }
@@ -390,13 +404,13 @@ afterEach(async () => {
   setRoomClientForTests(null);
 });
 
-describe("participant decision workbench", () => {
-  it("shows the active central-table proposal and submits proposals in proposals phase", async () => {
-    const client = new B5RoomClient(roomInPhase("proposals"));
-    await mount(client);
+describe("proposals workspace", () => {
+  it("shows the active candidate and submits proposals in the proposals phase", async () => {
+    const client = new FakeRoomClient(roomInPhase("proposals"));
+    await mount(client, <ProposalsWorkspace />);
 
     expect(container.textContent).toContain("Active proposal");
-    expect(container.textContent).toContain("central table");
+    expect(container.textContent).toContain("candidate board");
 
     await submit("proposal-form");
 
@@ -409,10 +423,12 @@ describe("participant decision workbench", () => {
       "constraint-3",
     );
   });
+});
 
+describe("issues workspace", () => {
   it("keeps objections, tradeoffs, and explicit resolutions as separate actions", async () => {
-    const client = new B5RoomClient(roomInPhase("deliberation"));
-    await mount(client);
+    const client = new FakeRoomClient(roomInPhase("deliberation"));
+    await mount(client, <IssuesWorkspace />);
 
     setValue(
       byTestId<HTMLFormElement>("objection-form").querySelector<HTMLTextAreaElement>(
@@ -453,13 +469,15 @@ describe("participant decision workbench", () => {
       },
     ]);
     expect(container.textContent).toContain(
-      "Tradeoffs and resolutions are separate recorded actions.",
+      "Nothing here can be voted on until they are settled.",
     );
   });
+});
 
+describe("vote workspace", () => {
   it("casts only the current participant vote and states that voting is not approval", async () => {
-    const client = new B5RoomClient(roomInPhase("voting"));
-    await mount(client);
+    const client = new FakeRoomClient(roomInPhase("voting"));
+    await mount(client, <VoteWorkspace />);
 
     setValue(
       byTestId<HTMLFormElement>("vote-form").querySelector<HTMLSelectElement>(
@@ -477,12 +495,14 @@ describe("participant decision workbench", () => {
       },
     ]);
     expect("participantId" in client.castMyVoteCalls[0]!).toBe(false);
-    expect(container.textContent).toContain("It is not final approval.");
+    expect(container.textContent).toContain("It is not final approval");
   });
+});
 
+describe("decision workspace", () => {
   it("binds approval to the exact current decision hash and resets on hash change", async () => {
-    const client = new B5RoomClient(roomInPhase("approval"));
-    await mount(client);
+    const client = new FakeRoomClient(roomInPhase("approval"));
+    await mount(client, <DecisionWorkspace />);
 
     await click(buttonNamed("Refresh exact server preview"));
     expect(client.previewCalls).toBe(1);
@@ -509,8 +529,8 @@ describe("participant decision workbench", () => {
   });
 
   it("loads the immutable final decision record instead of reconstructing it locally", async () => {
-    const client = new B5RoomClient(roomInPhase("finalized"));
-    await mount(client);
+    const client = new FakeRoomClient(roomInPhase("finalized"));
+    await mount(client, <DecisionWorkspace />);
 
     await click(buttonNamed("Load persisted final record"));
 

@@ -4,7 +4,6 @@ import type {
   RoomPhase,
   VoteChoice,
 } from "@/contracts/room";
-import type { ParticipantPresence } from "@/visualization/room-view-model";
 
 /**
  * Human-readable labels for canonical enum values.
@@ -70,18 +69,6 @@ export const ACTOR_TYPE_LABEL: Record<ActorType, string> = {
   participant: "Participant",
   expert: "Expert",
   system: "System",
-};
-
-/**
- * Where each person is in the office.
- *
- * The canvas is hidden from assistive technology, so anything the avatars say
- * has to be readable here too. Presence describes a place, never authority.
- */
-export const PRESENCE_LABEL: Record<ParticipantPresence, string> = {
-  meeting: "In the meeting room",
-  office: "At their desk",
-  roaming: "Moving about the office",
 };
 
 export const VOTE_CHOICE_LABEL: Record<VoteChoice, string> = {

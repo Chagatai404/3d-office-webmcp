@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RoomState } from "@/contracts/room";
 import { demoRoom, demoTimestamp } from "@/fixtures/demo-room";
-import {
-  createRoomVisualizationState,
-  OFFICE_SLOT_COUNT,
-} from "@/visualization/room-view-model";
+import { createRoomVisualizationState } from "@/visualization/room-view-model";
 
 function withDecision(overrides: Partial<RoomState>): RoomState {
   return { ...structuredClone(demoRoom), ...overrides };
@@ -37,25 +34,18 @@ describe("createRoomVisualizationState", () => {
     expect(first.activeProposal).toBeNull();
   });
 
-  it("lays out ten offices and marks the empty ones reserved", () => {
+  it("gives every participant a stable seat", () => {
     const view = createRoomVisualizationState(demoRoom);
 
-    expect(view.officeSlots).toHaveLength(OFFICE_SLOT_COUNT);
-    expect(
-      view.officeSlots.filter((slot) => slot.status === "occupied"),
-    ).toHaveLength(4);
-    expect(
-      view.officeSlots
-        .filter((slot) => slot.status === "reserved")
-        .every((slot) => slot.participantId === null),
-    ).toBe(true);
+    expect(new Set(view.participants.map((participant) => participant.seatIndex)).size).toBe(
+      view.participants.length,
+    );
 
-    // Office assignment is stable, so a participant keeps their room.
+    // Seat assignment is stable, so a participant keeps their seat.
     const engineer = view.participants.find(
       (participant) => participant.id === "participant-engineering",
     );
-    expect(engineer?.officeSlot).toBe(1);
-    expect(view.officeSlots[1]?.participantId).toBe("participant-engineering");
+    expect(engineer?.seatIndex).toBe(1);
   });
 
   it("marks the seated participant as self and labels simulations", () => {
