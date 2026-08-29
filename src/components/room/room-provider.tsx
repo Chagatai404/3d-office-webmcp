@@ -23,6 +23,7 @@ import type {
   ResolveObjectionInput,
   RoomPhase,
   RoomState,
+  StartDemoScenarioInput,
   SubmitProposalInput,
 } from "@/contracts/room";
 
@@ -80,6 +81,9 @@ export interface RoomActions {
   getDecisionRecord(): Promise<
     ActionResult<DecisionRecord>
   >;
+
+  /** Reset/reseed the single shared demo room through the guarded demo API. */
+  startDemoScenario(input: StartDemoScenarioInput): Promise<ActionResult>;
 
   /** Demo-only phase transition used by the isolated browser integration harness. */
   advanceDemoPhase(phase: RoomPhase): Promise<ActionResult>;
@@ -230,6 +234,9 @@ export function RoomProvider({
 
       getDecisionRecord: () =>
         client.getDecisionRecord(roomId),
+
+      startDemoScenario: (input) =>
+        client.startDemoScenario(roomId, input),
 
       advanceDemoPhase: (phase) =>
         client.advanceDemoPhase(roomId, phase),

@@ -70,11 +70,45 @@ flow. It requires `ALLOW_DEMO_PHASE_TRANSITIONS=true`, a claimed participant,
 the current version, the literal `demo` room, and the next deliberate phase in
 the sequence.
 
+The isolated `POST /api/dev/rooms/:roomId/scenario` route resets and reseeds the
+shared demo room as either `multi_user` or `solo_judge`. It requires an
+authenticated browser session, the literal `demo` room, and
+`ALLOW_DEMO_RESET=true`. Solo mode also requires one canonical human role; that
+participant is the only human and required approver, while the other three
+participants are visibly marked as simulations. The reset is transactional and
+uses a narrowly scoped database trigger bypass so a finalized demo can be
+replayed without weakening the normal finalized-room guard.
+
 WebMCP exposes phase-scoped voting, preview, approval-request, and finalized
 record tools. `approve_final_decision` never records an approval directly: it
 returns `HUMAN_CONFIRMATION_REQUIRED`. The visible room UI displays the exact
 candidate and hash, requires an explicit confirmation checkbox, and then sends
 the approval through `ApiRoomClient`.
+
+## Solo-judge orchestration
+
+Solo-judge reactions run in Postgres through the shared room repository, after
+reads and successful mutations from both the manual UI and WebMCP. There are no
+browser or WebMCP simulation mutation tools. Internal simulation functions are
+not executable by `anon` or `authenticated`; they record the simulated
+participant as actor authority and `simulation` as action origin.
+
+The demo rules are deterministic and intentionally scenario-specific:
+
+- simulated participants contribute their seeded positions;
+- ambitious proposals can produce engineering-capacity, accessibility, and
+  campaign-deadline reactions;
+- a revision that explicitly reduces scope, preserves accessibility, and keeps
+  the launch date resolves applicable blockers and advances voting;
+- simulated participants cast deterministic votes, but never human approvals;
+- only the selected human can approve the exact decision hash and finalize.
+
+An advisory transaction lock serializes orchestration for the room. A private
+reaction ledger with unique `(room_id, reaction_key)` entries makes repeated,
+concurrent, or replayed settlement calls idempotent. A bounded loop settles all
+newly enabled reactions and phase transitions before returning the refreshed
+canonical snapshot. These normalized text predicates are demo fixtures, not a
+general decision engine.
 
 ## Realtime
 
@@ -86,11 +120,18 @@ components.
 
 ## Frontend handoff
 
-Instantiate one `ApiRoomClient` per browser application session and provide it
-where the frontend currently provides `MockRoomClient`. No component should
-import Supabase table types or call Supabase mutation APIs. Continue to feed 3D
-only with `createRoomVisualizationState(room)`.
+Instantiate one `ApiRoomClient` per browser application session. `RoomProvider`
+exposes the canonical room snapshot and actions, including
+`startDemoScenario`. No component should import Supabase table types or call
+Supabase mutation APIs. Render mode and participant labels from
+`RoomState.demoMode`, `participant.kind`, and
+`participant.requiredForApproval`. Continue to feed 3D only with
+`createRoomVisualizationState(room)`; the projection includes participant kind
+and activity origin without giving the 3D layer any orchestration authority.
 
 For a hosted project, enable Anonymous Sign-Ins, apply the migration and seed,
-set the two public Supabase environment variables, and leave the developer phase
-transition flag disabled outside a controlled demo environment.
+set the two public Supabase environment variables, and leave both
+`ALLOW_DEMO_PHASE_TRANSITIONS` and `ALLOW_DEMO_RESET` disabled outside a
+controlled demo environment. The shared `demo` room is a single global fixture,
+so starting a scenario intentionally replaces its current state for every
+connected demo browser.

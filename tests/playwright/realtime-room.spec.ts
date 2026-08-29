@@ -310,3 +310,154 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   await engineerContext.close();
   await designerContext.close();
 });
+
+test("one judge completes and replays the deterministic solo demo", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const context = await browser.newContext();
+  await installWebMcpShim(context);
+  const page = await context.newPage();
+  await page.goto("/room/demo");
+  await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+
+  await page.getByTestId("demo-human-role").selectOption("product");
+  await page.getByTestId("start-solo-demo").click();
+  await expect(page.getByTestId("demo-mode")).toHaveText("Mode: solo_judge");
+  await expect(page.getByTestId("room-phase")).toHaveText("input");
+  await expect(page.getByTestId("room-version")).toHaveText("3");
+  await expect(page.getByTestId("participant-kind-demo-product")).toContainText("Human Participant · Required approver");
+  await expect(page.getByTestId("participant-kind-demo-engineer")).toHaveText("Simulated Participant");
+  await expect(page.getByTestId("participant-kind-demo-designer")).toHaveText("Simulated Participant");
+  await expect(page.getByTestId("participant-kind-demo-marketing")).toHaveText("Simulated Participant");
+
+  await page.getByTestId("claim-demo-product").click();
+  await expect(page.getByText("Your seat")).toBeVisible();
+  await expect.poll(() => toolNames(page)).toEqual([
+    "add_my_position",
+    "get_meeting_context",
+  ]);
+
+  const position = JSON.parse(String(await executeTool(page, "add_my_position", {
+    summary: "Improve onboarding completion and time to first value.",
+    category: "outcome",
+    priority: "high",
+    constraints: [],
+  })));
+  expect(position).toMatchObject({ ok: true, roomVersion: 6 });
+  await expect(page.getByTestId("room-phase")).toHaveText("proposals");
+  await expect.poll(() => toolNames(page)).toEqual([
+    "get_meeting_context",
+    "list_positions",
+    "submit_proposal",
+  ]);
+
+  const positions = JSON.parse(String(await executeTool(page, "list_positions", {})));
+  expect(positions.data.participantPositions).toHaveLength(4);
+  expect(positions.data.participantPositions.flatMap(
+    (group: { positions: unknown[] }) => group.positions,
+  )).toHaveLength(4);
+
+  const proposal = JSON.parse(String(await executeTool(page, "submit_proposal", {
+    title: "Custom personalized onboarding rebuild",
+    summary: "Rebuild onboarding as a custom multi-step flow with new event tracking and expanded personalization before campaign launch.",
+    rationale: "The broad rebuild aims to improve onboarding completion and first value.",
+    expectedOutcomes: ["Higher completion"],
+    referencedConstraintIds: ["constraint-product-completion", "constraint-product-value"],
+  })));
+  expect(proposal).toMatchObject({ ok: true, roomVersion: 10 });
+  await expect(page.getByTestId("room-phase")).toHaveText("deliberation");
+  await expect(page.getByTestId("conflicts")).toContainText("engineering capacity");
+  await expect(page.getByTestId("conflicts")).toContainText("accessibility review scope");
+  await expect(page.getByTestId("activity")).toContainText("objection.raised · simulation");
+
+  const issues = JSON.parse(String(await executeTool(page, "get_open_issues", {})));
+  expect(issues.data.openIssues).toHaveLength(2);
+  const tradeoff = JSON.parse(String(await executeTool(page, "propose_tradeoff", {
+    conflictIds: issues.data.openIssues.map((issue: { conflictId: string }) => issue.conflictId),
+    description: "Reduce scope and reuse the existing authentication and onboarding flow.",
+    expectedEffect: "Keep the two-week campaign launch while validating accessibility.",
+    revisedProposal: {
+      title: "Accessible incremental onboarding",
+      summary: "Reuse the existing authentication and onboarding flow, limit scope to two accessible steps, and keep the campaign launch date.",
+      rationale: "A thin two-week scope preserves existing auth while validating keyboard and screen reader accessibility and improving first value.",
+      expectedOutcomes: ["Improve onboarding completion", "Faster first value"],
+      referencedConstraintIds: [
+        "constraint-engineering-auth",
+        "constraint-engineering-capacity",
+        "constraint-design-accessibility",
+        "constraint-marketing-date",
+      ],
+    },
+  })));
+  expect(tradeoff).toMatchObject({ ok: true, roomVersion: 17 });
+  await expect(page.getByTestId("room-phase")).toHaveText("voting");
+  await expect(page.getByTestId("votes").locator("li")).toHaveCount(3);
+  await expect(page.getByTestId("activity")).toContainText("conflict.resolved · simulation");
+  await expect.poll(() => toolNames(page)).toEqual([
+    "cast_my_vote",
+    "get_meeting_context",
+    "get_open_issues",
+  ]);
+
+  const votingContext = JSON.parse(String(await executeTool(page, "get_meeting_context", {})));
+  const activeProposalId = votingContext.data.activeProposal.id;
+  const vote = JSON.parse(String(await executeTool(page, "cast_my_vote", {
+    proposalId: activeProposalId,
+    choice: "support",
+    comment: "Ready for exact human review.",
+  })));
+  expect(vote).toMatchObject({ ok: true, roomVersion: 19 });
+  await expect(page.getByTestId("room-phase")).toHaveText("approval");
+  await expect(page.getByTestId("approvals")).toBeEmpty();
+  await expect.poll(() => toolNames(page)).toEqual([
+    "approve_final_decision",
+    "get_meeting_context",
+    "preview_final_decision",
+  ]);
+
+  const preview = JSON.parse(String(await executeTool(page, "preview_final_decision", {})));
+  expect(preview.data.requiredApprovalParticipantIds).toEqual(["demo-product"]);
+  expect(preview.data.approvals).toEqual([]);
+  const decisionHash = preview.data.decisionHash;
+  await expect(page.getByTestId("decision-hash")).toHaveText(decisionHash);
+
+  const approvalRequest = JSON.parse(String(await executeTool(
+    page,
+    "approve_final_decision",
+    { decisionHash },
+  )));
+  expect(approvalRequest).toMatchObject({
+    ok: false,
+    error: { code: "HUMAN_CONFIRMATION_REQUIRED" },
+    roomVersion: 19,
+  });
+  await page.getByLabel("I reviewed and confirm this exact final decision.").check();
+  await page.getByTestId("confirm-approval").click();
+  await expect(page.getByTestId("room-phase")).toHaveText("finalized");
+  await expect(page.getByTestId("room-version")).toHaveText("20");
+  await expect.poll(() => toolNames(page)).toEqual(["get_decision_record"]);
+
+  const record = JSON.parse(String(await executeTool(page, "get_decision_record", {})));
+  expect(record.data.approvals.map(
+    (approval: { participantId: string }) => approval.participantId,
+  )).toEqual(["demo-product"]);
+  expect(record.data.provenance.some(
+    (event: { origin: string; action: string }) =>
+      event.origin === "simulation" && event.action === "objection.raised",
+  )).toBe(true);
+  expect(record.data.provenance.filter(
+    (event: { origin: string; action: string }) =>
+      event.origin === "simulation" && event.action === "vote.cast",
+  )).toHaveLength(3);
+
+  await page.getByTestId("start-solo-demo").click();
+  await expect(page.getByTestId("room-phase")).toHaveText("input");
+  await expect(page.getByTestId("room-version")).toHaveText("3");
+  await expect(page.getByTestId("conflicts")).toBeEmpty();
+  await expect(page.getByTestId("votes")).toBeEmpty();
+  await expect.poll(() => toolNames(page)).toEqual([
+    "add_my_position",
+    "get_meeting_context",
+  ]);
+
+  await context.close();
+});
