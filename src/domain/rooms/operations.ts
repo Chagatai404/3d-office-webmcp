@@ -3,6 +3,8 @@ import {
   approveFinalDecisionInputSchema,
   castVoteInputSchema,
   claimSeatInputSchema,
+  createRoomInputSchema,
+  createdRoomSchema,
   raiseObjectionInputSchema,
   proposeTradeoffInputSchema,
   resolveObjectionInputSchema,
@@ -15,6 +17,8 @@ import {
   type ApproveFinalDecisionInput,
   type CastVoteInput,
   type ClaimSeatInput,
+  type CreatedRoom,
+  type CreateRoomInput,
   type DecisionRecord,
   type FinalDecisionPreview,
   type RaiseObjectionInput,
@@ -25,7 +29,8 @@ import {
   type StartDemoScenarioInput,
   type SubmitProposalInput,
 } from "@/contracts/room";
-import type { MutationContext, RoomRepository } from "./repository";
+import { buildInviteUrl } from "./invitations";
+import type { DomainActor, MutationContext, RoomRepository } from "./repository";
 
 function failure<T = null>(
   code: ActionErrorCode,
@@ -75,6 +80,64 @@ async function prepareMutation(
     );
   }
   return room;
+}
+
+export interface CreateRoomContext {
+  actor: DomainActor;
+  /** Absolute origin used to build shareable invite links, e.g. `https://app.example`. */
+  inviteBaseUrl: string;
+}
+
+/**
+ * Creates a private, non-demo room. Organizer identity comes from the
+ * authenticated session only: the input schema is strict, so a request body
+ * cannot carry `organizerUserId`, `actorId`, `participantId`, `userId` or
+ * `origin`, and the database sets `organizer_user_id` from `auth.uid()`.
+ *
+ * Raw invitation tokens leave the system exactly once, inside the returned
+ * invite URLs; they are never persisted and never enter `RoomState`.
+ */
+export async function createRoom(
+  repository: RoomRepository,
+  input: CreateRoomInput,
+  context: CreateRoomContext,
+): Promise<ActionResult<CreatedRoom>> {
+  const parsed = createRoomInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Room creation input is invalid.", 0);
+  }
+  const distinctNames = new Set(
+    parsed.data.participants.map((participant) => participant.name.trim()),
+  );
+  if (distinctNames.size !== parsed.data.participants.length) {
+    return failure(
+      "VALIDATION_ERROR",
+      "Participant names must be unique within a room.",
+      0,
+    );
+  }
+  if (!context.actor.authUserId) {
+    return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
+  }
+
+  const created = await repository.createRoom(parsed.data, context.actor);
+  if (!created.ok) return created;
+
+  return {
+    ...created,
+    data: createdRoomSchema.parse({
+      roomId: created.data.roomId,
+      participantInvites: created.data.participantInvites.map((invite) => ({
+        participantId: invite.participantId,
+        role: invite.role,
+        inviteUrl: buildInviteUrl(
+          context.inviteBaseUrl,
+          created.data.roomId,
+          invite.inviteToken,
+        ),
+      })),
+    }),
+  };
 }
 
 export function getMeetingContext(

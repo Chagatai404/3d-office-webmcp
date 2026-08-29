@@ -33,6 +33,21 @@ export function mutationContext(
   };
 }
 
+/**
+ * Absolute origin used to build shareable links. An explicit deployment URL
+ * wins; otherwise the proxy-forwarded host, then the request URL itself.
+ */
+export function requestBaseUrl(request: Request): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  if (forwardedHost) {
+    const protocol = request.headers.get("x-forwarded-proto") ?? "https";
+    return `${protocol}://${forwardedHost}`;
+  }
+  return new URL(request.url).origin;
+}
+
 export function actionResponse<T>(result: ActionResult<T>) {
   const status = result.ok
     ? 200

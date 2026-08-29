@@ -5,6 +5,7 @@ import type {
   ApproveFinalDecisionInput,
   CastVoteInput,
   ClaimSeatInput,
+  CreateRoomInput,
   DecisionRecord,
   FinalDecisionPreview,
   RaiseObjectionInput,
@@ -27,8 +28,28 @@ export interface MutationContext {
   humanConfirmed?: boolean;
 }
 
+export interface CreatedRoomInvitation {
+  participantId: string;
+  role: string;
+  /**
+   * Raw invitation capability. It exists only on this creation boundary: it is
+   * never persisted (only its hash is) and never reaches `RoomState`.
+   */
+  inviteToken: string;
+}
+
+/** Internal creation record. The public DTO adds invite URLs and drops tokens. */
+export interface CreatedRoomRecord {
+  roomId: string;
+  participantInvites: CreatedRoomInvitation[];
+}
+
 export interface RoomRepository {
   getRoom(roomId: string, authUserId: string): Promise<RoomState | null>;
+  createRoom(
+    input: CreateRoomInput,
+    actor: DomainActor,
+  ): Promise<ActionResult<CreatedRoomRecord>>;
   claimSeat(
     roomId: string,
     input: ClaimSeatInput,

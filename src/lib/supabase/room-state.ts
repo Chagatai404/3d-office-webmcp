@@ -36,7 +36,7 @@ export async function loadRoomState(
 
   const [participants, positions, constraints, proposals, conflicts, tradeoffs, votes, approvals, activity] =
     await Promise.all([
-      client.from("participants").select("id,user_id,name,role,kind,required_for_approval,created_at").eq("room_id", roomId).order("created_at"),
+      client.from("participants").select("id,user_id,name,role,kind,required_for_approval,created_at").eq("room_id", roomId).order("seat_order"),
       client.from("positions").select("id,participant_id,summary,category,priority,created_at").eq("room_id", roomId).order("created_at"),
       client.from("constraints").select("id,participant_id,category,text,priority,created_at").eq("room_id", roomId).order("created_at"),
       client.from("proposals").select("id,participant_id,title,summary,rationale,expected_outcomes,referenced_constraint_ids,parent_proposal_id,status,created_at").eq("room_id", roomId).order("created_at"),

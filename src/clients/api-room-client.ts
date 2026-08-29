@@ -22,6 +22,7 @@ import {
   type SubmitProposalInput,
 } from "@/contracts/room";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
+import { ensureAnonymousAccessToken } from "@/lib/supabase/session";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 
 export class ApiRoomClient implements RoomClient {
@@ -154,13 +155,7 @@ export class ApiRoomClient implements RoomClient {
 
   private async ensureAnonymousSession(): Promise<string> {
     if (this.sessionPromise) return this.sessionPromise;
-    this.sessionPromise = (async () => {
-      const { data } = await this.supabase.auth.getSession();
-      if (data.session) return data.session.access_token;
-      const { data: signInData, error } = await this.supabase.auth.signInAnonymously();
-      if (error || !signInData.session) throw new Error(error?.message ?? "Anonymous sign-in failed.");
-      return signInData.session.access_token;
-    })();
+    this.sessionPromise = ensureAnonymousAccessToken(this.supabase);
     try {
       return await this.sessionPromise;
     } finally {

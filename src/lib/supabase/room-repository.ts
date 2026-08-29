@@ -8,6 +8,7 @@ import {
   type ApproveFinalDecisionInput,
   type CastVoteInput,
   type ClaimSeatInput,
+  type CreateRoomInput,
   type RaiseObjectionInput,
   type ResolveObjectionInput,
   type ProposeTradeoffInput,
@@ -16,9 +17,34 @@ import {
   type SubmitProposalInput,
 } from "@/contracts/room";
 import { settleSoloDemoScenario } from "@/demo/orchestrator";
-import type { MutationContext, RoomRepository } from "@/domain/rooms/repository";
+import type {
+  CreatedRoomRecord,
+  DomainActor,
+  MutationContext,
+  RoomRepository,
+} from "@/domain/rooms/repository";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadRoomState } from "./room-state";
+
+/**
+ * Database boundary shape for `create_room`. Deliberately not part of
+ * `src/contracts/room.ts`: it carries raw invitation tokens, which the domain
+ * layer converts into invite URLs and never serializes into `RoomState`.
+ */
+const createdRoomRecordSchema = z
+  .object({
+    roomId: z.string().min(1),
+    participantInvites: z.array(
+      z
+        .object({
+          participantId: z.string().min(1),
+          role: z.string().min(1),
+          inviteToken: z.string().min(1),
+        })
+        .strict(),
+    ),
+  })
+  .strict() satisfies z.ZodType<CreatedRoomRecord>;
 
 export class SupabaseRoomRepository implements RoomRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -26,6 +52,19 @@ export class SupabaseRoomRepository implements RoomRepository {
   async getRoom(roomId: string, authUserId: string) {
     if (roomId === "demo") await settleSoloDemoScenario(this.client, roomId);
     return loadRoomState(this.client, roomId, authUserId);
+  }
+
+  createRoom(input: CreateRoomInput, actor: DomainActor) {
+    return this.callWithData(
+      "create_room",
+      {
+        p_title: input.title,
+        p_brief: input.brief,
+        p_participants: input.participants,
+        p_origin: actor.origin,
+      },
+      createdRoomRecordSchema,
+    );
   }
 
   claimSeat(roomId: string, input: ClaimSeatInput, context: MutationContext) {

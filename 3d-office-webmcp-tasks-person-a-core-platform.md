@@ -18,7 +18,7 @@
 
 This is the only intentionally sequential setup step.
 
-- [ ] **A-000 — Verify base branch is clean**
+- [x] **A-000 — Verify base branch is clean**
   ```bash
   git switch integration/ux-core-test
   git pull --ff-only
@@ -28,7 +28,7 @@ This is the only intentionally sequential setup step.
   ```
   **Done:** clean branch and green baseline.
 
-- [ ] **A-001 — Create a tiny contract-only checkpoint branch/commit**
+- [x] **A-001 — Create a tiny contract-only checkpoint branch/commit**
   - Branch suggestion:
     ```text
     feature/product-flow-contract
@@ -52,10 +52,11 @@ This is the only intentionally sequential setup step.
   - Do **not** redesign existing `RoomState`.
   - **Done:** typecheck passes and Person B can code against stable signatures.
 
-- [ ] **A-002 — Push Contract Freeze checkpoint**
+- [x] **A-002 — Push Contract Freeze checkpoint**
   - Person B must branch from this exact commit before parallel implementation begins.
   - Record commit SHA in both PR descriptions.
   - **Done:** both branches share the same contract ancestor.
+  - Pushed by user as `2813c3f` on `feature/product-flow-contract` (parent `3f744ca`). Not independently re-verified from this sandbox (no GitHub credentials here to fetch/confirm) — if Person B can't see the branch on origin, re-check the push.
 
 ---
 
@@ -112,7 +113,7 @@ docs/status.md
 
 ## Canonical contract
 
-- [ ] **A-100 / T-100 — Add `CreateRoomInput`**
+- [x] **A-100 / T-100 — Add `CreateRoomInput`**
   - `src/contracts/room.ts`
   - Strict schema:
     ```ts
@@ -128,7 +129,7 @@ docs/status.md
   - Reject `organizerUserId`, `actorId`, `participantId`, `userId`, `origin`.
   - **Done:** contract tests prove authority fields cannot be supplied.
 
-- [ ] **A-101 / T-101 — Add `CreatedRoom` DTO**
+- [x] **A-101 / T-101 — Add `CreatedRoom` DTO**
   - Return:
     ```ts
     roomId
@@ -143,7 +144,7 @@ docs/status.md
 
 ## Database and domain
 
-- [ ] **A-102 / T-102 — Add new lifecycle/invitation migration**
+- [x] **A-102 / T-102 — Add new lifecycle/invitation migration**
   - New migration only; do not rewrite old migrations.
   - Suggested filename:
     ```text
@@ -151,21 +152,21 @@ docs/status.md
     ```
   - **Done:** `supabase db reset` succeeds.
 
-- [ ] **A-103 / T-103 — Add `rooms.organizer_user_id`**
+- [x] **A-103 / T-103 — Add `rooms.organizer_user_id`**
   - `uuid references auth.users(id) on delete set null`.
   - Product-created rooms derive organizer from `auth.uid()`.
   - Keep demo/system behavior backward compatible.
   - **Done:** organizer is never browser-provided.
 
-- [ ] **A-104 / T-104 — Add organizer authorization helper**
+- [x] **A-104 / T-104 — Add organizer authorization helper**
   - Prefer `public.is_room_organizer(room_id)` or equivalent transaction-local guard.
   - **Done:** another authenticated user cannot perform organizer-only mutation.
 
-- [ ] **A-105 / T-105 — Add opaque room ID generation**
+- [x] **A-105 / T-105 — Add opaque room ID generation**
   - Collision-resistant, e.g. `rm_7P3KQ8M2`.
   - **Done:** collisions are safely retried/rejected.
 
-- [ ] **A-106 / T-106 — Implement `createRoom` domain operation**
+- [x] **A-106 / T-106 — Implement `createRoom` domain operation**
   - Validate input.
   - Require authenticated anonymous/user session.
   - Create room.
@@ -175,34 +176,61 @@ docs/status.md
   - Audit `room.created`.
   - **Done:** no organizer identity accepted from request body.
 
-- [ ] **A-107 / T-107 — Room creation audit provenance**
+- [x] **A-107 / T-107 — Room creation audit provenance**
   - Decide and document organizer lifecycle actor semantics.
   - `origin = manual_ui` for UI creation.
   - **Done:** domain test verifies audit event.
 
 ## API and client
 
-- [ ] **A-108 / T-108 — Add `POST /api/rooms`**
+- [x] **A-108 / T-108 — Add `POST /api/rooms`**
   - Bearer auth.
   - Thin adapter to domain layer.
   - **Done:** route has no room creation business rules.
 
-- [ ] **A-109 / T-109 — Implement `RoomOnboardingClient.createRoom()`**
+- [x] **A-109 / T-109 — Implement `RoomOnboardingClient.createRoom()`**
   - Keep pre-membership lifecycle concerns out of `RoomClient`.
   - **Done:** frontend can create room through one stable abstraction.
 
 ## Tests
 
-- [ ] **A-113 / T-113 — Contract tests for creation**
-- [ ] **A-114 / T-114 — Domain creation test**
-- [ ] **A-115 / T-115 — Organizer vs participant authority test**
+- [x] **A-113 / T-113 — Contract tests for creation**
+- [x] **A-114 / T-114 — Domain creation test**
+- [x] **A-115 / T-115 — Organizer vs participant authority test**
 
 ### A1 exit gate
 
-- [ ] Non-demo room can be created through API/domain.
-- [ ] Organizer is server-derived.
-- [ ] Room starts in `input`.
-- [ ] `/room/demo` remains unchanged.
+- [x] Non-demo room can be created through API/domain.
+- [x] Organizer is server-derived.
+- [x] Room starts in `input`.
+- [x] `/room/demo` remains unchanged.
+
+**Delivered in `supabase/migrations/20260829120000_room_creation_and_invitations.sql`,
+`src/domain/rooms/operations.ts` (`createRoom`), `src/app/api/rooms/route.ts`,
+`src/clients/api-room-onboarding-client.ts`.**
+
+Decisions worth carrying into A2/A3:
+
+- **Organizer seat.** The organizer takes the first listed seat. Membership —
+  not an organizer exception in `can_read_room` — is what lets the creator read
+  their own private room, which keeps A-209 intact. Invitations are therefore
+  generated for every seat *except* the organizer's.
+- **Audit provenance (A-107).** `room.created` is recorded with
+  `actor_type = participant`, `actor_id` = the organizer's seat,
+  `origin = manual_ui`, and `previousRoomVersion = resultingRoomVersion = 0`
+  because the room is born at version 0.
+- **Invite URL shape.** `<base>/room/<roomId>/join?invite=<rawToken>`, built in
+  `src/domain/rooms/invitations.ts` from `NEXT_PUBLIC_APP_URL`, the forwarded
+  host, or the request origin. Person B's join route consumes `?invite=`.
+- **Seat ordering.** `participants.seat_order` (monotonic sequence default) now
+  drives participant order: rows inserted in one transaction share `created_at`,
+  and claiming a seat rewrites its row, so the previous ordering was unstable
+  for created rooms and for the demo room after a claim.
+- **A2 primitives landed early.** `room_invitations`, `generate_invite_token()`
+  and `hash_invite_token()` ship with this migration because `createRoom` cannot
+  return invite URLs without them. A2 still owns preview, claim, expiry/revoke
+  guards and their tests; `ApiRoomOnboardingClient.previewInvitation()` /
+  `claimInvitation()` currently reject with an explicit "arrives in A2" error.
 
 ---
 
@@ -210,7 +238,10 @@ docs/status.md
 
 ## Database/security
 
-- [ ] **A-200 / T-200 — Add `room_invitations` table**
+> A-200/A-201/A-202 landed with the A1 migration (`createRoom` depends on them).
+> Preview, claim and the expiry/revoke guards remain A2 work.
+
+- [x] **A-200 / T-200 — Add `room_invitations` table**
   ```text
   id
   room_id
@@ -225,11 +256,11 @@ docs/status.md
   - `unique(room_id, participant_id)`.
   - `token_hash` unique.
 
-- [ ] **A-201 / T-201 — Generate cryptographically secure raw invite token**
+- [x] **A-201 / T-201 — Generate cryptographically secure raw invite token**
   - Raw token returned only at creation/regeneration boundary.
   - Never persist raw token.
 
-- [ ] **A-202 / T-202 — Canonical SHA-256 token hashing helper**
+- [x] **A-202 / T-202 — Canonical SHA-256 token hashing helper**
   - Same implementation for create, preview and claim.
 
 - [ ] **A-203 / T-203 — Expiry/revoke/claimed guards**
