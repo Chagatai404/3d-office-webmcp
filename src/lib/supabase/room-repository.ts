@@ -1,12 +1,15 @@
 import { z } from "zod";
 import {
   actionResultSchema,
+  claimInvitationResultSchema,
   decisionRecordSchema,
   finalDecisionPreviewSchema,
+  roomInvitePreviewSchema,
   type ActionResult,
   type AddPositionInput,
   type ApproveFinalDecisionInput,
   type CastVoteInput,
+  type ClaimInvitationInput,
   type ClaimSeatInput,
   type CreateRoomInput,
   type RaiseObjectionInput,
@@ -64,6 +67,32 @@ export class SupabaseRoomRepository implements RoomRepository {
         p_origin: actor.origin,
       },
       createdRoomRecordSchema,
+    );
+  }
+
+  /**
+   * Pre-membership read. The RPC is SECURITY DEFINER because the caller holds
+   * no seat yet, so no read policy can admit them; it answers with the narrow
+   * preview DTO only, never with room state.
+   */
+  previewInvitation(inviteToken: string, actor: DomainActor) {
+    void actor;
+    return this.callWithData(
+      "preview_room_invitation",
+      { p_raw_token: inviteToken },
+      roomInvitePreviewSchema,
+    );
+  }
+
+  /**
+   * Carries no expected room version: the caller cannot read the room before
+   * the claim, so the database serializes the claim on the room row instead.
+   */
+  claimInvitation(input: ClaimInvitationInput, actor: DomainActor) {
+    return this.callWithData(
+      "claim_room_invitation",
+      { p_raw_token: input.inviteToken, p_origin: actor.origin },
+      claimInvitationResultSchema,
     );
   }
 

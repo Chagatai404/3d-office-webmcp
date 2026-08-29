@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  claimInvitationInputSchema,
+  claimInvitationResultSchema,
   createRoomInputSchema,
   createdRoomSchema,
+  roomInvitePreviewSchema,
   roomStateSchema,
   type CreateRoomInput,
 } from "@/contracts/room";
@@ -127,5 +130,109 @@ describe("room snapshot secrecy", () => {
 
   it("keeps the canonical snapshot free of any invite field", () => {
     expect(JSON.stringify(demoRoom)).not.toMatch(/invite/i);
+  });
+});
+
+describe("invitation preview contract", () => {
+  const livePreview = {
+    inviteValid: true as const,
+    alreadyClaimed: false,
+    roomId: "rm_7P3KQ8M2",
+    title: "Two-Week Onboarding Launch",
+    brief: "Should we ship the onboarding update within two weeks?",
+    participant: { id: "participant-engineer", name: "Emre", role: "Engineer" },
+  };
+
+  it("carries the room only for a live invitation", () => {
+    expect(roomInvitePreviewSchema.parse(livePreview)).toEqual(livePreview);
+  });
+
+  it("answers a refused invitation with no room at all", () => {
+    const refused = { inviteValid: false as const, alreadyClaimed: true };
+    expect(roomInvitePreviewSchema.parse(refused)).toEqual(refused);
+  });
+
+  it.each(["roomId", "title", "brief", "participant"])(
+    "rejects %s on a refused invitation",
+    (field) => {
+      expect(
+        roomInvitePreviewSchema.safeParse({
+          inviteValid: false,
+          alreadyClaimed: false,
+          [field]: livePreview[field as keyof typeof livePreview],
+        }).success,
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    "phase",
+    "version",
+    "selfParticipantId",
+    "participants",
+    "positions",
+    "constraints",
+    "proposals",
+    "votes",
+    "approvals",
+    "activity",
+  ])("rejects %s leaking full room state into a preview", (field) => {
+    expect(
+      roomInvitePreviewSchema.safeParse({ ...livePreview, [field]: [] }).success,
+    ).toBe(false);
+  });
+
+  it("rejects the capability echoed back on the preview", () => {
+    expect(
+      roomInvitePreviewSchema.safeParse({ ...livePreview, inviteToken: "raw" })
+        .success,
+    ).toBe(false);
+  });
+
+  it.each(["userId", "kind", "isClaimed", "requiredForApproval"])(
+    "rejects %s on the previewed seat",
+    (field) => {
+      expect(
+        roomInvitePreviewSchema.safeParse({
+          ...livePreview,
+          participant: { ...livePreview.participant, [field]: "smuggled" },
+        }).success,
+      ).toBe(false);
+    },
+  );
+});
+
+describe("invitation claim contract", () => {
+  it("accepts a bare capability", () => {
+    expect(claimInvitationInputSchema.parse({ inviteToken: "raw" })).toEqual({
+      inviteToken: "raw",
+    });
+  });
+
+  it("requires a non-empty capability", () => {
+    expect(claimInvitationInputSchema.safeParse({ inviteToken: "" }).success).toBe(false);
+    expect(claimInvitationInputSchema.safeParse({}).success).toBe(false);
+  });
+
+  it.each([
+    "seatId",
+    "participantId",
+    "userId",
+    "actorId",
+    "roomId",
+    "origin",
+  ])("rejects browser-supplied %s authority", (field) => {
+    expect(
+      claimInvitationInputSchema.safeParse({ inviteToken: "raw", [field]: "smuggled" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("names only the seat the capability was minted for", () => {
+    const result = { roomId: "rm_7P3KQ8M2", participantId: "participant-engineer" };
+    expect(claimInvitationResultSchema.parse(result)).toEqual(result);
+    expect(
+      claimInvitationResultSchema.safeParse({ ...result, inviteToken: "raw" }).success,
+    ).toBe(false);
   });
 });

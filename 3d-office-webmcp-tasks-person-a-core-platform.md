@@ -263,12 +263,12 @@ Decisions worth carrying into A2/A3:
 - [x] **A-202 / T-202 — Canonical SHA-256 token hashing helper**
   - Same implementation for create, preview and claim.
 
-- [ ] **A-203 / T-203 — Expiry/revoke/claimed guards**
+- [x] **A-203 / T-203 — Expiry/revoke/claimed guards**
   - Invalid, expired, revoked and already-used capability paths return structured errors.
 
 ## Contract/domain
 
-- [ ] **A-204 / T-204 — Add `RoomInvitePreview`**
+- [x] **A-204 / T-204 — Add `RoomInvitePreview`**
   - Only safe fields:
     ```text
     roomId
@@ -280,19 +280,19 @@ Decisions worth carrying into A2/A3:
     ```
   - Never return full `RoomState` before membership.
 
-- [ ] **A-205 / T-205 — Add `ClaimInvitationInput`**
+- [x] **A-205 / T-205 — Add `ClaimInvitationInput`**
   ```ts
   { inviteToken: string }
   ```
   - No seat/participant authority field.
 
-- [ ] **A-206 / T-206 — Implement `previewRoomInvitation`**
+- [x] **A-206 / T-206 — Implement `previewRoomInvitation`**
   - Hash raw token.
   - Resolve capability server-side.
   - No full-room membership requirement.
   - Return only safe preview.
 
-- [ ] **A-207 / T-207 — Implement atomic `claimRoomInvitation`**
+- [x] **A-207 / T-207 — Implement atomic `claimRoomInvitation`**
   1. Require auth session.
   2. Hash token.
   3. Lock invitation.
@@ -304,39 +304,85 @@ Decisions worth carrying into A2/A3:
   9. Increment room version once.
   10. Audit `participant.seat_claimed`.
 
-- [ ] **A-208 / T-208 — Replay/race protection**
+- [x] **A-208 / T-208 — Replay/race protection**
   - Second different session cannot consume same token.
   - Same claimed user behavior must be explicitly idempotent or explicitly rejected.
 
 ## RLS/API/client
 
-- [ ] **A-209 / T-209 — Keep private-room full reads membership-only**
+- [x] **A-209 / T-209 — Keep private-room full reads membership-only**
   - Do not weaken `can_read_room` to accept invitation token.
 
-- [ ] **A-210 / T-210 — Narrow invitation preview path**
+- [x] **A-210 / T-210 — Narrow invitation preview path**
   - Server route or SECURITY DEFINER RPC.
   - Safe DTO only.
 
-- [ ] **A-211 / T-211 — Add `/api/invitations/preview`**
-- [ ] **A-212 / T-212 — Add `/api/invitations/claim`**
-- [ ] **A-213 — Implement onboarding client `previewInvitation()` / `claimInvitation()`**
+- [x] **A-211 / T-211 — Add `/api/invitations/preview`**
+- [x] **A-212 / T-212 — Add `/api/invitations/claim`**
+- [x] **A-213 — Implement onboarding client `previewInvitation()` / `claimInvitation()`**
 
 ## Tests
 
-- [ ] **A-217 / T-217 — Valid invite preview**
-- [ ] **A-218 / T-218 — Invalid token**
-- [ ] **A-219 / T-219 — Expired token**
-- [ ] **A-220 / T-220 — Revoked token**
-- [ ] **A-221 / T-221 — Cross-seat attack**
-- [ ] **A-222 / T-222 — Double claim / race / replay**
-- [ ] **A-223 / T-223 — Non-member full-room read rejected**
-- [ ] **A-224 / T-224 — Claimed member full-room read succeeds**
+- [x] **A-217 / T-217 — Valid invite preview**
+- [x] **A-218 / T-218 — Invalid token**
+- [x] **A-219 / T-219 — Expired token**
+- [x] **A-220 / T-220 — Revoked token**
+- [x] **A-221 / T-221 — Cross-seat attack**
+- [x] **A-222 / T-222 — Double claim / race / replay**
+- [x] **A-223 / T-223 — Non-member full-room read rejected**
+- [x] **A-224 / T-224 — Claimed member full-room read succeeds**
 
 ### A2 exit gate
 
-- [ ] Invitation acts only as predetermined-seat capability.
-- [ ] Raw token absent from DB and `RoomState`.
-- [ ] Seat ownership is derived from authenticated user after claim.
+- [x] Invitation acts only as predetermined-seat capability.
+- [x] Raw token absent from DB and `RoomState`.
+- [x] Seat ownership is derived from authenticated user after claim.
+
+**Delivered in `supabase/migrations/20260829130000_invitation_preview_and_claim.sql`
+(`preview_room_invitation`, `claim_room_invitation`), `previewRoomInvitation` /
+`claimRoomInvitation` in `src/domain/rooms/operations.ts`,
+`src/app/api/invitations/{preview,claim}/route.ts`, and the two
+`ApiRoomOnboardingClient` methods. Covered by `tests/domain/room-invitations.test.ts`
+and the invitation blocks of `tests/contracts/room-onboarding.test.ts`.**
+
+Decisions worth carrying into A3/A4:
+
+- **A-204/A-205 needed no contract change.** `roomInvitePreviewSchema`,
+  `claimInvitationInputSchema` and `claimInvitationResultSchema` landed in the
+  A-001 contract freeze and were implemented as frozen. The preview union is
+  discriminated on `inviteValid`, so the refusal branch structurally cannot
+  carry room or participant fields.
+- **Preview requires an authenticated session, not membership.** Every browser
+  already has an anonymous session (`ensureAnonymousAccessToken`), so this costs
+  the join flow nothing and keeps both RPCs granted to `authenticated` only.
+  `can_read_room` is untouched (A-209): only a claim creates membership.
+- **A spent capability is shown only to its claimant.** Re-opening one's own
+  invite link returns `inviteValid: true, alreadyClaimed: true`; anyone else
+  holding a copy gets the refusal branch. A preview therefore never reveals more
+  than the caller's existing entitlement.
+- **Structured errors reuse `NOT_AUTHORIZED`.** Unknown, expired, revoked and
+  already-used capabilities are distinguished by `message`/`recovery`, not by a
+  new `ActionErrorCode`. Adding an enum member after the freeze would have
+  broken Person B's exhaustive error handling.
+- **Replay is idempotent (A-208).** Re-claiming one's own seat succeeds without
+  a second version bump or audit event, matching `claim_participant_seat`; any
+  other session is refused, so a token is consumed exactly once.
+- **Locking order is rooms → invitation → participant**, the same order every
+  other room mutation uses. Concurrent claims serialize on the room row, and the
+  `participants_one_seat_per_user_per_room` index is the hard backstop.
+- **The token is hashed in the database**, by the canonical
+  `public.hash_invite_token`, so creation, preview and claim share one
+  implementation (A-202). Tokens travel in the POST body, never the URL path,
+  to keep them out of access logs and `Referer` headers.
+- **Carried to A4:** `claim_participant_seat` still lets any authenticated
+  session take a free seat given a room id, seat id and current version. Only
+  unguessability protects it for created rooms, since non-members cannot read
+  those values. Consider restricting it to `demo` when A4 hardens participant
+  authority.
+- **Invite management is still P1.** Nothing revokes or ages an invitation yet
+  (A-700/A-701), so `tests/domain/room-invitations.test.ts` sets `expires_at` /
+  `revoked_at` directly with the local secret key, which it reads from
+  `supabase status`.
 
 ---
 
@@ -478,13 +524,13 @@ Person A owns the final cross-layer Playwright spec to avoid merge conflicts.
 - [ ] **SEC-03** Organizer cannot write another participant’s position.
 - [ ] **SEC-04** Organizer cannot cast another participant’s vote.
 - [ ] **SEC-05** Organizer cannot approve for another participant.
-- [ ] **SEC-06** Invite token can claim only its predetermined seat.
-- [ ] **SEC-07** Raw invite token is never stored.
-- [ ] **SEC-08** Invite token is high entropy.
-- [ ] **SEC-09** Expired/revoked/claimed tokens fail.
-- [ ] **SEC-10** Non-member cannot read full private room.
-- [ ] **SEC-11** Invite preview does not expose full room.
-- [ ] **SEC-12** One auth user cannot claim multiple seats in one room.
+- [x] **SEC-06** Invite token can claim only its predetermined seat.
+- [x] **SEC-07** Raw invite token is never stored.
+- [x] **SEC-08** Invite token is high entropy.
+- [x] **SEC-09** Expired/revoked/claimed tokens fail.
+- [x] **SEC-10** Non-member cannot read full private room.
+- [x] **SEC-11** Invite preview does not expose full room.
+- [x] **SEC-12** One auth user cannot claim multiple seats in one room.
 - [ ] **SEC-13** Cross-room references rejected transactionally.
 - [ ] **SEC-14** Stale mutation writes nothing.
 - [ ] **SEC-15** Finalized room immutable.

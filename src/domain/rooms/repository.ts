@@ -4,6 +4,8 @@ import type {
   AddPositionInput,
   ApproveFinalDecisionInput,
   CastVoteInput,
+  ClaimInvitationInput,
+  ClaimInvitationResult,
   ClaimSeatInput,
   CreateRoomInput,
   DecisionRecord,
@@ -11,6 +13,7 @@ import type {
   RaiseObjectionInput,
   ResolveObjectionInput,
   ProposeTradeoffInput,
+  RoomInvitePreview,
   RoomPhase,
   RoomState,
   StartDemoScenarioInput,
@@ -50,6 +53,14 @@ export interface RoomRepository {
     input: CreateRoomInput,
     actor: DomainActor,
   ): Promise<ActionResult<CreatedRoomRecord>>;
+  previewInvitation(
+    inviteToken: string,
+    actor: DomainActor,
+  ): Promise<ActionResult<RoomInvitePreview>>;
+  claimInvitation(
+    input: ClaimInvitationInput,
+    actor: DomainActor,
+  ): Promise<ActionResult<ClaimInvitationResult>>;
   claimSeat(
     roomId: string,
     input: ClaimSeatInput,

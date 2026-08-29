@@ -2,6 +2,7 @@ import {
   addPositionInputSchema,
   approveFinalDecisionInputSchema,
   castVoteInputSchema,
+  claimInvitationInputSchema,
   claimSeatInputSchema,
   createRoomInputSchema,
   createdRoomSchema,
@@ -16,6 +17,8 @@ import {
   type AddPositionInput,
   type ApproveFinalDecisionInput,
   type CastVoteInput,
+  type ClaimInvitationInput,
+  type ClaimInvitationResult,
   type ClaimSeatInput,
   type CreatedRoom,
   type CreateRoomInput,
@@ -24,6 +27,7 @@ import {
   type RaiseObjectionInput,
   type ProposeTradeoffInput,
   type ResolveObjectionInput,
+  type RoomInvitePreview,
   type RoomPhase,
   type RoomState,
   type StartDemoScenarioInput,
@@ -138,6 +142,49 @@ export async function createRoom(
       })),
     }),
   };
+}
+
+/**
+ * Resolves a raw invitation token into the narrow pre-membership preview.
+ *
+ * An unknown, expired, revoked or foreign-claimed token is not an error: it is
+ * answered with the `inviteValid: false` branch, which carries no room or
+ * participant fields. Only a missing token is a validation failure, because
+ * there is nothing to resolve.
+ */
+export async function previewRoomInvitation(
+  repository: RoomRepository,
+  inviteToken: unknown,
+  actor: DomainActor,
+): Promise<ActionResult<RoomInvitePreview>> {
+  if (!actor.authUserId) {
+    return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
+  }
+  if (typeof inviteToken !== "string" || inviteToken.length === 0) {
+    return failure("VALIDATION_ERROR", "An invitation token is required.", 0);
+  }
+  return repository.previewInvitation(inviteToken, actor);
+}
+
+/**
+ * Binds the authenticated session to the one seat its capability names. The
+ * input carries no seat, participant or user field, so the claimed seat is
+ * always the one the token was minted for; the database performs the whole
+ * claim atomically and increments the room version once.
+ */
+export async function claimRoomInvitation(
+  repository: RoomRepository,
+  input: ClaimInvitationInput,
+  actor: DomainActor,
+): Promise<ActionResult<ClaimInvitationResult>> {
+  const parsed = claimInvitationInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Invitation claim input is invalid.", 0);
+  }
+  if (!actor.authUserId) {
+    return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
+  }
+  return repository.claimInvitation(parsed.data, actor);
 }
 
 export function getMeetingContext(

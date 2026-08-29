@@ -1,8 +1,11 @@
 "use client";
 
+import { z } from "zod";
 import {
   actionResultSchema,
+  claimInvitationResultSchema,
   createdRoomSchema,
+  roomInvitePreviewSchema,
   type ActionResult,
   type ClaimInvitationInput,
   type ClaimInvitationResult,
@@ -15,8 +18,11 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { ensureAnonymousAccessToken } from "@/lib/supabase/session";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const NOT_IMPLEMENTED_UNTIL_A2 =
-  "Invitation preview and claim arrive with the secure invitation slice.";
+/** Callers that expect a value rather than a structured refusal. */
+function unwrap<T>(result: ActionResult<T>): T {
+  if (!result.ok) throw new Error(result.error.message);
+  return result.data;
+}
 
 /**
  * Pre-membership onboarding over the HTTP API. Deliberately separate from
@@ -31,35 +37,54 @@ export class ApiRoomOnboardingClient implements RoomOnboardingClient {
   }
 
   async createRoom(input: CreateRoomInput): Promise<CreatedRoom> {
+    return unwrap(await this.post("/api/rooms", input, createdRoomSchema));
+  }
+
+  /**
+   * An unknown, expired, revoked or already-spent token is a normal answer, not
+   * a failure: it resolves to the `inviteValid: false` preview, which carries
+   * no room details.
+   */
+  async previewInvitation(inviteToken: string): Promise<RoomInvitePreview> {
+    return unwrap(
+      await this.post(
+        "/api/invitations/preview",
+        { inviteToken },
+        roomInvitePreviewSchema,
+      ),
+    );
+  }
+
+  /**
+   * Returns the raw `ActionResult` so the join UI can render the structured
+   * reason a capability was refused instead of a thrown message.
+   */
+  claimInvitation(
+    input: ClaimInvitationInput,
+  ): Promise<ActionResult<ClaimInvitationResult>> {
+    return this.post("/api/invitations/claim", input, claimInvitationResultSchema);
+  }
+
+  private async post<T>(
+    path: string,
+    body: unknown,
+    dataSchema: z.ZodType<T>,
+  ): Promise<ActionResult<T>> {
     const accessToken = await ensureAnonymousAccessToken(this.supabase);
-    const response = await fetch("/api/rooms", {
+    const response = await fetch(path, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(input),
+      body: JSON.stringify(body),
     });
-    const parsed = actionResultSchema(createdRoomSchema).safeParse(
+    const parsed = actionResultSchema(dataSchema).safeParse(
       await response.json().catch(() => null),
     );
     if (!parsed.success) {
-      throw new Error(`Room creation failed with HTTP ${response.status}.`);
+      throw new Error(`Request to ${path} failed with HTTP ${response.status}.`);
     }
-    const result = parsed.data as ActionResult<CreatedRoom>;
-    if (!result.ok) throw new Error(result.error.message);
-    return result.data;
-  }
-
-  previewInvitation(inviteToken: string): Promise<RoomInvitePreview> {
-    void inviteToken;
-    return Promise.reject(new Error(NOT_IMPLEMENTED_UNTIL_A2));
-  }
-
-  claimInvitation(
-    input: ClaimInvitationInput,
-  ): Promise<ActionResult<ClaimInvitationResult>> {
-    void input;
-    return Promise.reject(new Error(NOT_IMPLEMENTED_UNTIL_A2));
+    return parsed.data as ActionResult<T>;
   }
 }
