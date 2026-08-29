@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import type { ActionErrorCode } from "@/contracts/room";
 
 export function readToolSuccess<T>(data: T, roomVersion: number, message: string) {
   return {
@@ -6,6 +7,23 @@ export function readToolSuccess<T>(data: T, roomVersion: number, message: string
     data,
     roomVersion,
     message,
+  };
+}
+
+/**
+ * A refusal shaped exactly like a domain `ActionResult` failure, so an agent
+ * reads a tool-level guard and a database-level guard the same way.
+ */
+export function toolRefusal(
+  code: ActionErrorCode,
+  message: string,
+  recovery: string,
+  roomVersion: number,
+) {
+  return {
+    ok: false as const,
+    error: { code, message, recovery },
+    roomVersion,
   };
 }
 
