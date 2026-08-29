@@ -26,6 +26,7 @@ import { SupabaseRoomRepository } from "@/lib/supabase/room-repository";
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321";
 const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
   "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 async function anonymousActor() {
   const client = createClient(url, key, { auth: { persistSession: false } });
@@ -54,11 +55,18 @@ describe.sequential("Supabase-backed room domain operations", () => {
   let engineer: Awaited<ReturnType<typeof anonymousActor>>;
   let designer: Awaited<ReturnType<typeof anonymousActor>>;
   let product: Awaited<ReturnType<typeof anonymousActor>>;
+  let demoAdminRepository: SupabaseRoomRepository;
   let engineerConstraintId = "";
   let proposalId = "";
   let conflictId = "";
 
   beforeAll(async () => {
+    if (!serviceRoleKey) {
+      throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for guarded demo reset tests.");
+    }
+    demoAdminRepository = new SupabaseRoomRepository(createClient(url, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    }));
     engineer = await anonymousActor();
     designer = await anonymousActor();
     product = await anonymousActor();
@@ -676,8 +684,15 @@ describe.sequential("Supabase-backed room domain operations", () => {
   });
 
   it("runs an idempotent solo-judge scenario with simulation authority and replayable reset", async () => {
+    const browserResetAttempt = await product.client.rpc("start_demo_scenario", {
+      p_room_id: "demo",
+      p_mode: "solo_judge",
+      p_human_role: "product",
+    });
+    expect(browserResetAttempt.error?.message).toContain("permission denied");
+
     const reset = await startDemoScenario(
-      product.repository,
+      demoAdminRepository,
       "demo",
       { mode: "solo_judge", humanRole: "product" },
       product.userId,
@@ -840,7 +855,7 @@ describe.sequential("Supabase-backed room domain operations", () => {
     expect(record.data.provenance.filter((event) => event.origin === "simulation" && event.action === "vote.cast")).toHaveLength(3);
 
     const replayReset = await startDemoScenario(
-      product.repository,
+      demoAdminRepository,
       "demo",
       { mode: "solo_judge", humanRole: "product" },
       product.userId,
@@ -874,7 +889,7 @@ describe.sequential("Supabase-backed room domain operations", () => {
   it("transactionally resets input, deliberation, voting, and approval state", async () => {
     async function resetSolo() {
       const result = await startDemoScenario(
-        product.repository,
+        demoAdminRepository,
         "demo",
         { mode: "solo_judge", humanRole: "product" },
         product.userId,
@@ -972,7 +987,7 @@ describe.sequential("Supabase-backed room domain operations", () => {
     await resetSolo();
 
     const multiReset = await startDemoScenario(
-      product.repository,
+      demoAdminRepository,
       "demo",
       { mode: "multi_user", humanRole: null },
       product.userId,

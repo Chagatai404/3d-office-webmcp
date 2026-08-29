@@ -509,7 +509,7 @@ declare
   acted boolean;
   iteration integer;
 begin
-  if (select auth.uid()) is null then
+  if (select auth.uid()) is null and (select auth.role()) <> 'service_role' then
     return public.action_failure('NOT_AUTHORIZED', 'An authenticated session is required.', 0);
   end if;
   if p_room_id <> 'demo' then
@@ -717,8 +717,8 @@ declare
   previous_version bigint;
   human_participant_id text;
 begin
-  if (select auth.uid()) is null then
-    return public.action_failure('NOT_AUTHORIZED', 'An authenticated session is required.', 0);
+  if (select auth.role()) <> 'service_role' then
+    return public.action_failure('NOT_AUTHORIZED', 'Demo reset requires the guarded server route.', 0);
   end if;
   if p_room_id <> 'demo' then
     return public.action_failure('NOT_AUTHORIZED', 'Only the shared demo room may be reset.', 0);
@@ -867,6 +867,7 @@ revoke all on function public.demo_raise_simulation_objection(text, text, text, 
 revoke all on function public.demo_resolve_simulation_objection(text, text, text, text, text) from anon, authenticated;
 revoke all on function public.demo_cast_simulation_vote(text, text, text, public.vote_choice, text, text) from anon, authenticated;
 revoke all on function public.demo_advance_solo_phase(text, public.room_phase, text) from anon, authenticated;
+revoke all on function public.start_demo_scenario(text, public.demo_mode, text) from anon, authenticated;
 
-grant execute on function public.run_solo_demo_orchestration(text) to authenticated;
-grant execute on function public.start_demo_scenario(text, public.demo_mode, text) to authenticated;
+grant execute on function public.run_solo_demo_orchestration(text) to authenticated, service_role;
+grant execute on function public.start_demo_scenario(text, public.demo_mode, text) to service_role;

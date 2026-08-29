@@ -4,6 +4,8 @@ import {
   actionResponse,
   authenticateRoomRequest,
 } from "@/app/api/_shared/request";
+import { SupabaseRoomRepository } from "@/lib/supabase/room-repository";
+import { createServiceRoleServerClient } from "@/lib/supabase/server";
 
 export async function POST(
   request: Request,
@@ -19,7 +21,8 @@ export async function POST(
   if (!parsed.success) {
     return Response.json({ error: "Invalid demo scenario input." }, { status: 400 });
   }
+  const demoRepository = new SupabaseRoomRepository(createServiceRoleServerClient());
   return actionResponse(
-    await startDemoScenario(auth.repository, roomId, parsed.data, auth.userId),
+    await startDemoScenario(demoRepository, roomId, parsed.data, auth.userId),
   );
 }

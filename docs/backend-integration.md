@@ -73,7 +73,9 @@ the sequence.
 The isolated `POST /api/dev/rooms/:roomId/scenario` route resets and reseeds the
 shared demo room as either `multi_user` or `solo_judge`. It requires an
 authenticated browser session, the literal `demo` room, and
-`ALLOW_DEMO_RESET=true`. Solo mode also requires one canonical human role; that
+`ALLOW_DEMO_RESET=true`. After authenticating the caller, the route alone uses
+the server-only `SUPABASE_SERVICE_ROLE_KEY`; the reset RPC is revoked from
+browser roles. Solo mode also requires one canonical human role; that
 participant is the only human and required approver, while the other three
 participants are visibly marked as simulations. The reset is transactional and
 uses a narrowly scoped database trigger bypass so a finalized demo can be
