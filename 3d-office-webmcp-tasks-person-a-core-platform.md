@@ -612,31 +612,102 @@ Decisions worth carrying into A5:
 
 Person A owns the final cross-layer Playwright spec to avoid merge conflicts.
 
-- [ ] **A-500 / T-500 — Add created-room multi-context helpers**
+- [x] **A-500 / T-500 — Add created-room multi-context helpers**
   - Organizer context.
   - Engineer context.
   - Designer context.
   - Additional required participant contexts if needed.
 
-- [ ] **A-501 / T-501 — Create-room E2E**
-- [ ] **A-502 / T-502 — Extract distinct invitation URLs**
-- [ ] **A-503 / T-503 — Engineer preview + claim + redirect**
-- [ ] **A-504 / T-504 — Designer preview + claim + redirect**
-- [ ] **A-505 / T-505 — Organizer sees joined state via realtime**
-- [ ] **A-506 / T-506 — WebMCP `add_my_position` propagates to other contexts**
-- [ ] **A-507 / T-507 — Readiness + organizer starts proposals without dev endpoint**
-- [ ] **A-508 / T-508 — Proposal propagation**
-- [ ] **A-509 / T-509 — Different participant raises blocking objection**
-- [ ] **A-510 / T-510 — Tradeoff/revision creates correct parent-child proposal chain**
-- [ ] **A-511 / T-511 — Voting blocked until explicit conflict resolution**
-- [ ] **A-512 / T-512 — Participant-scoped voting**
-- [ ] **A-513 / T-513 — Exact approval preview/hash**
-- [ ] **A-514 / T-514 — Independent required-human approvals**
-- [ ] **A-515 / T-515 — Last approval finalizes + immutable record + `ALREADY_FINALIZED`**
+- [x] **A-501 / T-501 — Create-room E2E**
+- [x] **A-502 / T-502 — Extract distinct invitation URLs**
+- [x] **A-503 / T-503 — Engineer preview + claim + redirect**
+- [x] **A-504 / T-504 — Designer preview + claim + redirect**
+- [x] **A-505 / T-505 — Organizer sees joined state via realtime**
+- [x] **A-506 / T-506 — WebMCP `add_my_position` propagates to other contexts**
+- [x] **A-507 / T-507 — Readiness + organizer starts proposals without dev endpoint**
+- [x] **A-508 / T-508 — Proposal propagation**
+- [x] **A-509 / T-509 — Different participant raises blocking objection**
+- [x] **A-510 / T-510 — Tradeoff/revision creates correct parent-child proposal chain**
+- [x] **A-511 / T-511 — Voting blocked until explicit conflict resolution**
+- [x] **A-512 / T-512 — Participant-scoped voting**
+- [x] **A-513 / T-513 — Exact approval preview/hash**
+- [x] **A-514 / T-514 — Independent required-human approvals**
+- [x] **A-515 / T-515 — Last approval finalizes + immutable record + `ALREADY_FINALIZED`**
 
 ### A5 exit gate
 
-- [ ] One E2E proves auth + invites + realtime + WebMCP + lifecycle + voting + approval on a runtime-created non-demo room.
+- [x] One E2E proves auth + invites + realtime + WebMCP + lifecycle + voting + approval on a runtime-created non-demo room.
+
+**Delivered in `tests/playwright/created-room-journey.spec.ts` — one test that
+creates a room at runtime and drives it to a finalized, immutable decision
+across four browser contexts. Supported by `tests/playwright/helpers.ts` (the
+shared WebMCP shim, tool execution, raw-HTTP escape hatch and context/onboarding
+helpers, now also used by `realtime-room.spec.ts`),
+`src/components/room/onboarding-e2e-harness.tsx` and
+`src/app/e2e/onboarding/page.tsx` (the pre-membership harness), and additive
+test IDs plus the production lifecycle controls in
+`src/components/room/room-e2e-harness.tsx`. No migration, route, contract field,
+domain operation or error code changed.**
+
+Decisions worth carrying into the merge and P1:
+
+- **The pre-membership lane needed its own harness (A-500/A-501).** `/new`,
+  `/room/[roomId]/join` and `src/components/onboarding/**` belong to Person B
+  and do not exist on this branch, but Person A's branch has to be green on its
+  own (§11). So `/e2e/onboarding` — gated by the same `E2E_ROOM_HARNESS` flag as
+  the room harness — drives the real `ApiRoomOnboardingClient`: creation,
+  preview, claim and the post-claim redirect are exercised end to end without
+  touching a single Person B file. When Person B's routes land, pointing the
+  spec at them is a two-function change in `helpers.ts`
+  (`openInviteLink`/`claimAndEnterRoom`); nothing else in the spec moves.
+- **The organizer is deliberately not a required approver.** Room authority and
+  decision authority are different things, and separating them makes SEC-05
+  provable in its strongest form: the organizer cannot approve *at all*, for
+  themselves or anyone else, because
+  `approve_participant_final_decision` resolves the acting seat with
+  `required_for_approval = true`. The organizer still holds seat one, publishes
+  a position and votes — proving room authority buys no participant power.
+- **Every authority boundary is probed twice: once through WebMCP and once
+  through plain HTTP with the context's own bearer token.** The two paths
+  converge on the same domain operations, so a refusal that only held for
+  agents would be a real hole. Both are refused identically.
+- **`ALLOW_DEMO_PHASE_TRANSITIONS` is left on for this spec on purpose.** With
+  the demo endpoint enabled, `POST /api/dev/rooms/<createdRoom>/phase` still
+  returns `NOT_AUTHORIZED`, so nothing in the journey could have come from
+  `/api/dev/...` — a stronger claim than simply not calling it (A-507).
+- **A WebMCP write does not travel through `ApiRoomClient`.** It reaches the
+  database directly, so every context — including the writer's own — learns the
+  resulting version from realtime rather than from a mutation response. Anything
+  carrying a version guard therefore waits on `expectRoomVersion` first. This is
+  the server's optimistic-concurrency guard doing its job, not a defect: a human
+  clicking a button sees the same refreshed number before they click.
+- **Harness additions are additive test IDs plus two production controls.**
+  `last-action` (the structured message of the last action, including a
+  refusal — `connection-status` deliberately still only reports connectivity),
+  `room-id`, `participant-status-*`, `participant-ready-*`, `proposal-lineage`,
+  and the `mark-ready` / `advance-room-phase` buttons. Demo controls and
+  `advance-phase` are now gated on `room.id === "demo"`, which is exactly the
+  set of rooms the demo endpoints accept. The existing demo specs are unchanged.
+- **`advance-room-phase` is offered to every seated participant on purpose.**
+  The harness must not pre-filter what the server is responsible for refusing,
+  so the non-organizer rejection (A-317) is proved through the same button the
+  organizer uses.
+- **Version accounting is exact and deterministic**, 0 → 20: create 0; two seat
+  claims 1–2; three positions 3–5; two readiness marks 6–7; `input → proposals`
+  8; proposal 9; `→ deliberation` 10; objection 11; trade-off 12; resolution 13;
+  `→ voting` 14; three votes 15–17; `→ approval` 18; two approvals 19–20, the
+  last of which finalizes. Every refusal in the spec asserts the version did not
+  move.
+- **Five more P0 items fell out of the same journey.** SEC-13 (a proposal
+  referencing a constraint from another room is refused in-transaction),
+  SEC-14 (a stale `If-Match` writes nothing), SEC-15 (`ALREADY_FINALIZED` on
+  both the vote and the phase route), SEC-16 (three support votes leave
+  `approvals` empty) and SEC-17 (a wrong hash returns `DECISION_CHANGED`).
+- **Still open after A5:** `A-604` (`docs/backend-integration.md`) and the
+  invite-management pair `A-700`/`A-701` are P1. The A2 note about
+  `claim_participant_seat` also still stands — a created room's free seats are
+  protected by unguessability and RLS rather than by an explicit demo-only
+  guard, and nothing in A5 changed that.
 
 ---
 
@@ -644,9 +715,9 @@ Person A owns the final cross-layer Playwright spec to avoid merge conflicts.
 
 - [x] **SEC-01** Browser-supplied participant ID is never authority.
 - [x] **SEC-02** WebMCP schemas contain no actor/user/role/origin authority fields.
-- [ ] **SEC-03** Organizer cannot write another participant’s position.
-- [ ] **SEC-04** Organizer cannot cast another participant’s vote.
-- [ ] **SEC-05** Organizer cannot approve for another participant.
+- [x] **SEC-03** Organizer cannot write another participant’s position.
+- [x] **SEC-04** Organizer cannot cast another participant’s vote.
+- [x] **SEC-05** Organizer cannot approve for another participant.
 - [x] **SEC-06** Invite token can claim only its predetermined seat.
 - [x] **SEC-07** Raw invite token is never stored.
 - [x] **SEC-08** Invite token is high entropy.
@@ -654,25 +725,32 @@ Person A owns the final cross-layer Playwright spec to avoid merge conflicts.
 - [x] **SEC-10** Non-member cannot read full private room.
 - [x] **SEC-11** Invite preview does not expose full room.
 - [x] **SEC-12** One auth user cannot claim multiple seats in one room.
-- [ ] **SEC-13** Cross-room references rejected transactionally.
-- [ ] **SEC-14** Stale mutation writes nothing.
-- [ ] **SEC-15** Finalized room immutable.
-- [ ] **SEC-16** Vote is not approval.
-- [ ] **SEC-17** Approval bound to exact decision hash.
+- [x] **SEC-13** Cross-room references rejected transactionally.
+- [x] **SEC-14** Stale mutation writes nothing.
+- [x] **SEC-15** Finalized room immutable.
+- [x] **SEC-16** Vote is not approval.
+- [x] **SEC-17** Approval bound to exact decision hash.
 - [x] **SEC-18** WebMCP cannot bypass visible human approval confirmation.
 
 ---
 
 # 8. Architecture checklist — Person A responsibilities
 
-- [ ] `src/contracts/room.ts` remains the only canonical serialized room contract.
-- [ ] Database rows map explicitly into canonical DTOs.
-- [ ] Domain logic remains independent of route handlers.
-- [ ] Manual HTTP and WebMCP paths converge on the same domain operations.
-- [ ] Realtime remains version-notification → canonical refetch.
-- [ ] Pre-membership onboarding stays outside normal `RoomClient` room-runtime concerns.
-- [ ] Demo-only phase/reset endpoints are never required for production rooms.
-- [ ] No backend state leaks into 3D code.
+- [x] `src/contracts/room.ts` remains the only canonical serialized room contract.
+- [x] Database rows map explicitly into canonical DTOs.
+- [x] Domain logic remains independent of route handlers.
+- [x] Manual HTTP and WebMCP paths converge on the same domain operations.
+- [x] Realtime remains version-notification → canonical refetch.
+- [x] Pre-membership onboarding stays outside normal `RoomClient` room-runtime concerns.
+- [x] Demo-only phase/reset endpoints are never required for production rooms.
+- [x] No backend state leaks into 3D code.
+
+Evidence: `src/contracts/room.ts` imports nothing but `zod`; `src/domain/**`
+imports no `next/*` or route module; `src/visualization/**` and
+`src/components/plan/**` import nothing from `@/lib` or `@/clients`;
+`src/lib/supabase/room-state.ts` is the single row → DTO projection; the
+created-room E2E refuses the same impersonation on both the WebMCP and HTTP
+paths, and reaches a finalized decision with `/api/dev/...` enabled but refused.
 
 ---
 
@@ -769,15 +847,20 @@ docs: document product lifecycle backend
 
 # 12. Person A Definition of Done
 
-- [ ] Runtime-created private rooms exist.
-- [ ] Organizer identity is server-derived.
-- [ ] Secure role-specific invitations exist.
-- [ ] Invite preview is narrow and safe.
-- [ ] Invite claim establishes participant membership atomically.
-- [ ] Readiness and production phase progression exist.
-- [ ] Organizer cannot bypass participant authority.
-- [ ] WebMCP cannot impersonate another participant.
-- [ ] Voting and approval security invariants are preserved.
-- [ ] Final decision remains immutable.
-- [ ] Full non-demo multi-browser E2E passes.
-- [ ] All migrations/domain/WebMCP/build gates are green.
+- [x] Runtime-created private rooms exist.
+- [x] Organizer identity is server-derived.
+- [x] Secure role-specific invitations exist.
+- [x] Invite preview is narrow and safe.
+- [x] Invite claim establishes participant membership atomically.
+- [x] Readiness and production phase progression exist.
+- [x] Organizer cannot bypass participant authority.
+- [x] WebMCP cannot impersonate another participant.
+- [x] Voting and approval security invariants are preserved.
+- [x] Final decision remains immutable.
+- [x] Full non-demo multi-browser E2E passes.
+- [x] All migrations/domain/WebMCP/build gates are green.
+
+Verified locally on `feature/product-flow-contract`: `npm run check`,
+`npm run test:unit` (184), `npm run test:domain` (56), `npm run test:e2e`
+(3 specs, including the created-room journey) and `npm run build` all pass,
+with `git diff --check` clean.
