@@ -90,6 +90,8 @@ export async function loadRoomState(
       role: participant.role,
       kind: participant.kind,
       isClaimed: participant.kind === "simulation" || participant.user_id !== null,
+      // Placeholder until A-300 wires participants.ready_at into this projection.
+      isReady: false,
       requiredForApproval: participant.required_for_approval,
       createdAt: participant.created_at,
     })),

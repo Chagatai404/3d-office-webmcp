@@ -51,6 +51,7 @@ export const participantSchema = z
     role: z.string().min(1),
     kind: z.enum(["human", "simulation"]),
     isClaimed: z.boolean(),
+    isReady: z.boolean(),
     requiredForApproval: z.boolean(),
     createdAt: timestampSchema,
   })
@@ -450,6 +451,101 @@ export const actionResultSchema = <T extends z.ZodType>(dataSchema: T) =>
       .strict(),
   ]);
 
+/**
+ * Pre-membership onboarding contract: room creation and invitation
+ * preview/claim. These happen before a caller has an authenticated seat in
+ * a room, so their DTOs are kept separate from `RoomState`.
+ */
+
+export const createRoomParticipantInputSchema = z
+  .object({
+    name: z.string().min(1),
+    role: z.string().min(1),
+    requiredForApproval: z.boolean(),
+  })
+  .strict();
+export type CreateRoomParticipantInput = z.infer<
+  typeof createRoomParticipantInputSchema
+>;
+
+export const createRoomInputSchema = z
+  .object({
+    title: z.string().min(1),
+    brief: z.string().min(1),
+    participants: z.array(createRoomParticipantInputSchema).min(2),
+  })
+  .strict();
+export type CreateRoomInput = z.infer<typeof createRoomInputSchema>;
+
+export const createdRoomParticipantInviteSchema = z
+  .object({
+    participantId: idSchema,
+    role: z.string().min(1),
+    inviteUrl: z.string().min(1),
+  })
+  .strict();
+export type CreatedRoomParticipantInvite = z.infer<
+  typeof createdRoomParticipantInviteSchema
+>;
+
+export const createdRoomSchema = z
+  .object({
+    roomId: idSchema,
+    participantInvites: z.array(createdRoomParticipantInviteSchema),
+  })
+  .strict();
+export type CreatedRoom = z.infer<typeof createdRoomSchema>;
+
+const roomInvitePreviewParticipantSchema = z
+  .object({
+    id: idSchema,
+    name: z.string().min(1),
+    role: z.string().min(1),
+  })
+  .strict();
+
+/**
+ * Discriminated on `inviteValid` so an unknown/expired/revoked/claimed
+ * token never has to be answered with room details: the `false` branch
+ * carries no room/participant fields at all.
+ */
+export const roomInvitePreviewSchema = z.discriminatedUnion("inviteValid", [
+  z
+    .object({
+      inviteValid: z.literal(true),
+      alreadyClaimed: z.boolean(),
+      roomId: idSchema,
+      title: z.string().min(1),
+      brief: z.string().min(1),
+      participant: roomInvitePreviewParticipantSchema,
+    })
+    .strict(),
+  z
+    .object({
+      inviteValid: z.literal(false),
+      alreadyClaimed: z.boolean(),
+    })
+    .strict(),
+]);
+export type RoomInvitePreview = z.infer<typeof roomInvitePreviewSchema>;
+
+export const claimInvitationInputSchema = z
+  .object({
+    inviteToken: z.string().min(1),
+  })
+  .strict();
+export type ClaimInvitationInput = z.infer<typeof claimInvitationInputSchema>;
+
+export const claimInvitationResultSchema = z
+  .object({
+    roomId: idSchema,
+    participantId: idSchema,
+  })
+  .strict();
+export type ClaimInvitationResult = z.infer<
+  typeof claimInvitationResultSchema
+>;
+
 export interface RoomClient {
   getRoom(roomId: string): Promise<RoomState>;
 
@@ -501,6 +597,15 @@ export interface RoomClient {
   ): Promise<ActionResult>;
 
   advanceDemoPhase(
+    roomId: string,
+    phase: RoomPhase,
+  ): Promise<ActionResult>;
+
+  /** Claimed human marks their own published input ready. Input phase only. */
+  markMyInputReady(roomId: string): Promise<ActionResult>;
+
+  /** Organizer-only production phase advance. Kept separate from `advanceDemoPhase`. */
+  advanceRoomPhase(
     roomId: string,
     phase: RoomPhase,
   ): Promise<ActionResult>;

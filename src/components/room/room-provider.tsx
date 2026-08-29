@@ -83,6 +83,12 @@ export interface RoomActions {
 
   /** Demo-only phase transition used by the isolated browser integration harness. */
   advanceDemoPhase(phase: RoomPhase): Promise<ActionResult>;
+
+  /** Claimed human marks their own published input ready. Input phase only. */
+  markMyInputReady(): Promise<ActionResult>;
+
+  /** Organizer-only production phase advance. Kept separate from `advanceDemoPhase`. */
+  advanceRoomPhase(phase: RoomPhase): Promise<ActionResult>;
 }
 
 export interface RoomContextValue {
@@ -227,6 +233,12 @@ export function RoomProvider({
 
       advanceDemoPhase: (phase) =>
         client.advanceDemoPhase(roomId, phase),
+
+      markMyInputReady: () =>
+        client.markMyInputReady(roomId),
+
+      advanceRoomPhase: (phase) =>
+        client.advanceRoomPhase(roomId, phase),
     }),
     [client, roomId],
   );

@@ -141,6 +141,17 @@ export class ApiRoomClient implements RoomClient {
     return this.mutate(roomId, "phase", { phase }, `/api/dev/rooms/${encodeURIComponent(roomId)}/phase`);
   }
 
+  markMyInputReady(roomId: string): Promise<ActionResult> {
+    return Promise.resolve(this.notAvailable(roomId, "Marking input ready"));
+  }
+
+  advanceRoomPhase(roomId: string, phase: RoomPhase): Promise<ActionResult> {
+    void phase;
+    return Promise.resolve(
+      this.notAvailable(roomId, "Advancing the production room phase"),
+    );
+  }
+
   private async ensureAnonymousSession(): Promise<string> {
     if (this.sessionPromise) return this.sessionPromise;
     this.sessionPromise = (async () => {

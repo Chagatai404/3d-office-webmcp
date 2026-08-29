@@ -336,6 +336,27 @@ export class MockRoomClient implements RoomClient {
     );
   }
 
+  async markMyInputReady(roomId: string): Promise<ActionResult> {
+    return this.#notInThisMilestone(roomId, "input", "Marking input ready");
+  }
+
+  async advanceRoomPhase(
+    roomId: string,
+    phase: RoomPhase,
+  ): Promise<ActionResult> {
+    void phase;
+
+    const roomError = this.#requireRoom(roomId);
+    if (roomError) return roomError;
+
+    return fail(
+      "VALIDATION_ERROR",
+      "Advancing the production room phase is not implemented in the mock client.",
+      this.#state.version,
+      "Use ApiRoomClient for backend-backed production phase progression.",
+    );
+  }
+
   #snapshot(): RoomState {
     return structuredClone(this.#state);
   }
