@@ -2,7 +2,7 @@
 
 import type { VisualProposal } from "@/visualization/room-view-model";
 import { meetingSeats, SURFACE } from "./office-layout";
-import { OfficeModel } from "./office-models";
+import { ProceduralProp } from "./procedural-props";
 import { SceneLabel } from "./scene-label";
 
 /**
@@ -35,7 +35,7 @@ export function CentralTable({
       </mesh>
 
       {/* Stretched on the floor plane only: a long table, not a tall one. */}
-      <OfficeModel
+      <ProceduralProp
         name="meeting-table"
         colors={[SURFACE.table, SURFACE.tableAccent]}
         position={[0, 0.16, 0]}
@@ -45,7 +45,7 @@ export function CentralTable({
       {/* One chair per office, so the room reads as ten seats here too, and a
           participant's place at the table is as fixed as their office is. */}
       {meetingSeats().map((seat) => (
-        <OfficeModel
+        <ProceduralProp
           key={seat.index}
           name="chair"
           colors={[SURFACE.chair, SURFACE.chairAccent]}

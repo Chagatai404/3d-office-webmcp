@@ -1,5 +1,10 @@
 # 3D Office WebMCP — Person A Tasks
 
+> **Archived completed workstream.** This file is retained as an implementation
+> record only. Some frontend paths mentioned below (for example the old floor
+> plan) have since been removed by the meeting-room UX reset. Do not treat those
+> historical ownership lists as the current repository map.
+
 ## Lane A — Core Platform, Authority, Domain, API, WebMCP
 
 **Base repository:** `Chagatai404/3d-office-webmcp`  

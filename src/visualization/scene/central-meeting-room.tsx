@@ -4,7 +4,7 @@ import type { RoomVisualizationState } from "@/visualization/room-view-model";
 import { CentralTable } from "./central-table";
 import { ConflictVisualization } from "./conflict-visualization";
 import { meetingSeats, MEETING_ROOM, slotColor, SURFACE } from "./office-layout";
-import { OfficeModel } from "./office-models";
+import { ProceduralProp } from "./procedural-props";
 import { ParticipantAvatar } from "./participant-avatar";
 import { SceneLabel } from "./scene-label";
 
@@ -47,12 +47,12 @@ export function CentralMeetingRoom({
         <boxGeometry args={[width, wallHeight, 0.16]} />
         <meshStandardMaterial color={SURFACE.meetingWall} roughness={0.9} />
       </mesh>
-      <OfficeModel
+      <ProceduralProp
         name="whiteboard"
         colors={[SURFACE.board, SURFACE.boardFrame, "#8fa3b8"]}
         position={[-3.6, platformHeight, -depth / 2 + 0.35]}
       />
-      <OfficeModel
+      <ProceduralProp
         name="plant"
         colors={[SURFACE.plant, SURFACE.plantPot, "#2f7047"]}
         position={[width / 2 - 1.1, platformHeight, -depth / 2 + 1.1]}

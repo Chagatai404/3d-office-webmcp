@@ -6,7 +6,7 @@ import type {
   VisualParticipant,
 } from "@/visualization/room-view-model";
 import { OFFICE, SURFACE, slotColor, type OfficePlacement } from "./office-layout";
-import { OfficeModel } from "./office-models";
+import { ProceduralProp } from "./procedural-props";
 import { ParticipantAvatar } from "./participant-avatar";
 import { SceneLabel } from "./scene-label";
 
@@ -242,7 +242,7 @@ export function MiniOffice({
 
       {occupied && participant ? (
         <>
-          <OfficeModel
+          <ProceduralProp
             name="door"
             colors={[frameColor, glassColor, SURFACE.officeWall]}
             position={[OFFICE.width / 2 - 0.7, 0, OFFICE.depth / 2 - 0.35]}
@@ -250,12 +250,12 @@ export function MiniOffice({
             scale={[0.82, 0.9, 0.82]}
             roughness={0.34}
           />
-          <OfficeModel
+          <ProceduralProp
             name="desk"
             colors={[SURFACE.desk, SURFACE.deskAccent]}
             position={[0, 0, -0.9]}
           />
-          <OfficeModel
+          <ProceduralProp
             name="monitor"
             colors={[SURFACE.screen, "#c9d6e2"]}
             position={[0.65, 0.78, -1.05]}
@@ -263,7 +263,7 @@ export function MiniOffice({
           />
           {/* Turned to the desk, so the chair and whoever is in it face the
               monitor rather than the door. */}
-          <OfficeModel
+          <ProceduralProp
             name="chair"
             colors={[SURFACE.chair, SURFACE.chairAccent]}
             position={[0, 0, 0.35]}
@@ -278,13 +278,13 @@ export function MiniOffice({
               />
             </group>
           ) : null}
-          <OfficeModel
+          <ProceduralProp
             name="plant"
             colors={[SURFACE.plant, SURFACE.plantPot, "#2f7047"]}
             position={[-1.9, 0, 1.35]}
             scale={0.72}
           />
-          <OfficeModel
+          <ProceduralProp
             name="whiteboard"
             colors={[SURFACE.board, SURFACE.boardFrame, "#8fa3b8"]}
             position={[-2.05, 0.25, -1.78]}
@@ -307,7 +307,7 @@ export function MiniOffice({
         </>
       ) : (
         <>
-          <OfficeModel
+          <ProceduralProp
             name="door"
             colors={[frameColor, glassColor, SURFACE.officeWallReserved]}
             position={[OFFICE.width / 2 - 0.7, 0, OFFICE.depth / 2 - 0.35]}

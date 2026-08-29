@@ -2,7 +2,7 @@
 
 import type { RoomVisualizationState } from "@/visualization/room-view-model";
 import { COMMON_AREA, SURFACE } from "./office-layout";
-import { OfficeModel } from "./office-models";
+import { ProceduralProp } from "./procedural-props";
 import { SceneLabel } from "./scene-label";
 
 /**
@@ -62,12 +62,12 @@ export function SharedCommonArea({
         <meshStandardMaterial color={SURFACE.commonFloor} roughness={0.95} />
       </mesh>
 
-      <OfficeModel
+      <ProceduralProp
         name="whiteboard"
         colors={[SURFACE.board, SURFACE.boardFrame, "#8fa3b8"]}
         position={[-8.2, 0, -2.2]}
       />
-      <OfficeModel
+      <ProceduralProp
         name="plant"
         colors={[SURFACE.plant, SURFACE.plantPot, "#2f7047"]}
         position={[8.4, 0, -1.2]}

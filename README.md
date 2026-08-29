@@ -1,15 +1,32 @@
 # 3D Office WebMCP
 
-A structured decision room where people and browser agents negotiate proposals,
-surface conflicts, vote, and independently approve an exact final decision.
+A WebMCP-native shared decision room where each human keeps an independent
+identity, browser agent, vote, and final approval authority.
 
-This repository begins with a deliberately narrow shared baseline. The core and
-3D experience branches may evolve independently, but both program against the
-canonical contract in [`src/contracts/room.ts`](src/contracts/room.ts).
+**Agents negotiate. People decide.**
+
+## Product direction
+
+The room experience is being simplified around one clear spatial metaphor:
+
+- one bright, minimal 3D meeting room is the default view;
+- meeting metadata such as participants, roles, invitations, activity, and
+  settings lives in a compact meeting toolbar/drawer system;
+- decision artifacts such as the brief, constraints, proposals, issues,
+  whiteboard notes, voting, and the final decision live in a separate workspace
+  dock;
+- selecting a workspace moves the 3D camera to one dedicated board/surface;
+- only the active workspace is visually foregrounded — the UI must not render
+  every board, panel, and participant list at once;
+- production 3D assets will be authored later with Blender MCP. Until then,
+  scene props should remain lightweight procedural placeholders.
+
+The previous desktop-window / 2D-floor-plan direction is deprecated. Do not add
+new product work to it.
 
 ## Start locally
 
-Requirements: Node.js 20.9 or newer.
+Requirements: Node.js 20.9 or newer and Docker for local Supabase.
 
 ```bash
 npm install
@@ -24,16 +41,16 @@ Copy the reported `API_URL` and `PUBLISHABLE_KEY` into `.env.local` using
 npm run dev
 ```
 
-Open `http://localhost:3000/room/demo`.
+Open `http://localhost:3000/room/demo` for the seeded judge room.
 
-Run all baseline checks with:
+Core checks:
 
 ```bash
 npm run check
 npm run build
 ```
 
-Backend verification with the local Docker-based Supabase stack:
+Database and browser integration checks:
 
 ```bash
 npm run test:domain
@@ -41,69 +58,46 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Both integration commands reset and reseed the local database first.
-
-## Architectural boundary
+## Architecture boundary
 
 ```text
-UI -> ApiRoomClient -> Server/API adapter -> Domain operations -> Supabase
-                                              ^
-                                              |
-                                       Expert service
+Manual UI ────────┐
+Browser WebMCP ───┼──> Domain operations -> authorization -> Supabase
+Expert service ───┘
 
-RoomState -> 2D UI
-RoomState -> createRoomVisualizationState() -> 3D scene
+RoomState -> semantic DOM UI
+RoomState -> createRoomVisualizationState() -> 3D presentation
 ```
 
+Important invariants:
+
+- `src/contracts/room.ts` is the canonical shared integration contract.
 - The browser never supplies trusted participant identity for mutations.
-- Manual UI, WebMCP, and expert actions share server-side domain operations.
-- `MockRoomClient` and `ApiRoomClient` must implement the canonical
-  `RoomClient` interface.
-- Supabase client usage is limited to authentication and realtime invalidation;
-  authoritative writes go through server-side domain operations.
-- The 3D layer consumes only `RoomVisualizationState` and owns no business state.
-- Voting never implies approval. Approval binds to the exact decision hash.
+- Manual UI, WebMCP, and expert actions converge on the same domain operations.
+- `RoomProvider` owns the latest canonical room snapshot in the browser.
+- The 3D layer is presentation-only and performs no authorization or business
+  transitions.
+- Voting never implies approval; final approval is explicit and hash-bound.
 
-## Frontend layers
+## Repository guide
 
-```text
-src/contracts/room.ts          canonical shared types (both workstreams)
-src/room-client/               RoomClient boundary + MockRoomClient
-src/components/room/           RoomProvider and the semantic 2D panels
-src/components/shell/          the full-screen shell: windows, dock, HUD
-src/visualization/             createRoomVisualizationState() + the R3F scene
-public/models/office/          low-poly OBJ props
-```
+- [`3d-office-webmcp-shared-context.md`](3d-office-webmcp-shared-context.md) —
+  canonical product + architecture decisions.
+- [`docs/product-ux.md`](docs/product-ux.md) — the new meeting-room UX contract.
+- [`docs/status.md`](docs/status.md) — current implementation and migration status.
+- [`docs/hackathon.md`](docs/hackathon.md) — concise demo/submission checklist.
+- [`docs/backend-integration.md`](docs/backend-integration.md) — API, identity,
+  realtime, WebMCP, and backend handoff details.
+- [`docs/branching.md`](docs/branching.md) — integration rules for parallel work.
+- [`docs/workstreams/product-ux.md`](docs/workstreams/product-ux.md) — current
+  frontend/3D overhaul checklist.
+- [`docs/workstreams/core-platform-completed.md`](docs/workstreams/core-platform-completed.md)
+  — completed backend/core workstream record.
 
-## The room is a place, not a page
+## 3D asset policy
 
-`/room/demo` opens the 3D office full screen. Every panel — the brief,
-positions, participants, the ledger — is a window you open, move, and close
-over it, and the camera is a god view you fly around the office:
-
-- drag to move over the floor, right-drag to swing round, wheel to come closer;
-- `W A S D` or the arrow keys to walk the view, `Q` and `E` to turn, `+` and `−`
-  to zoom, all of which stand down while focus is inside a window;
-- click a place — the meeting room, an office, the constraint wall, the common
-  area — to fly there and open the panel that explains it;
-- the dock along the bottom is the keyboard route to the same places and
-  panels, because the canvas is hidden from assistive technology.
-
-Window layout, the selected place, and the camera are presentation state. They
-live in `src/components/shell/`, never reach `RoomClient`, and are not part of
-`RoomState`.
-
-Integration is a one-file change: `getRoomClient()` in
-[`src/room-client/room-client.ts`](src/room-client/room-client.ts) is the only
-place that names a concrete implementation. Swapping `MockRoomClient` for
-`ApiRoomClient` there requires no change to any panel, the provider, the view
-model, or the scene.
-
-See [`docs/branching.md`](docs/branching.md) before creating workstream branches.
-See [`docs/backend-integration.md`](docs/backend-integration.md) for the API,
-identity, realtime, and `ApiRoomClient` handoff.
-
-## Source documents
-
-- [`3d-office-webmcp-shared-context.md`](3d-office-webmcp-shared-context.md)
-- [`webmcp-hackathon-project-brief.md`](webmcp-hackathon-project-brief.md)
+Do not commit third-party office asset packs or generated low-poly prop dumps.
+The temporary scene should use procedural geometry only. Final authored assets
+should be small, intentional `.glb` files produced for this product and placed
+under `public/models/meeting-room/` only when they are actually wired into the
+runtime.

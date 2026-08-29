@@ -1,26 +1,42 @@
 # Repository instructions
 
-The integration rules in this file apply to all work in this repository.
+These rules apply to all implementation work in this repository.
 
-- Treat `src/contracts/room.ts` as the canonical public integration boundary.
+## Shared product/domain boundaries
+
+- Treat `src/contracts/room.ts` as the canonical serialized integration
+  boundary.
 - Do not duplicate room DTOs, action inputs, result types, or phase names.
-- Keep the canonical contract JSON-serializable and independent of React,
-  React Three Fiber, Supabase implementations, route handlers, Node-only code,
-  and UI components.
-- Browser mutations must not accept trusted participant identity. Resolve the
+- Keep the canonical contract JSON-serializable and independent of React, R3F,
+  Supabase implementations, route handlers, Node-only code, and UI components.
+- Browser mutations must not accept trusted participant identity; resolve the
   actor from the authenticated session on the server.
 - Keep actor authority (`participant`, `expert`, `system`) separate from action
   origin (`manual_ui`, `webmcp`, `simulation`, `expert_service`, `system`).
 - Route authoritative mutations from UI, WebMCP, and experts through shared
   server-side domain operations.
-- `MockRoomClient` and `ApiRoomClient` must implement `RoomClient` from the
-  canonical contract.
-- Feed 3D components only with the output of
-  `createRoomVisualizationState(room)`. The 3D layer performs no I/O,
-  authorization, phase transition, or consensus decision.
-- Update the shared contract and its tests before implementing a new shared
-  field or action in either workstream.
-- Preserve the exact room phases and `ActionResult` error codes already defined.
+- `MockRoomClient` and `ApiRoomClient` must implement the canonical `RoomClient`
+  contract.
+- Feed 3D components only with presentation projections derived from canonical
+  `RoomState`. The 3D layer performs no I/O, authorization, phase transition, or
+  consensus decision.
+- Preserve the exact vote-vs-approval and hash-bound final approval invariants.
+
+## Current UX direction
+
+- The product is one simple 3D meeting room, not a virtual office campus.
+- Do not add new work to the deprecated 2D floor-plan or desktop-window UX.
+- Meeting metadata belongs in a compact meeting toolbar/drawers.
+- Decision artifacts belong in a separate workspace dock and are shown one at a
+  time through camera-focused 3D surfaces plus accessible DOM content.
+- Camera/workspace/drawer state is presentation-only and must never enter
+  `RoomState`.
+- Do not add free-roaming avatars, mini offices, common-area gameplay, or
+  god-view navigation to the new experience.
+- Do not commit generic third-party office packs. Until Blender MCP assets are
+  authored, use small procedural placeholders.
+- Do not add fake video-call controls (microphone/camera/screen share) unless the
+  feature actually exists.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
