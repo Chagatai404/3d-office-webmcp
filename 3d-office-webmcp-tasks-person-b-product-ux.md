@@ -173,7 +173,7 @@ and `git diff --check`; all passed.
 
 # 4. Slice B2 — Organizer Setup + Invitation UX
 
-- [ ] **B-213 / T-213 — Add `/room/[roomId]/setup` organizer screen**
+- [x] **B-213 / T-213 — Add `/room/[roomId]/setup` organizer screen**
   - Show each participant seat:
     ```text
     Name
@@ -184,13 +184,13 @@ and `git diff --check`; all passed.
     ```
   - Keep tokens out of logs/debug DOM where avoidable.
 
-- [ ] **B-214 / T-214 — Use canonical invite URL format**
+- [x] **B-214 / T-214 — Use canonical invite URL format**
   ```text
   /room/:roomId/join?invite=RAW_TOKEN
   ```
   - UI must not interpret token as participant authority itself.
 
-- [ ] **B-215 / T-215 — Add `/room/[roomId]/join` page**
+- [x] **B-215 / T-215 — Add `/room/[roomId]/join` page**
   - Flow:
     1. Ensure browser auth/session through onboarding client flow.
     2. Preview invite capability.
@@ -200,41 +200,53 @@ and `git diff --check`; all passed.
     6. Redirect to `/room/:roomId`.
   - **Done:** user consciously claims intended role.
 
-- [ ] **B-216 / T-216 — Do not mount normal `RoomProvider` before claim**
+- [x] **B-216 / T-216 — Do not mount normal `RoomProvider` before claim**
   - Join page is pre-membership surface.
   - No participant WebMCP mutation tool set may be registered there.
   - **Done:** join preview is independent of full room runtime.
 
 ## UX states
 
-- [ ] Loading invite preview.
-- [ ] Invalid invite.
-- [ ] Expired invite.
-- [ ] Revoked invite.
-- [ ] Already claimed invite.
-- [ ] Claim in progress.
-- [ ] Claim race lost.
-- [ ] Successful join.
+- [x] Loading invite preview.
+- [x] Invalid invite.
+- [x] Expired invite.
+- [x] Revoked invite.
+- [x] Already claimed invite.
+- [x] Claim in progress.
+- [x] Claim race lost.
+- [x] Successful join.
 
 ## Component tests
 
-- [ ] **B-217 — Valid preview renders intended role**
-- [ ] **B-218 — Invalid/expired/revoked states**
-- [ ] **B-219 — Join button calls claim once**
-- [ ] **B-220 — Successful claim redirects into room runtime**
-- [ ] **B-221 — Join page never mounts room runtime before membership**
+- [x] **B-217 — Valid preview renders intended role**
+- [x] **B-218 — Invalid/expired/revoked states**
+- [x] **B-219 — Join button calls claim once**
+- [x] **B-220 — Successful claim redirects into room runtime**
+- [x] **B-221 — Join page never mounts room runtime before membership**
 
 ### B2 exit gate
 
-- [ ] Organizer can copy distinct role links.
-- [ ] Invitee sees only safe pre-membership information.
-- [ ] Full room opens only after claim succeeds.
+- [x] Organizer can copy distinct role links.
+- [x] Invitee sees only safe pre-membership information.
+- [x] Full room opens only after claim succeeds.
+
+**B2 implementation note:** Added the organizer setup screen and pre-membership
+join flow using the canonical onboarding client. Setup renders organizer and
+invitation seats from the volatile post-create handoff, copies distinct
+`/room/:roomId/join?invite=RAW_TOKEN` links without rendering raw tokens, and
+recovers safely when the handoff has gone. Join previews the invite before room
+runtime mounts, shows only safe room/seat details, handles unavailable and
+already-claimed invitations, claims the invite exactly once, and redirects to
+`/room/:roomId` only after a successful claim. Removed the temporary B2 QA route
+and harness before closing the slice. Verified with `npm run lint`,
+`npm run typecheck`, `npm run test:unit`, `npm run build`, Impeccable detector
+on the B2 onboarding surfaces, and `git diff --check`; all passed.
 
 ---
 
 # 5. Slice B3 — Waiting Room + Readiness + Organizer Controls
 
-- [ ] **B-312 / T-312 — Add “My input is ready” UX**
+- [x] **B-312 / T-312 — Add “My input is ready” UX**
   - Existing participant/positions surface.
   - Disabled until participant has at least one position.
   - After success show:
@@ -243,7 +255,7 @@ and `git diff --check`; all passed.
     ```
   - Readiness comes from canonical snapshot, not local optimistic truth.
 
-- [ ] **B-313 / T-313 — Organizer waiting/setup panel**
+- [x] **B-313 / T-313 — Organizer waiting/setup panel**
   - For every participant show:
     ```text
     Invited
@@ -253,7 +265,7 @@ and `git diff --check`; all passed.
     ```
   - Realtime changes should naturally update through RoomProvider.
 
-- [ ] **B-314 / T-314 — Organizer phase controls**
+- [x] **B-314 / T-314 — Organizer phase controls**
   - Buttons:
     ```text
     Start proposals
@@ -267,15 +279,26 @@ and `git diff --check`; all passed.
 
 ## Component tests
 
-- [ ] **B-315 — Ready button disabled before position**
-- [ ] **B-316 — Ready state follows canonical snapshot**
-- [ ] **B-317 — Organizer controls call production action**
-- [ ] **B-318 — Non-organizer does not see organizer CTA**
-- [ ] **B-319 — Server rejection renders useful feedback**
+- [x] **B-315 — Ready button disabled before position**
+- [x] **B-316 — Ready state follows canonical snapshot**
+- [x] **B-317 — Organizer controls call production action**
+- [x] **B-318 — Non-organizer does not see organizer CTA**
+- [x] **B-319 — Server rejection renders useful feedback**
 
 ### B3 exit gate
 
-- [ ] Product UI has no dependency on demo phase controls for real rooms.
+- [x] Product UI has no dependency on demo phase controls for real rooms.
+
+**B3 implementation note:** Added canonical snapshot-driven input readiness to
+the positions surface, plus an organizer-only waiting room and production phase
+controls in the status panel. Readiness calls `actions.markMyInputReady()` and
+renders `✓ Ready for deliberation` only once `self.isReady` appears in
+`RoomState`; phase CTAs call `actions.advanceRoomPhase(...)`, never the demo
+phase endpoint, and show disabled prerequisite copy plus authoritative server
+feedback. Verified with `npm run lint`, `npm run typecheck`,
+`npm run test:unit` (18 files / 193 tests), `npm run build`,
+Impeccable detector on the changed room UI surfaces, and `git diff --check`;
+all passed.
 
 ---
 
@@ -283,7 +306,7 @@ and `git diff --check`; all passed.
 
 Person B does **not** change tool definitions or authority logic. This lane only explains and visualizes the existing WebMCP capability.
 
-- [ ] **B-405 / T-405 — `document.modelContext` feature detection UI**
+- [x] **B-405 / T-405 — `document.modelContext` feature detection UI**
   - Supported:
     ```text
     Browser agent tools available for this phase
@@ -294,29 +317,40 @@ Person B does **not** change tool definitions or authority logic. This lane only
     ```
   - Manual participation must never be blocked.
 
-- [ ] **B-406 / T-406 — Agent prompt guidance in participant input surface**
+- [x] **B-406 / T-406 — Agent prompt guidance in participant input surface**
   - Example:
     > Read this meeting and help me express my engineering constraints.
   - Explain that the agent acts only for this participant/session.
 
-- [ ] **B-407 / T-407 — Last WebMCP action projection**
+- [x] **B-407 / T-407 — Last WebMCP action projection**
   - Derive from canonical `room.activity` where `origin === "webmcp"`.
   - Resolve latest event per participant.
   - Do not invent persistent “agent online” state.
 
-- [ ] **B-408 / T-408 — Visible provenance in activity UI**
+- [x] **B-408 / T-408 — Visible provenance in activity UI**
   - Example:
     ```text
     Engineering · via browser agent · added position
     ```
   - Manual / WebMCP / simulation / system must be distinguishable without color alone.
 
-- [ ] **B-413 / T-413 — Manual fallback component test without `document.modelContext`**
+- [x] **B-413 / T-413 — Manual fallback component test without `document.modelContext`**
 
 ### B4 exit gate
 
-- [ ] Judge/user can understand how to use their own browser agent without needing an “agent account” setup flow.
-- [ ] UI never claims an agent is continuously online unless actual evidence exists.
+- [x] Judge/user can understand how to use their own browser agent without needing an “agent account” setup flow.
+- [x] UI never claims an agent is continuously online unless actual evidence exists.
+
+**B4 implementation note:** Added participant-facing browser-agent availability
+and prompt guidance in the input surface, with a manual fallback when
+`document.modelContext` is unavailable. The activity ledger now derives the
+latest WebMCP event per participant from canonical `room.activity` and presents
+each audit event as actor/role + explicit origin wording, so manual, browser
+agent, simulation, expert, and system provenance are distinguishable without
+color alone. The UI shows recorded evidence only; it does not claim any agent is
+continuously online. Verified with `npm run lint`, `npm run typecheck`,
+`npm run test:unit` (19 files / 197 tests), `npm run build`, Impeccable
+detector on the changed room UI surfaces, and `git diff --check`; all passed.
 
 ---
 
@@ -324,41 +358,53 @@ Person B does **not** change tool definitions or authority logic. This lane only
 
 The backend already has proposal, objection, tradeoff, voting, approval and final record primitives. Make sure the real UX exposes enough of them for a complete non-demo journey.
 
-- [ ] **B-500 — Proposal panel/action is usable in proposals phase**
+- [x] **B-500 — Proposal panel/action is usable in proposals phase**
   - Use `actions.submitProposal`.
   - Show active proposal on central table/plan.
 
-- [ ] **B-501 — Conflict/objection panel is usable in deliberation**
+- [x] **B-501 — Conflict/objection panel is usable in deliberation**
   - Use `actions.raiseObjection`.
   - Show open/blocking status.
 
-- [ ] **B-502 — Tradeoff/revision UX**
+- [x] **B-502 — Tradeoff/revision UX**
   - Use `actions.proposeTradeoff`.
   - Show revised proposal lineage where useful.
 
-- [ ] **B-503 — Explicit objection-resolution UX**
+- [x] **B-503 — Explicit objection-resolution UX**
   - Use `actions.resolveObjection`.
   - Do not imply tradeoff automatically resolves issue.
 
-- [ ] **B-504 — Voting panel**
+- [x] **B-504 — Voting panel**
   - Current participant only.
   - Support / oppose / abstain / request changes.
   - Make clear vote is not final approval.
 
-- [ ] **B-505 — Exact final preview + human approval UI**
+- [x] **B-505 — Exact final preview + human approval UI**
   - Render exact server candidate.
   - Show decision hash.
   - Explicit confirmation checkbox bound to exact current hash.
   - Enable approval only after explicit review/confirmation.
   - If candidate/hash changes, reset confirmation.
 
-- [ ] **B-506 — Final decision record UI**
+- [x] **B-506 — Final decision record UI**
   - Persisted immutable record, not reconstructed local state.
   - Proposal, rationale, accepted tradeoffs, dissent, votes, approvals, provenance.
 
 ### B5 exit gate
 
-- [ ] A human can complete every participant-visible action in the real DesktopShell without old `RoomClientView` harness.
+- [x] A human can complete every participant-visible action in the real DesktopShell without old `RoomClientView` harness.
+
+**B5 implementation note:** Added a real DesktopShell `Decision workbench`
+window for the participant-facing decision journey. The workbench exposes
+proposal submission, objections, tradeoff-backed proposal revisions, explicit
+objection resolution, current-participant voting, exact server final preview
+with hash-bound confirmation, and server-fetched immutable decision records.
+The meeting room and HUD open this workbench, the active proposal remains
+derived on the central table/plan, and organizer controls can now advance a
+fully voted room into approval. Verified with focused component coverage for
+the B5 flow plus shell/window wiring, `npm run lint`, `npm run typecheck`,
+`npm run test:unit` (20 files / 204 tests), `npm run build`, Impeccable
+detector on the changed room UI surfaces, and `git diff --check`; all passed.
 
 ---
 

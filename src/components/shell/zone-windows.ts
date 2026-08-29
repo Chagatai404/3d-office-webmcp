@@ -12,7 +12,7 @@ import type { WindowId } from "./window-state";
  * whole idea of moving through the room instead of through a menu.
  */
 const ZONE_WINDOW: Partial<Record<SceneZoneId, WindowId>> = {
-  "meeting-room": "brief",
+  "meeting-room": "decision",
   "constraint-wall": "positions",
   "common-area": "activity",
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useMemo, useState, useSyncExternalStore } from "react";
 import type { ActionResult, AddPositionInput } from "@/contracts/room";
 import { ActionFeedback } from "./action-feedback";
 import { useRoom } from "./room-provider";
@@ -50,6 +50,25 @@ const EMPTY_CONSTRAINT: Omit<ConstraintDraft, "key"> = {
 
 const PRIORITY_OPTIONS = ["high", "medium", "low"];
 
+type WebMcpAvailability = "checking" | "available" | "unavailable";
+
+function getWebMcpAvailability(): WebMcpAvailability {
+  if (typeof document === "undefined") return "checking";
+  return document.modelContext ? "available" : "unavailable";
+}
+
+function subscribeToWebMcpAvailability(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  window.addEventListener("focus", callback);
+  document.addEventListener("visibilitychange", callback);
+
+  return () => {
+    window.removeEventListener("focus", callback);
+    document.removeEventListener("visibilitychange", callback);
+  };
+}
+
 function toNullable(value: string): string | null {
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
@@ -58,6 +77,11 @@ function toNullable(value: string): string | null {
 export function PositionsPanel() {
   const { room, self, actions } = useRoom();
   const fieldId = useId();
+  const webMcpAvailability = useSyncExternalStore(
+    subscribeToWebMcpAvailability,
+    getWebMcpAvailability,
+    () => "checking",
+  );
 
   const [summary, setSummary] = useState(INITIAL_DRAFT.summary);
   const [category, setCategory] = useState(INITIAL_DRAFT.category);
@@ -67,9 +91,34 @@ export function PositionsPanel() {
   );
   const [nextKey, setNextKey] = useState(3);
   const [pending, setPending] = useState(false);
+  const [readyPending, setReadyPending] = useState(false);
   const [result, setResult] = useState<ActionResult<unknown> | null>(null);
+  const [readyResult, setReadyResult] = useState<ActionResult<unknown> | null>(
+    null,
+  );
 
   const canSubmit = self !== null && room.phase === "input";
+  const selfPositionCount = useMemo(() => {
+    if (!self) return 0;
+    return room.positions.filter((position) => position.participantId === self.id)
+      .length;
+  }, [room.positions, self]);
+  const hasPublishedPosition = selfPositionCount > 0;
+  const isReadyForDeliberation = self?.isReady ?? false;
+  const canMarkReady =
+    self !== null &&
+    room.phase === "input" &&
+    hasPublishedPosition &&
+    !isReadyForDeliberation;
+  const readyDisabledReason = self
+    ? room.phase !== "input"
+      ? "Readiness is only collected during the input phase."
+      : !hasPublishedPosition
+        ? "Publish at least one position before marking your input ready."
+        : isReadyForDeliberation
+          ? "Your canonical room snapshot already shows you are ready."
+          : null
+    : "Claim a seat before marking input ready.";
 
   function updateConstraint(
     key: string,
@@ -127,6 +176,15 @@ export function PositionsPanel() {
       setPriority("");
       setConstraints([]);
     }
+  }
+
+  async function handleReadyClick() {
+    if (readyPending || !canMarkReady) return;
+
+    setReadyPending(true);
+    const actionResult = await actions.markMyInputReady();
+    setReadyPending(false);
+    setReadyResult(actionResult);
   }
 
   return (
@@ -189,6 +247,31 @@ export function PositionsPanel() {
         <h3 className="panel-subheading">
           {self ? `Publish your position as ${self.role}` : "Publish a position"}
         </h3>
+
+        <div className="agent-guide" aria-labelledby="agent-guide-heading">
+          <div className="agent-guide-status">
+            <span className="agent-guide-mark" aria-hidden="true">
+              ◆
+            </span>
+            <div>
+              <h4 id="agent-guide-heading">
+                {webMcpAvailability === "available"
+                  ? "Browser agent tools available for this phase"
+                  : webMcpAvailability === "unavailable"
+                    ? "WebMCP is unavailable in this browser. You can still participate manually."
+                    : "Checking browser agent tools for this phase"}
+              </h4>
+              <p>
+                {self
+                  ? `Actions from this browser agent are recorded only for your ${self.role} participant session.`
+                  : "Claim a seat before asking a browser agent to act for you."}
+              </p>
+            </div>
+          </div>
+          <blockquote className="agent-prompt">
+            Read this meeting and help me express my engineering constraints.
+          </blockquote>
+        </div>
 
         <label htmlFor={`${fieldId}-summary`}>Position summary</label>
         <textarea
@@ -316,6 +399,35 @@ export function PositionsPanel() {
 
         <ActionFeedback result={result} />
       </form>
+
+      <div className="ready-box" aria-labelledby="ready-heading">
+        <h3 className="panel-subheading" id="ready-heading">
+          Input readiness
+        </h3>
+
+        {isReadyForDeliberation ? (
+          <p className="ready-state" role="status">
+            ✓ Ready for deliberation
+          </p>
+        ) : (
+          <>
+            <button
+              className="button ready-action"
+              type="button"
+              disabled={!canMarkReady || readyPending}
+              onClick={handleReadyClick}
+            >
+              {readyPending ? "Marking ready…" : "My input is ready"}
+            </button>
+
+            {readyDisabledReason ? (
+              <p className="panel-note">{readyDisabledReason}</p>
+            ) : null}
+          </>
+        )}
+
+        <ActionFeedback result={readyResult} />
+      </div>
     </section>
   );
 }

@@ -148,6 +148,18 @@ describe("the window shell over the office", () => {
     );
   });
 
+  it("opens the decision workbench when the meeting room is visited", async () => {
+    await mountShell();
+    expect(windowTitles()).not.toContain("Decision workbench");
+
+    await act(async () => {
+      visit?.("meeting-room");
+    });
+
+    expect(windowTitles()).toContain("Decision workbench");
+    expect(container.textContent).toContain("Active proposal");
+  });
+
   it("opens the participants panel when an office is visited", async () => {
     await mountShell();
 

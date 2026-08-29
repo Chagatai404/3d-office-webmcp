@@ -12,6 +12,7 @@
 
 export type WindowId =
   | "brief"
+  | "decision"
   | "positions"
   | "participants"
   | "activity"
@@ -73,6 +74,13 @@ const CASCADE = 26;
 
 export const WINDOW_DEFAULTS: readonly WindowDefault[] = [
   { id: "brief", width: 400, height: 250, anchor: "top-left", open: true },
+  {
+    id: "decision",
+    width: 600,
+    height: 620,
+    anchor: "center",
+    open: false,
+  },
   {
     id: "participants",
     width: 420,

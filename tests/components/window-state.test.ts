@@ -37,6 +37,7 @@ describe("the opening layout", () => {
     const windows = createWindows();
 
     expect(windows.brief.open).toBe(true);
+    expect(windows.decision.open).toBe(false);
     expect(windows.participants.open).toBe(true);
     expect(windows.positions.open).toBe(false);
     expect(windows.activity.open).toBe(false);

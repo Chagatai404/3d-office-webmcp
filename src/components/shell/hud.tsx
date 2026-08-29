@@ -43,7 +43,7 @@ export function Hud() {
   const handlePrimaryAction = () => {
     if (activeProposal) {
       visitZone("meeting-room");
-      openWindow("brief");
+      openWindow("decision");
       return;
     }
 

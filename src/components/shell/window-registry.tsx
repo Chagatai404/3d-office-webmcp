@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { ActivityLedger } from "@/components/room/activity-ledger";
+import { DecisionPanel } from "@/components/room/decision-panel";
 import { MeetingBrief } from "@/components/room/meeting-brief";
 import { ParticipantPanel } from "@/components/room/participant-panel";
 import { PositionsPanel } from "@/components/room/positions-panel";
@@ -39,6 +40,14 @@ export const WINDOW_DEFINITIONS: readonly WindowDefinition[] = [
     hint: "What this room is deciding",
     zone: "meeting-room",
     render: () => <MeetingBrief />,
+  },
+  {
+    id: "decision",
+    title: "Decision workbench",
+    glyph: "◇",
+    hint: "Proposals, objections, votes, approval, and record",
+    zone: "meeting-room",
+    render: () => <DecisionPanel />,
   },
   {
     id: "participants",

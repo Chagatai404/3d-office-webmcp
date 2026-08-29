@@ -30,6 +30,16 @@ const LEGEND_ORIGINS: readonly ActionOrigin[] = [
 export function ActivityLedger() {
   const { room, visualization } = useRoom();
   const entries = [...visualization.recentActivity].reverse();
+  const latestWebMcpActivity = room.participants.map((participant) => {
+    const event = room.activity
+      .filter(
+        (candidate) =>
+          candidate.origin === "webmcp" && candidate.actorId === participant.id,
+      )
+      .toSorted((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+
+    return { participant, event };
+  });
 
   return (
     <section className="panel-block" aria-labelledby="activity-heading">
@@ -50,23 +60,78 @@ export function ActivityLedger() {
         ))}
       </ul>
 
-      <ol className="activity-list">
-        {entries.map((event) => (
-          <li key={event.id} className={`activity-item origin-${event.origin}`}>
-            <span className="activity-origin">
-              <span aria-hidden="true">{ORIGIN_GLYPH[event.origin]}</span>
-              {ORIGIN_LABEL[event.origin]}
-            </span>
-            <span className="activity-body">
-              <strong>{event.actorName}</strong>
-              {" · "}
-              {formatActionName(event.action)}
-              <span className="activity-meta">
-                {ACTOR_TYPE_LABEL[event.actorType]} · {formatTime(event.createdAt)}
+      <section
+        className="latest-agent-actions"
+        aria-labelledby="latest-agent-actions-heading"
+      >
+        <h3 className="panel-subheading" id="latest-agent-actions-heading">
+          Latest browser-agent actions
+        </h3>
+        <ul className="latest-agent-list">
+          {latestWebMcpActivity.map(({ participant, event }) => (
+            <li key={participant.id} className="latest-agent-row">
+              <span className="latest-agent-participant">
+                {participant.role}
+                <span>{participant.name}</span>
               </span>
-            </span>
-          </li>
-        ))}
+              {event ? (
+                <span className="latest-agent-event">
+                  <span className="activity-origin origin-webmcp">
+                    <span aria-hidden="true">{ORIGIN_GLYPH.webmcp}</span>
+                    via browser agent
+                  </span>
+                  <span>
+                    {formatActionName(event.action)} · {formatTime(event.createdAt)}
+                  </span>
+                </span>
+              ) : (
+                <span className="latest-agent-empty">
+                  No browser-agent action recorded
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <ol className="activity-list">
+        {entries.map((event) => {
+          const participant =
+            event.actorId && event.actorType === "participant"
+              ? room.participants.find(
+                  (candidate) => candidate.id === event.actorId,
+                )
+              : null;
+          const actorLabel =
+            participant?.role ??
+            (event.actorType === "system" ? "System" : event.actorName);
+
+          return (
+            <li key={event.id} className={`activity-item origin-${event.origin}`}>
+              <span className="activity-origin">
+                <span aria-hidden="true">{ORIGIN_GLYPH[event.origin]}</span>
+                {ORIGIN_LABEL[event.origin]}
+              </span>
+              <span className="activity-body">
+                <strong>
+                  {actorLabel}
+                  {participant ? (
+                    <span className="activity-actor-name">
+                      {participant.name}
+                    </span>
+                  ) : null}
+                </strong>
+                <span>
+                  via {ORIGIN_LABEL[event.origin].toLowerCase()} ·{" "}
+                  {formatActionName(event.action)}
+                </span>
+                <span className="activity-meta">
+                  {ACTOR_TYPE_LABEL[event.actorType]} · {formatTime(event.createdAt)}
+                </span>
+              </span>
+            </li>
+          );
+        })}
       </ol>
 
       <p className="panel-note">

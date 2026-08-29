@@ -28,19 +28,28 @@ type ClaimState =
   | { kind: "failure"; recovery?: string }
   | { kind: "success" };
 
+function previewToState(
+  roomId: string,
+  preview: RoomInvitePreview,
+): PreviewState {
+  if (!preview.inviteValid) return { kind: "unavailable" };
+  if (preview.roomId !== roomId) return { kind: "route-mismatch" };
+  return { kind: "valid", preview };
+}
+
 export function JoinRoom({ roomId, inviteToken, client: suppliedClient }: JoinRoomProps) {
   const router = useRouter();
   const [client] = useState<RoomOnboardingClient>(
     () => suppliedClient ?? new ApiRoomOnboardingClient(),
   );
-  const [previewState, setPreviewState] = useState<PreviewState>({
-    kind: "loading",
-  });
+  const [previewState, setPreviewState] = useState<PreviewState>(() =>
+    inviteToken ? { kind: "loading" } : { kind: "unavailable" },
+  );
   const [claimState, setClaimState] = useState<ClaimState>({ kind: "idle" });
   const previewRequest = useRef(0);
   const claimInFlight = useRef(false);
 
-  const loadPreview = useCallback(async () => {
+  const refreshPreview = useCallback(async () => {
     const requestId = ++previewRequest.current;
     setClaimState({ kind: "idle" });
 
@@ -54,13 +63,7 @@ export function JoinRoom({ roomId, inviteToken, client: suppliedClient }: JoinRo
       const preview = await client.previewInvitation(inviteToken);
       if (requestId !== previewRequest.current) return;
 
-      if (!preview.inviteValid) {
-        setPreviewState({ kind: "unavailable" });
-      } else if (preview.roomId !== roomId) {
-        setPreviewState({ kind: "route-mismatch" });
-      } else {
-        setPreviewState({ kind: "valid", preview });
-      }
+      setPreviewState(previewToState(roomId, preview));
     } catch {
       if (requestId === previewRequest.current) {
         setPreviewState({ kind: "failure" });
@@ -69,11 +72,26 @@ export function JoinRoom({ roomId, inviteToken, client: suppliedClient }: JoinRo
   }, [client, inviteToken, roomId]);
 
   useEffect(() => {
-    void loadPreview();
+    const requestId = ++previewRequest.current;
+    if (!inviteToken) return;
+
+    void client
+      .previewInvitation(inviteToken)
+      .then((preview) => {
+        if (requestId === previewRequest.current) {
+          setPreviewState(previewToState(roomId, preview));
+        }
+      })
+      .catch(() => {
+        if (requestId === previewRequest.current) {
+          setPreviewState({ kind: "failure" });
+        }
+      });
+
     return () => {
       previewRequest.current += 1;
     };
-  }, [loadPreview]);
+  }, [client, inviteToken, roomId]);
 
   async function claimInvitation() {
     if (
@@ -169,7 +187,7 @@ export function JoinRoom({ roomId, inviteToken, client: suppliedClient }: JoinRo
             <button
               type="button"
               className={styles.secondaryButton}
-              onClick={() => void loadPreview()}
+              onClick={() => void refreshPreview()}
             >
               Try again
             </button>
@@ -181,7 +199,7 @@ export function JoinRoom({ roomId, inviteToken, client: suppliedClient }: JoinRo
             preview={previewState.preview}
             claimState={claimState}
             onClaim={() => void claimInvitation()}
-            onRecheck={() => void loadPreview()}
+            onRecheck={() => void refreshPreview()}
           />
         ) : null}
       </section>
