@@ -14,7 +14,7 @@
 
 # 0. Before parallel work starts
 
-- [ ] **B-000 — Wait only for Contract Freeze checkpoint, not full backend implementation**
+- [x] **B-000 — Wait only for Contract Freeze checkpoint, not full backend implementation**
   - Person A provides commit containing stable shared signatures for:
     - `CreateRoomInput`
     - `CreatedRoom`
@@ -27,7 +27,7 @@
   - Branch from that exact SHA.
   - **Done:** B does not need to modify `src/contracts/room.ts`.
 
-- [ ] **B-001 — Verify own branch and baseline**
+- [x] **B-001 — Verify own branch and baseline**
   ```bash
   git status
   npm run test:unit
@@ -109,7 +109,7 @@ Temporary UI mocks belong only in tests.
 
 # 3. Slice B1 — Product Entry + Room Creation UX
 
-- [ ] **B-110 / T-110 — Turn home page into product entry**
+- [x] **B-110 / T-110 — Turn home page into product entry**
   - `src/app/page.tsx`
   - CTAs:
     ```text
@@ -119,7 +119,7 @@ Temporary UI mocks belong only in tests.
   - Keep `/room/demo` as fast judge shortcut.
   - **Done:** demo is not the only entry point.
 
-- [ ] **B-111 / T-111 — Add `/new` create-room page**
+- [x] **B-111 / T-111 — Add `/new` create-room page**
   - Suggested composition:
     ```text
     src/app/new/page.tsx
@@ -141,7 +141,7 @@ Temporary UI mocks belong only in tests.
   - Submit only canonical `CreateRoomInput`.
   - **Done:** no organizer/user/participant authority is sent from the form.
 
-- [ ] **B-112 / T-112 — Handle create success navigation**
+- [x] **B-112 / T-112 — Handle create success navigation**
   - Navigate to:
     ```text
     /room/:roomId/setup
@@ -152,13 +152,22 @@ Temporary UI mocks belong only in tests.
 
 ## Component tests
 
-- [ ] **B-113 — Create-room form validation test**
-- [ ] **B-114 — Create-room success navigation test**
-- [ ] **B-115 — Create-room API/client failure feedback test**
+- [x] **B-113 — Create-room form validation test**
+- [x] **B-114 — Create-room success navigation test**
+- [x] **B-115 — Create-room API/client failure feedback test**
 
 ### B1 exit gate
 
-- [ ] User can understand and complete “Create Decision Room” without touching demo controls.
+- [x] User can understand and complete “Create Decision Room” without touching demo controls.
+
+**B1 implementation note:** Added the product home entry, `/new` form, responsive
+onboarding styles, a lightweight `/room/[roomId]/setup` arrival route, and focused
+component tests. Creation uses `RoomOnboardingClient` with canonical
+`CreateRoomInput`; the returned `CreatedRoom` is held only in a volatile in-memory
+handoff for the immediate setup transition, never room state or browser storage.
+Full organizer invitation management remains B2. Verified with `npm run lint`,
+`npm run typecheck`, `npm run test:unit` (15 files / 175 tests), `npm run build`,
+and `git diff --check`; all passed.
 
 ---
 
