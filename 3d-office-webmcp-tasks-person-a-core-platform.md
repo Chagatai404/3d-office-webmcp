@@ -390,66 +390,128 @@ Decisions worth carrying into A3/A4:
 
 ## Contract/data
 
-- [ ] **A-300 / T-300 — Adopt `participants.ready_at`**
+- [x] **A-300 / T-300 — Adopt `participants.ready_at`**
   - Public DTO exposes `isReady: boolean` only.
 
-- [ ] **A-301 / T-301 — Map `isReady` into canonical participant DTO**
+- [x] **A-301 / T-301 — Map `isReady` into canonical participant DTO**
 
 ## Domain
 
-- [ ] **A-302 / T-302 — Implement `markMyInputReady`**
+- [x] **A-302 / T-302 — Implement `markMyInputReady`**
   - Input phase only.
   - Claimed human only.
   - At least one position required.
   - Server-derived actor.
   - Version + audit.
 
-- [ ] **A-303 / T-303 — Implement production `advanceRoomPhase`**
+- [x] **A-303 / T-303 — Implement production `advanceRoomPhase`**
   - Organizer-only.
   - Current-version guard.
   - Do not reuse demo authority endpoint.
 
-- [ ] **A-304 / T-304 — `input → proposals` prerequisites**
+- [x] **A-304 / T-304 — `input → proposals` prerequisites**
   - Required participants joined.
   - Required participants published position.
   - Required participants ready.
 
-- [ ] **A-305 / T-305 — `proposals → deliberation` prerequisite**
+- [x] **A-305 / T-305 — `proposals → deliberation` prerequisite**
   - Active proposal exists.
 
-- [ ] **A-306 / T-306 — `deliberation → voting` prerequisite**
+- [x] **A-306 / T-306 — `deliberation → voting` prerequisite**
   - Active proposal.
   - No unresolved blocking conflict.
 
-- [ ] **A-307 / T-307 — `voting → approval` reuse existing decision rules**
+- [x] **A-307 / T-307 — `voting → approval` reuse existing decision rules**
   - No duplicate voting/approval logic.
 
-- [ ] **A-308 / T-308 — Preserve finalization boundary**
+- [x] **A-308 / T-308 — Preserve finalization boundary**
   - Organizer cannot force-finalize.
   - Last required human approval remains the only finalization path.
 
 ## API/client/provider
 
-- [ ] **A-309 / T-309 — Add production `POST /api/rooms/[roomId]/phase`**
-- [ ] **A-310 / T-310 — Add `advanceRoomPhase` to client contract and `ApiRoomClient`**
+- [x] **A-309 / T-309 — Add production `POST /api/rooms/[roomId]/phase`**
+- [x] **A-310 / T-310 — Add `advanceRoomPhase` to client contract and `ApiRoomClient`**
   - Keep `advanceDemoPhase` separate.
-- [ ] **A-311 / T-311 — Add `markMyInputReady` client method and bind through `RoomProvider.actions`**
+- [x] **A-311 / T-311 — Add `markMyInputReady` client method and bind through `RoomProvider.actions`**
   - Person A owns provider edit.
 
 ## Tests
 
-- [ ] **A-315 / T-315 — Mark-self-ready authorization**
-- [ ] **A-316 / T-316 — Position-before-ready prerequisite**
-- [ ] **A-317 / T-317 — Non-organizer phase advance rejection**
-- [ ] **A-318 / T-318 — Organizer too-early rejection**
-- [ ] **A-319 / T-319 — Valid organizer advancement**
-- [ ] **A-320 / T-320 — Version + audit + realtime invalidation**
+- [x] **A-315 / T-315 — Mark-self-ready authorization**
+- [x] **A-316 / T-316 — Position-before-ready prerequisite**
+- [x] **A-317 / T-317 — Non-organizer phase advance rejection**
+- [x] **A-318 / T-318 — Organizer too-early rejection**
+- [x] **A-319 / T-319 — Valid organizer advancement**
+- [x] **A-320 / T-320 — Version + audit + realtime invalidation**
 
 ### A3 exit gate
 
-- [ ] Real room can progress without `/api/dev/...`.
-- [ ] Organizer authority and participant authority remain separate.
-- [ ] Finalization remains human-controlled.
+- [x] Real room can progress without `/api/dev/...`.
+- [x] Organizer authority and participant authority remain separate.
+- [x] Finalization remains human-controlled.
+
+**Delivered in `supabase/migrations/20260829140000_room_lifecycle_and_readiness.sql`
+(`participants.ready_at`, `mark_my_input_ready`, `advance_room_phase`, and the
+shared `apply_room_phase_entry`), `markMyInputReady` / `advanceRoomPhase` in
+`src/domain/rooms/operations.ts`, `src/app/api/rooms/[roomId]/{ready,phase}/route.ts`,
+the two `ApiRoomClient` methods, and the `isReady` projection in
+`src/lib/supabase/room-state.ts`. Covered by `tests/domain/room-lifecycle.test.ts`,
+which drives a runtime-created room from `input` to `approval` without any
+`/api/dev/...` call.**
+
+Decisions worth carrying into A4/A5:
+
+- **Two authorities, two operations.** `markMyInputReady` derives the acting
+  seat from `auth.uid()` and carries no participant field, so it structurally
+  cannot mark anyone else ready; `advanceRoomPhase` is authorized by
+  `is_room_organizer`, which reads `rooms.organizer_user_id` — a column only
+  `create_room` ever sets. Neither can perform the other's action.
+- **The demo and production endpoints never overlap, without a room-id check
+  in the new function.** The seeded demo room has no `organizer_user_id`, so
+  `is_room_organizer('demo')` is false for everyone; conversely
+  `advance_demo_room_phase` still refuses any room but `demo`. A created room
+  is therefore unreachable from `/api/dev/rooms/[roomId]/phase`, and the demo
+  room is unreachable from `/api/rooms/[roomId]/phase`.
+- **Voting and approval rules exist once (A-307).** The `voting` and `approval`
+  entry rules — vote completeness, strict majority, no `request_changes`, no
+  blocking conflict, candidate build and hash, clearing stale votes/approvals —
+  moved out of `advance_demo_room_phase` into `public.apply_room_phase_entry`,
+  which both phase functions call. The demo function was rewritten with
+  `create or replace` in the new migration; its behaviour, messages and audit
+  payload are unchanged, and the demo domain suite still passes.
+- **Finalization stays with the humans (A-308).** `approval` is absent from the
+  transition map, so an organizer moves a room *into* approval and no further;
+  asking for `finalized` returns `WRONG_PHASE` with a recovery line pointing at
+  the required approvals. Only `approve_participant_final_decision` finalizes.
+- **Guard ordering is deliberate.** `mark_my_input_ready` checks the room
+  version before the seat, matching every other participant mutation.
+  `advance_room_phase` checks organizer authority *before* the version, mirroring
+  the demo function's room-level gate, so a non-organizer is never told whether
+  their version guess was right.
+- **Readiness is idempotent and one-way within the input phase.** Re-marking an
+  already-ready seat succeeds without a second version bump or audit event,
+  matching a repeated seat claim. Nothing clears `ready_at`: it is a declaration
+  that the seat's input is complete, and it only gates `input → proposals`.
+- **No new `ActionErrorCode`.** Unmet prerequisites reuse `VALIDATION_ERROR`
+  with distinct messages ("must join", "publish a position", "mark their input
+  ready"), so Person B's exhaustive error handling from the contract freeze
+  still compiles.
+- **A room with zero required participants is rejected at `input → proposals`.**
+  It could never reach approval under the existing decision rules, so it fails
+  early rather than at the end.
+- **Realtime needed no new mechanism (A-320).** Both operations bump
+  `rooms.version`, which is what the existing `room:<id>` channel notifies on;
+  clients refetch the canonical snapshot as before.
+- **`POST /api/rooms/[roomId]/ready` takes no request body**, and the phase route
+  takes only `{ phase }`. Neither accepts an actor, participant or origin field.
+- **Carried to A4:** no WebMCP tool exposes readiness or phase advance yet, and
+  the A2 note about `claim_participant_seat` still stands.
+- **Test environment:** `tests/domain` and the Playwright web server both need
+  `SUPABASE_SERVICE_ROLE_KEY` exported (`supabase status -o json`). This is
+  pre-existing — `tests/domain/supabase-operations.test.ts` and the guarded demo
+  scenario route require it — but without it the demo suite and one e2e spec
+  fail for environment reasons rather than code ones.
 
 ---
 

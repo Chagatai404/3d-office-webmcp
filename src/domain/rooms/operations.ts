@@ -381,6 +381,71 @@ export async function getFinalDecisionRecord(
   return repository.getDecisionRecord(roomId, actorUserId);
 }
 
+/**
+ * A claimed human declares their own input complete.
+ *
+ * The acting seat is derived from the authenticated session inside the
+ * database, so this operation carries no participant field and can never mark
+ * another seat ready. The remaining prerequisites -- a claimed human seat and
+ * at least one published position -- are enforced in the same transaction that
+ * writes `ready_at`, bumps the room version and audits the event.
+ */
+export async function markMyInputReady(
+  repository: RoomRepository,
+  roomId: string,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const room = await prepareMutation(repository, roomId, context, ["input"]);
+  if ("ok" in room) return room;
+  return repository.markMyInputReady(roomId, context);
+}
+
+/**
+ * Organizer-only production phase advance.
+ *
+ * Deliberately not `advanceDemoRoomPhase`: that one is a demo-room developer
+ * affordance authorized by any claimed seat, while this one is authorized by
+ * the server-derived organizer of a real room and enforces the per-phase
+ * prerequisites (readiness, an active proposal, no blocking conflict, the
+ * existing voting rules).
+ *
+ * `approval` is not a source phase here, so an organizer can move a room into
+ * approval but never past it: finalization stays with the last required human
+ * approval.
+ */
+export async function advanceRoomPhase(
+  repository: RoomRepository,
+  roomId: string,
+  nextPhase: RoomPhase,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = roomPhaseSchema.safeParse(nextPhase);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Invalid room phase.", context.expectedRoomVersion);
+  }
+  const room = await prepareMutation(repository, roomId, context, [
+    "input",
+    "proposals",
+    "deliberation",
+    "voting",
+  ]);
+  if ("ok" in room) return room;
+  const expectedNextPhase: Partial<Record<RoomPhase, RoomPhase>> = {
+    input: "proposals",
+    proposals: "deliberation",
+    deliberation: "voting",
+    voting: "approval",
+  };
+  if (expectedNextPhase[room.phase] !== parsed.data) {
+    return failure(
+      "WRONG_PHASE",
+      "Only the next room phase may be selected.",
+      room.version,
+    );
+  }
+  return repository.advanceRoomPhase(roomId, parsed.data, context);
+}
+
 export async function advanceDemoRoomPhase(
   repository: RoomRepository,
   roomId: string,

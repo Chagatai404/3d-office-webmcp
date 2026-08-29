@@ -109,6 +109,15 @@ export interface RoomRepository {
     roomId: string,
     authUserId: string,
   ): Promise<ActionResult<DecisionRecord>>;
+  markMyInputReady(
+    roomId: string,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  advanceRoomPhase(
+    roomId: string,
+    nextPhase: RoomPhase,
+    context: MutationContext,
+  ): Promise<ActionResult>;
   advanceDemoPhase(
     roomId: string,
     nextPhase: RoomPhase,

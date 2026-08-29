@@ -142,15 +142,14 @@ export class ApiRoomClient implements RoomClient {
     return this.mutate(roomId, "phase", { phase }, `/api/dev/rooms/${encodeURIComponent(roomId)}/phase`);
   }
 
+  /** No body: the server derives the acting seat from the session. */
   markMyInputReady(roomId: string): Promise<ActionResult> {
-    return Promise.resolve(this.notAvailable(roomId, "Marking input ready"));
+    return this.mutate(roomId, "ready", {});
   }
 
+  /** Organizer-only. Distinct route from `advanceDemoPhase`. */
   advanceRoomPhase(roomId: string, phase: RoomPhase): Promise<ActionResult> {
-    void phase;
-    return Promise.resolve(
-      this.notAvailable(roomId, "Advancing the production room phase"),
-    );
+    return this.mutate(roomId, "phase", { phase });
   }
 
   private async ensureAnonymousSession(): Promise<string> {
@@ -237,16 +236,5 @@ export class ApiRoomClient implements RoomClient {
     } finally {
       this.startingChannels.delete(roomId);
     }
-  }
-
-  private notAvailable(roomId: string, feature: string) {
-    return {
-      ok: false as const,
-      error: {
-        code: "WRONG_PHASE" as const,
-        message: `${feature} is not implemented in the current backend milestone.`,
-      },
-      roomVersion: this.versions.get(roomId) ?? 0,
-    };
   }
 }

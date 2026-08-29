@@ -202,6 +202,23 @@ export class SupabaseRoomRepository implements RoomRepository {
     );
   }
 
+  markMyInputReady(roomId: string, context: MutationContext) {
+    return this.call("mark_my_input_ready", {
+      p_room_id: roomId,
+      p_expected_version: context.expectedRoomVersion,
+      p_origin: context.actor.origin,
+    });
+  }
+
+  advanceRoomPhase(roomId: string, nextPhase: RoomPhase, context: MutationContext) {
+    return this.call("advance_room_phase", {
+      p_room_id: roomId,
+      p_expected_version: context.expectedRoomVersion,
+      p_next_phase: nextPhase,
+      p_origin: context.actor.origin,
+    });
+  }
+
   advanceDemoPhase(roomId: string, nextPhase: RoomPhase, context: MutationContext) {
     return this.call("advance_demo_room_phase", {
       p_room_id: roomId, p_expected_version: context.expectedRoomVersion,
