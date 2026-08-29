@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   castVoteInputSchema,
   roomStateSchema,
+  startDemoScenarioInputSchema,
 } from "@/contracts/room";
 import { demoRoom } from "@/fixtures/demo-room";
 import { createRoomVisualizationState } from "@/visualization/room-view-model";
@@ -31,6 +32,18 @@ describe("canonical room contract", () => {
         comment: null,
       }).success,
     ).toBe(false);
+  });
+
+  it("keeps demo selection role-based without participant authority", () => {
+    expect(startDemoScenarioInputSchema.parse({
+      mode: "solo_judge",
+      humanRole: "product",
+    })).toEqual({ mode: "solo_judge", humanRole: "product" });
+    expect(startDemoScenarioInputSchema.safeParse({
+      mode: "solo_judge",
+      humanRole: "product",
+      participantId: "demo-product",
+    }).success).toBe(false);
   });
 
   it("projects canonical state into a presentation-only 3D view model", () => {

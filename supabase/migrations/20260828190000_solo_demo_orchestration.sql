@@ -505,11 +505,11 @@ declare
   actor_role text;
   constraint_id text;
   conflict_id text;
-  reaction_key text;
+  pending_reaction_key text;
   acted boolean;
   iteration integer;
 begin
-  if (select auth.uid()) is null then
+  if (select auth.uid()) is null and (select auth.role()) <> 'service_role' then
     return public.action_failure('NOT_AUTHORIZED', 'An authenticated session is required.', 0);
   end if;
   if p_room_id <> 'demo' then
@@ -537,7 +537,7 @@ begin
           when 'Designer' then 'Preserve accessibility and interaction consistency.'
           else 'Do not move the campaign launch date.'
         end
-      into actor_id, actor_role, reaction_key
+      into actor_id, actor_role, pending_reaction_key
       from public.participants participant
       where participant.room_id = p_room_id and participant.kind = 'simulation'
         and not exists (
@@ -547,7 +547,7 @@ begin
       order by participant.id limit 1;
       if actor_id is not null then
         acted := public.demo_add_simulation_position(
-          p_room_id, actor_id, reaction_key, 'scenario', 'high',
+          p_room_id, actor_id, pending_reaction_key, 'scenario', 'high',
           'position:' || actor_id
         );
       else
@@ -574,10 +574,10 @@ begin
           from public.participants participant
           where participant.room_id = p_room_id and participant.role = 'Engineer'
             and participant.kind = 'simulation';
-          reaction_key := 'engineer_capacity_objection:' || active_id;
+          pending_reaction_key := 'engineer_capacity_objection:' || active_id;
           if actor_id is not null and not exists (
             select 1 from public.demo_reactions reaction
-            where reaction.room_id = p_room_id and reaction.reaction_key = reaction_key
+            where reaction.room_id = p_room_id and reaction.reaction_key = pending_reaction_key
           ) then
             select constraint_value.id into constraint_id
             from public.constraints constraint_value
@@ -587,7 +587,7 @@ begin
             acted := public.demo_raise_simulation_objection(
               p_room_id, actor_id, active_id, constraint_id,
               'Estimated scope exceeds available engineering capacity for the two-week release window.',
-              'blocking', reaction_key
+              'blocking', pending_reaction_key
             );
           end if;
         end if;
@@ -596,10 +596,10 @@ begin
           from public.participants participant
           where participant.room_id = p_room_id and participant.role = 'Designer'
             and participant.kind = 'simulation';
-          reaction_key := 'designer_accessibility_objection:' || active_id;
+          pending_reaction_key := 'designer_accessibility_objection:' || active_id;
           if actor_id is not null and not exists (
             select 1 from public.demo_reactions reaction
-            where reaction.room_id = p_room_id and reaction.reaction_key = reaction_key
+            where reaction.room_id = p_room_id and reaction.reaction_key = pending_reaction_key
           ) then
             select constraint_value.id into constraint_id
             from public.constraints constraint_value
@@ -609,7 +609,7 @@ begin
             acted := public.demo_raise_simulation_objection(
               p_room_id, actor_id, active_id, constraint_id,
               'The proposed custom flow introduces accessibility review scope that cannot be safely skipped.',
-              'blocking', reaction_key
+              'blocking', pending_reaction_key
             );
           end if;
         end if;
@@ -618,10 +618,10 @@ begin
           from public.participants participant
           where participant.room_id = p_room_id and participant.role = 'Marketing Lead'
             and participant.kind = 'simulation';
-          reaction_key := 'marketing_deadline_objection:' || active_id;
+          pending_reaction_key := 'marketing_deadline_objection:' || active_id;
           if actor_id is not null and not exists (
             select 1 from public.demo_reactions reaction
-            where reaction.room_id = p_room_id and reaction.reaction_key = reaction_key
+            where reaction.room_id = p_room_id and reaction.reaction_key = pending_reaction_key
           ) then
             select constraint_value.id into constraint_id
             from public.constraints constraint_value
@@ -631,7 +631,7 @@ begin
             acted := public.demo_raise_simulation_objection(
               p_room_id, actor_id, active_id, constraint_id,
               'The proposal threatens the fixed campaign launch date.',
-              'warning', reaction_key
+              'warning', pending_reaction_key
             );
           end if;
         end if;
@@ -694,7 +694,7 @@ begin
     actor_role := null;
     constraint_id := null;
     conflict_id := null;
-    reaction_key := null;
+    pending_reaction_key := null;
   end loop;
 
   select room.version into current_version from public.rooms room where room.id = p_room_id;
@@ -717,8 +717,8 @@ declare
   previous_version bigint;
   human_participant_id text;
 begin
-  if (select auth.uid()) is null then
-    return public.action_failure('NOT_AUTHORIZED', 'An authenticated session is required.', 0);
+  if (select auth.role()) <> 'service_role' then
+    return public.action_failure('NOT_AUTHORIZED', 'Demo reset requires the guarded server route.', 0);
   end if;
   if p_room_id <> 'demo' then
     return public.action_failure('NOT_AUTHORIZED', 'Only the shared demo room may be reset.', 0);
@@ -770,23 +770,23 @@ begin
     id, room_id, name, role, kind, required_for_approval, created_at
   ) values
     ('demo-product', p_room_id, 'Maya', 'Product Manager',
-      case when p_mode = 'multi_user' or human_participant_id = 'demo-product'
-        then 'human' else 'simulation' end,
+      (case when p_mode = 'multi_user' or human_participant_id = 'demo-product'
+        then 'human' else 'simulation' end)::public.participant_kind,
       case when p_mode = 'solo_judge' then human_participant_id = 'demo-product' else false end,
       '2026-08-28T12:00:00Z'),
     ('demo-engineer', p_room_id, 'Emre', 'Engineer',
-      case when p_mode = 'multi_user' or human_participant_id = 'demo-engineer'
-        then 'human' else 'simulation' end,
+      (case when p_mode = 'multi_user' or human_participant_id = 'demo-engineer'
+        then 'human' else 'simulation' end)::public.participant_kind,
       case when p_mode = 'solo_judge' then human_participant_id = 'demo-engineer' else true end,
       '2026-08-28T12:00:00Z'),
     ('demo-designer', p_room_id, 'Lina', 'Designer',
-      case when p_mode = 'multi_user' or human_participant_id = 'demo-designer'
-        then 'human' else 'simulation' end,
+      (case when p_mode = 'multi_user' or human_participant_id = 'demo-designer'
+        then 'human' else 'simulation' end)::public.participant_kind,
       case when p_mode = 'solo_judge' then human_participant_id = 'demo-designer' else true end,
       '2026-08-28T12:00:00Z'),
     ('demo-marketing', p_room_id, 'Ari', 'Marketing Lead',
-      case when p_mode = 'multi_user' or human_participant_id = 'demo-marketing'
-        then 'human' else 'simulation' end,
+      (case when p_mode = 'multi_user' or human_participant_id = 'demo-marketing'
+        then 'human' else 'simulation' end)::public.participant_kind,
       case when p_mode = 'solo_judge' then human_participant_id = 'demo-marketing' else false end,
       '2026-08-28T12:00:00Z');
 
@@ -855,5 +855,19 @@ revoke all on function public.demo_advance_solo_phase(text, public.room_phase, t
 revoke all on function public.run_solo_demo_orchestration(text) from public;
 revoke all on function public.start_demo_scenario(text, public.demo_mode, text) from public;
 
-grant execute on function public.run_solo_demo_orchestration(text) to authenticated;
-grant execute on function public.start_demo_scenario(text, public.demo_mode, text) to authenticated;
+revoke all on function public.demo_claim_reaction(text, text) from anon, authenticated;
+revoke all on function public.demo_normalize_text(text) from anon, authenticated;
+revoke all on function public.demo_proposal_text(text) from anon, authenticated;
+revoke all on function public.demo_is_ambitious_proposal(text) from anon, authenticated;
+revoke all on function public.demo_needs_accessibility_objection(text) from anon, authenticated;
+revoke all on function public.demo_threatens_deadline(text) from anon, authenticated;
+revoke all on function public.demo_revision_is_acceptable(text) from anon, authenticated;
+revoke all on function public.demo_add_simulation_position(text, text, text, text, text, text) from anon, authenticated;
+revoke all on function public.demo_raise_simulation_objection(text, text, text, text, text, public.conflict_severity, text) from anon, authenticated;
+revoke all on function public.demo_resolve_simulation_objection(text, text, text, text, text) from anon, authenticated;
+revoke all on function public.demo_cast_simulation_vote(text, text, text, public.vote_choice, text, text) from anon, authenticated;
+revoke all on function public.demo_advance_solo_phase(text, public.room_phase, text) from anon, authenticated;
+revoke all on function public.start_demo_scenario(text, public.demo_mode, text) from anon, authenticated;
+
+grant execute on function public.run_solo_demo_orchestration(text) to authenticated, service_role;
+grant execute on function public.start_demo_scenario(text, public.demo_mode, text) to service_role;

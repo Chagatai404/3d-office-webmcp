@@ -11,6 +11,7 @@ import {
   proposeParticipantTradeoff,
   raiseParticipantObjection,
   resolveParticipantObjection,
+  startDemoScenario,
   previewFinalDecision,
   submitParticipantProposal,
 } from "@/domain/rooms/operations";
@@ -25,6 +26,7 @@ import { SupabaseRoomRepository } from "@/lib/supabase/room-repository";
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321";
 const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
   "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 async function anonymousActor() {
   const client = createClient(url, key, { auth: { persistSession: false } });
@@ -35,6 +37,7 @@ async function anonymousActor() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return {
+    client: authenticatedClient,
     userId: data.user.id,
     repository: new SupabaseRoomRepository(authenticatedClient),
   };
@@ -51,13 +54,22 @@ function context(
 describe.sequential("Supabase-backed room domain operations", () => {
   let engineer: Awaited<ReturnType<typeof anonymousActor>>;
   let designer: Awaited<ReturnType<typeof anonymousActor>>;
+  let product: Awaited<ReturnType<typeof anonymousActor>>;
+  let demoAdminRepository: SupabaseRoomRepository;
   let engineerConstraintId = "";
   let proposalId = "";
   let conflictId = "";
 
   beforeAll(async () => {
+    if (!serviceRoleKey) {
+      throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for guarded demo reset tests.");
+    }
+    demoAdminRepository = new SupabaseRoomRepository(createClient(url, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    }));
     engineer = await anonymousActor();
     designer = await anonymousActor();
+    product = await anonymousActor();
   });
 
   it("rejects unauthenticated mutations before repository writes", async () => {
@@ -669,5 +681,322 @@ describe.sequential("Supabase-backed room domain operations", () => {
 
   it("does not expose or permit reads from an unrelated room", async () => {
     await expect(getMeetingContext(engineer.repository, engineer.userId, "authorization-fixture")).resolves.toBeNull();
+  });
+
+  it("runs an idempotent solo-judge scenario with simulation authority and replayable reset", async () => {
+    const browserResetAttempt = await product.client.rpc("start_demo_scenario", {
+      p_room_id: "demo",
+      p_mode: "solo_judge",
+      p_human_role: "product",
+    });
+    expect(browserResetAttempt.error?.message).toContain("permission denied");
+
+    const reset = await startDemoScenario(
+      demoAdminRepository,
+      "demo",
+      { mode: "solo_judge", humanRole: "product" },
+      product.userId,
+    );
+    expect(reset).toMatchObject({ ok: true, roomVersion: 3 });
+
+    let room = await getMeetingContext(product.repository, product.userId, "demo");
+    expect(room).toMatchObject({ demoMode: "solo_judge", phase: "input", version: 3 });
+    expect(room?.participants.filter((participant) => participant.kind === "human").map((participant) => participant.id)).toEqual(["demo-product"]);
+    expect(room?.participants.filter((participant) => participant.kind === "simulation")).toHaveLength(3);
+    expect(room?.participants.filter((participant) => participant.requiredForApproval).map((participant) => participant.id)).toEqual(["demo-product"]);
+    expect(room?.positions).toHaveLength(3);
+    expect(room?.activity.filter((event) => event.action === "position.added" && event.origin === "simulation")).toHaveLength(3);
+
+    const privateSimulationAttempt = await product.client.rpc(
+      "demo_add_simulation_position",
+      {
+        p_room_id: "demo",
+        p_participant_id: "demo-product",
+        p_summary: "Authority attack",
+        p_category: "attack",
+        p_priority: "critical",
+        p_reaction_key: "attack:human-position",
+      },
+    );
+    expect(privateSimulationAttempt.error).toBeTruthy();
+
+    const simulationSeatAttack = await claimParticipantSeat(
+      product.repository,
+      "demo",
+      { seatId: "demo-engineer" },
+      context(product.userId, 3),
+    );
+    expect(simulationSeatAttack).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" }, roomVersion: 3 });
+
+    const claim = await claimParticipantSeat(
+      product.repository,
+      "demo",
+      { seatId: "demo-product" },
+      context(product.userId, 3),
+    );
+    expect(claim).toMatchObject({ ok: true, roomVersion: 4 });
+
+    const position = await addParticipantPosition(
+      product.repository,
+      "demo",
+      {
+        summary: "Improve onboarding completion and time to first value.",
+        category: "outcome",
+        priority: "high",
+        constraints: [],
+      },
+      context(product.userId, 4, "webmcp"),
+    );
+    expect(position).toMatchObject({ ok: true, roomVersion: 6 });
+    room = await getMeetingContext(product.repository, product.userId, "demo");
+    expect(room).toMatchObject({ phase: "proposals", version: 6 });
+
+    const ambitious = await submitParticipantProposal(
+      product.repository,
+      "demo",
+      {
+        title: "Custom personalized onboarding rebuild",
+        summary: "Rebuild onboarding as a custom multi-step flow with new event tracking and expanded personalization before campaign launch.",
+        rationale: "The broad rebuild aims to improve onboarding completion and first value.",
+        expectedOutcomes: ["Higher completion"],
+        referencedConstraintIds: ["constraint-product-completion", "constraint-product-value"],
+        parentProposalId: null,
+      },
+      context(product.userId, 6, "webmcp"),
+    );
+    expect(ambitious).toMatchObject({ ok: true, roomVersion: 10 });
+    room = await getMeetingContext(product.repository, product.userId, "demo");
+    expect(room).toMatchObject({ phase: "deliberation", version: 10 });
+    const blockers = room!.conflicts.filter((item) => item.status === "open" && item.severity === "blocking");
+    expect(blockers).toHaveLength(2);
+    expect(blockers.map((item) => item.raisedByActorId).sort()).toEqual(["demo-designer", "demo-engineer"]);
+    for (const blocker of blockers) {
+      expect(room?.activity.find((event) => event.entityId === blocker.id)).toMatchObject({
+        actorType: "participant",
+        actorId: blocker.raisedByActorId,
+        origin: "simulation",
+        action: "objection.raised",
+      });
+    }
+
+    const concurrentReads = await Promise.all([
+      getMeetingContext(product.repository, product.userId, "demo"),
+      getMeetingContext(product.repository, product.userId, "demo"),
+      getMeetingContext(product.repository, product.userId, "demo"),
+    ]);
+    expect(concurrentReads.every((snapshot) => snapshot?.version === 10)).toBe(true);
+    expect(concurrentReads[0]?.conflicts.filter((item) => item.status === "open")).toHaveLength(2);
+
+    const compromise = await proposeParticipantTradeoff(
+      product.repository,
+      "demo",
+      {
+        conflictIds: blockers.map((item) => item.id),
+        description: "Reduce scope and reuse the existing authentication and onboarding flow.",
+        expectedEffect: "Keep the two-week campaign launch while validating accessibility.",
+        revisedProposal: {
+          title: "Accessible incremental onboarding",
+          summary: "Reuse the existing authentication and onboarding flow, limit scope to two accessible steps, and keep the campaign launch date.",
+          rationale: "A thin two-week scope preserves existing auth while validating keyboard and screen reader accessibility and improving first value.",
+          expectedOutcomes: ["Improve onboarding completion", "Faster first value"],
+          referencedConstraintIds: [
+            "constraint-engineering-auth",
+            "constraint-engineering-capacity",
+            "constraint-design-accessibility",
+            "constraint-marketing-date",
+          ],
+        },
+      },
+      context(product.userId, 10, "webmcp"),
+    );
+    expect(compromise).toMatchObject({ ok: true, roomVersion: 17 });
+    room = await getMeetingContext(product.repository, product.userId, "demo");
+    expect(room).toMatchObject({ phase: "voting", version: 17 });
+    expect(room?.conflicts.filter((item) => item.status === "open" && item.severity === "blocking")).toHaveLength(0);
+    expect(room?.conflicts.every((item) => item.status !== "resolved" || item.resolvedByActorId === item.raisedByActorId)).toBe(true);
+    expect(room?.votes).toHaveLength(3);
+    expect(room?.votes.every((vote) => vote.participantId !== "demo-product" && vote.choice === "support")).toBe(true);
+    expect(room?.activity.filter((event) => event.action === "vote.cast" && event.origin === "simulation")).toHaveLength(3);
+
+    const simulatedApproval = await approveParticipantFinalDecision(
+      product.repository,
+      "demo",
+      { decisionHash: "not-yet-available" },
+      context(product.userId, 17, "simulation"),
+    );
+    expect(simulatedApproval).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" }, roomVersion: 17 });
+
+    const humanVote = await castParticipantVote(
+      product.repository,
+      "demo",
+      { proposalId: room!.activeProposalId!, choice: "support", comment: "Ready for exact human review." },
+      context(product.userId, 17, "webmcp"),
+    );
+    expect(humanVote).toMatchObject({ ok: true, roomVersion: 19 });
+    room = await getMeetingContext(product.repository, product.userId, "demo");
+    expect(room).toMatchObject({ phase: "approval", version: 19 });
+    expect(room?.approvals).toHaveLength(0);
+    expect(room?.finalDecisionPreview?.requiredApprovalParticipantIds).toEqual(["demo-product"]);
+
+    const decisionHash = room!.finalDecisionPreview!.decisionHash;
+    const humanApproval = await approveParticipantFinalDecision(
+      product.repository,
+      "demo",
+      { decisionHash },
+      { ...context(product.userId, 19), humanConfirmed: true },
+    );
+    expect(humanApproval).toMatchObject({ ok: true, roomVersion: 20 });
+    const record = await getFinalDecisionRecord(product.repository, product.userId, "demo");
+    expect(record.ok).toBe(true);
+    if (!record.ok) throw new Error("Solo decision record unavailable.");
+    expect(record.data.approvals.map((approval) => approval.participantId)).toEqual(["demo-product"]);
+    expect(record.data.provenance.some((event) => event.origin === "simulation" && event.action === "objection.raised")).toBe(true);
+    expect(record.data.provenance.some((event) => event.origin === "simulation" && event.action === "conflict.resolved")).toBe(true);
+    expect(record.data.provenance.filter((event) => event.origin === "simulation" && event.action === "vote.cast")).toHaveLength(3);
+
+    const replayReset = await startDemoScenario(
+      demoAdminRepository,
+      "demo",
+      { mode: "solo_judge", humanRole: "product" },
+      product.userId,
+    );
+    expect(replayReset).toMatchObject({ ok: true, roomVersion: 3 });
+    room = await getMeetingContext(product.repository, product.userId, "demo");
+    expect(room).toMatchObject({ phase: "input", version: 3, finalizedAt: null, activeProposalId: null });
+    expect(room?.conflicts).toHaveLength(0);
+    expect(room?.tradeoffs).toHaveLength(0);
+    expect(room?.votes).toHaveLength(0);
+    expect(room?.approvals).toHaveLength(0);
+    expect(room?.finalDecisionPreview).toBeNull();
+    expect(room?.selfParticipantId).toBeNull();
+
+    const replayClaim = await claimParticipantSeat(
+      product.repository,
+      "demo",
+      { seatId: "demo-product" },
+      context(product.userId, 3),
+    );
+    expect(replayClaim).toMatchObject({ ok: true, roomVersion: 4 });
+    const replayPosition = await addParticipantPosition(
+      product.repository,
+      "demo",
+      { summary: "Replay onboarding outcome.", category: "outcome", priority: "high", constraints: [] },
+      context(product.userId, 4),
+    );
+    expect(replayPosition).toMatchObject({ ok: true, roomVersion: 6 });
+  });
+
+  it("transactionally resets input, deliberation, voting, and approval state", async () => {
+    async function resetSolo() {
+      const result = await startDemoScenario(
+        demoAdminRepository,
+        "demo",
+        { mode: "solo_judge", humanRole: "product" },
+        product.userId,
+      );
+      expect(result).toMatchObject({ ok: true, roomVersion: 3 });
+      const snapshot = await getMeetingContext(product.repository, product.userId, "demo");
+      expect(snapshot).toMatchObject({ phase: "input", version: 3, finalizedAt: null });
+      expect(snapshot?.conflicts).toHaveLength(0);
+      expect(snapshot?.tradeoffs).toHaveLength(0);
+      expect(snapshot?.votes).toHaveLength(0);
+      expect(snapshot?.approvals).toHaveLength(0);
+      expect(snapshot?.finalDecisionPreview).toBeNull();
+      return snapshot!;
+    }
+
+    async function reachDeliberation() {
+      await resetSolo();
+      await claimParticipantSeat(
+        product.repository,
+        "demo",
+        { seatId: "demo-product" },
+        context(product.userId, 3),
+      );
+      await addParticipantPosition(
+        product.repository,
+        "demo",
+        { summary: "Improve onboarding completion.", category: "outcome", priority: "high", constraints: [] },
+        context(product.userId, 4),
+      );
+      await submitParticipantProposal(
+        product.repository,
+        "demo",
+        {
+          title: "Custom onboarding rebuild",
+          summary: "Rebuild onboarding as a custom multi-step flow with new event tracking.",
+          rationale: "Improve onboarding completion and first value before campaign launch.",
+          expectedOutcomes: ["Higher completion"],
+          referencedConstraintIds: ["constraint-product-completion"],
+          parentProposalId: null,
+        },
+        context(product.userId, 6),
+      );
+      const snapshot = await getMeetingContext(product.repository, product.userId, "demo");
+      expect(snapshot).toMatchObject({ phase: "deliberation", version: 10 });
+      return snapshot!;
+    }
+
+    async function reachVoting() {
+      const deliberation = await reachDeliberation();
+      const blockers = deliberation.conflicts.filter((item) => item.status === "open");
+      await proposeParticipantTradeoff(
+        product.repository,
+        "demo",
+        {
+          conflictIds: blockers.map((item) => item.id),
+          description: "Reuse existing authentication and reduce scope.",
+          expectedEffect: "Preserve launch and accessibility.",
+          revisedProposal: {
+            title: "Accessible incremental onboarding",
+            summary: "Reuse the existing authentication and onboarding flow, limit scope, and keep the campaign launch date.",
+            rationale: "A thin two-week scope validates keyboard and screen reader accessibility and improves first value.",
+            expectedOutcomes: ["Improve onboarding completion"],
+            referencedConstraintIds: [
+              "constraint-engineering-auth",
+              "constraint-design-accessibility",
+              "constraint-marketing-date",
+            ],
+          },
+        },
+        context(product.userId, 10),
+      );
+      const snapshot = await getMeetingContext(product.repository, product.userId, "demo");
+      expect(snapshot).toMatchObject({ phase: "voting", version: 17 });
+      return snapshot!;
+    }
+
+    await resetSolo();
+    await resetSolo();
+
+    await reachDeliberation();
+    await resetSolo();
+
+    await reachVoting();
+    await resetSolo();
+
+    const voting = await reachVoting();
+    await castParticipantVote(
+      product.repository,
+      "demo",
+      { proposalId: voting.activeProposalId!, choice: "support", comment: null },
+      context(product.userId, 17),
+    );
+    const approval = await getMeetingContext(product.repository, product.userId, "demo");
+    expect(approval).toMatchObject({ phase: "approval", version: 19 });
+    await resetSolo();
+
+    const multiReset = await startDemoScenario(
+      demoAdminRepository,
+      "demo",
+      { mode: "multi_user", humanRole: null },
+      product.userId,
+    );
+    expect(multiReset).toMatchObject({ ok: true, roomVersion: 0 });
+    const multiRoom = await getMeetingContext(product.repository, product.userId, "demo");
+    expect(multiRoom).toMatchObject({ demoMode: "multi_user", phase: "input", version: 0 });
+    expect(multiRoom?.participants.every((participant) => participant.kind === "human")).toBe(true);
+    expect(multiRoom?.participants.filter((participant) => participant.requiredForApproval).map((participant) => participant.id).sort()).toEqual(["demo-designer", "demo-engineer"]);
+    expect(multiRoom?.positions).toHaveLength(4);
   });
 });

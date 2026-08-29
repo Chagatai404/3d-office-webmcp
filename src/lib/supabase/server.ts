@@ -8,3 +8,14 @@ export function createAuthenticatedServerClient(accessToken: string): SupabaseCl
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
+
+export function createServiceRoleServerClient(): SupabaseClient {
+  const { url } = getSupabaseConfig();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY for guarded server operations.");
+  }
+  return createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}

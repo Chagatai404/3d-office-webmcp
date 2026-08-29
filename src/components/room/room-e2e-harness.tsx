@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ActionResult, RoomPhase } from "@/contracts/room";
+import type { ActionResult, DemoHumanRole, RoomPhase } from "@/contracts/room";
 import { useRoom } from "./room-provider";
 
 /**
@@ -17,6 +17,7 @@ export function RoomE2EHarness() {
   const { room, self, actions } = useRoom();
   const [confirmedDecisionHash, setConfirmedDecisionHash] = useState<string | null>(null);
   const [status, setStatus] = useState("Connected");
+  const [soloRole, setSoloRole] = useState<DemoHumanRole>("product");
 
   const decisionHash = room.finalDecisionPreview?.decisionHash ?? null;
   const nextPhase: RoomPhase | null = room.phase === "input"
@@ -47,11 +48,52 @@ export function RoomE2EHarness() {
       <p>Room · <span data-testid="room-phase">{room.phase}</span></p>
       <p>Version <span data-testid="room-version">{room.version}</span></p>
 
+      <section data-testid="demo-controls">
+        <p data-testid="demo-mode">Mode: {room.demoMode ?? "none"}</p>
+        <label>
+          Judge role
+          <select
+            data-testid="demo-human-role"
+            value={soloRole}
+            onChange={(event) => setSoloRole(event.target.value as DemoHumanRole)}
+          >
+            <option value="product">Product Manager</option>
+            <option value="engineer">Engineer</option>
+            <option value="designer">Designer</option>
+            <option value="marketing">Marketing Lead</option>
+          </select>
+        </label>
+        <button
+          type="button"
+          data-testid="start-solo-demo"
+          onClick={() => void run(actions.startDemoScenario({
+            mode: "solo_judge",
+            humanRole: soloRole,
+          }))}
+        >
+          Start solo demo
+        </button>
+        <button
+          type="button"
+          data-testid="reset-multi-user-demo"
+          onClick={() => void run(actions.startDemoScenario({
+            mode: "multi_user",
+            humanRole: null,
+          }))}
+        >
+          Reset multi-user demo
+        </button>
+      </section>
+
       <section aria-label="Participant seats">
         {room.participants.map((participant) => (
           <article key={participant.id}>
             <strong>{participant.role}</strong>
             <span>{participant.name}</span>
+            <span data-testid={`participant-kind-${participant.id}`}>
+              {participant.kind === "simulation" ? "Simulated Participant" : "Human Participant"}
+              {participant.requiredForApproval ? " · Required approver" : ""}
+            </span>
             <span>
               {participant.id === room.selfParticipantId
                 ? "Your seat"
