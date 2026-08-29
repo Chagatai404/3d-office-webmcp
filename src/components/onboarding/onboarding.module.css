@@ -559,12 +559,493 @@
   line-height: 1.6;
 }
 
+.setupPage,
+.joinPage {
+  width: min(78rem, calc(100% - 2rem));
+  min-height: 100dvh;
+  margin: 0 auto;
+}
+
+.setupPage {
+  padding: 1.5rem 0 5rem;
+}
+
+.setupHeader,
+.joinHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #253141;
+}
+
+.secureLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #9aa8b6;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.secureLabel::before {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0.2rem rgba(94, 234, 212, 0.12);
+  content: "";
+}
+
+.setupLayout {
+  display: grid;
+  grid-template-columns: minmax(17rem, 0.68fr) minmax(34rem, 1.32fr);
+  gap: clamp(2rem, 7vw, 6rem);
+  align-items: start;
+  padding-top: clamp(3rem, 7vw, 5.5rem);
+}
+
+.setupIntro {
+  position: sticky;
+  top: 2rem;
+}
+
+.setupIntro h1,
+.setupRecovery h1,
+.joinStateCard h1,
+.joinCardIntro h1 {
+  margin: 0.65rem 0 1.25rem;
+  letter-spacing: -0.045em;
+}
+
+.setupIntro h1 {
+  max-width: 10ch;
+  font-size: clamp(2.8rem, 5vw, 5rem);
+  line-height: 0.96;
+}
+
+.setupIntro > p:not(.eyebrow) {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.setupIntro > p.setupBrief {
+  margin-top: 0.55rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.securityNote {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 1.8rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(248, 195, 93, 0.3);
+  border-radius: 0.7rem;
+  background: rgba(248, 195, 93, 0.06);
+}
+
+.securityNote strong {
+  color: #ffe1a1;
+  font-size: 0.82rem;
+}
+
+.securityNote span {
+  color: #b3a98e;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.enterRoomLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 1.25rem;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.enterRoomLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+
+.setupSeats {
+  display: grid;
+  gap: 1rem;
+}
+
+.setupSeatsHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.4rem;
+}
+
+.setupSeatsHeading h2 {
+  max-width: 22ch;
+  margin: 0.35rem 0 0;
+  font-size: clamp(1.55rem, 3vw, 2.2rem);
+  letter-spacing: -0.035em;
+}
+
+.setupSeatsHeading > span {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inviteList {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.inviteCard {
+  display: grid;
+  gap: 1rem;
+  padding: 1.15rem;
+  border: 1px solid #2b3949;
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 0.9rem 2.5rem rgba(0, 0, 0, 0.13);
+}
+
+.organizerCard {
+  border-color: rgba(94, 234, 212, 0.34);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.inviteCardTopline,
+.copyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.inviteIdentity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.inviteInitials {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  border-radius: 0.72rem;
+  background: rgba(94, 234, 212, 0.08);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.inviteIdentity > div {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.inviteIdentity strong {
+  font-size: 0.95rem;
+}
+
+.inviteIdentity span,
+.copyRow > div span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.invitedBadge,
+.seatBadges span {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.22rem 0.5rem;
+  border: 1px solid #3b4c5e;
+  border-radius: 999px;
+  color: #b5c1cd;
+  font-size: 0.65rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.invitedBadge {
+  border-color: rgba(94, 234, 212, 0.3);
+  color: var(--accent);
+}
+
+.seatBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.organizerSeatNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.copyRow {
+  padding: 0.8rem;
+  border: 1px solid #263545;
+  border-radius: 0.65rem;
+  background: #0c131b;
+}
+
+.copyRow > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.copyRow > div strong {
+  font-size: 0.78rem;
+}
+
+.copyButton,
+.secondaryButton,
+.inlineButton {
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.copyButton {
+  flex: 0 0 auto;
+  min-height: 2.35rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.55rem;
+  font-size: 0.74rem;
+}
+
+.copyButton:hover,
+.secondaryButton:hover,
+.inlineButton:hover {
+  background: rgba(94, 234, 212, 0.08);
+}
+
+.copyStatus {
+  min-height: 1rem;
+  margin: -0.55rem 0 0;
+  color: var(--accent);
+  font-size: 0.7rem;
+}
+
+.setupRecovery {
+  padding: clamp(1.5rem, 5vw, 3rem);
+  border: 1px solid #2a3745;
+  border-radius: 1rem;
+  background: var(--surface);
+}
+
+.setupRecovery h1 {
+  max-width: 13ch;
+  font-size: clamp(2.6rem, 6vw, 4.6rem);
+  line-height: 0.98;
+}
+
+.setupRecovery > p:not(.eyebrow) {
+  max-width: 37rem;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.joinPage {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 1.25rem 0 1.5rem;
+}
+
+.joinStage {
+  display: grid;
+  place-items: center;
+  padding: clamp(3rem, 8vw, 6rem) 0;
+}
+
+.joinStateCard,
+.joinCard {
+  width: min(100%, 45rem);
+  padding: clamp(1.5rem, 5vw, 3rem);
+  border: 1px solid #2a3745;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 1.25rem 4rem rgba(0, 0, 0, 0.22);
+}
+
+.joinStateCard h1,
+.joinCardIntro h1 {
+  max-width: 15ch;
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  line-height: 0.98;
+}
+
+.joinStateCard > p:not(.eyebrow),
+.joinCardIntro > p:not(.eyebrow) {
+  max-width: 38rem;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.joinStateCard .primaryAction,
+.joinStateCard .secondaryAction,
+.joinStateCard .secondaryButton {
+  margin-top: 1rem;
+}
+
+.loadingMark {
+  display: block;
+  width: 2.2rem;
+  height: 2.2rem;
+  margin-bottom: 1.2rem;
+  border: 0.22rem solid rgba(94, 234, 212, 0.18);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+}
+
+.joinCard {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.joinCardIntro {
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #263545;
+}
+
+.roleReveal {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  border-radius: 0.75rem;
+  background: rgba(94, 234, 212, 0.05);
+}
+
+.roleReveal > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.roleReveal > div > span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.roleReveal strong {
+  margin-top: 0.15rem;
+  font-size: 1.1rem;
+}
+
+.roleReveal p {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 750;
+}
+
+.joinConfirmation {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 1.5rem;
+}
+
+.joinConfirmation strong {
+  font-size: 0.85rem;
+}
+
+.joinConfirmation p {
+  max-width: 29rem;
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.claimFeedback {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(251, 113, 133, 0.4);
+  border-radius: 0.65rem;
+  background: rgba(127, 29, 29, 0.16);
+  color: #fecdd3;
+  font-size: 0.78rem;
+}
+
+.claimFeedback span {
+  color: #e9adb5;
+  line-height: 1.45;
+}
+
+.inlineButton {
+  justify-self: start;
+  min-height: 2.1rem;
+  margin-top: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.45rem;
+  font-size: 0.7rem;
+}
+
+.secondaryButton {
+  min-height: 2.75rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.55rem;
+}
+
+.joinFooter {
+  padding-top: 1rem;
+  border-top: 1px solid #253141;
+  color: #798795;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.copyButton:focus-visible,
+.secondaryButton:focus-visible,
+.inlineButton:focus-visible,
+.enterRoomLink:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 3px;
+}
+
 @media (max-width: 52rem) {
   .onboardingLayout {
     grid-template-columns: 1fr;
   }
 
-  .onboardingIntro {
+  .setupLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .onboardingIntro,
+  .setupIntro {
     position: static;
   }
 
@@ -620,5 +1101,34 @@
 
   .participantRowHeader {
     align-items: flex-start;
+  }
+
+  .setupPage,
+  .joinPage {
+    width: min(100% - 1rem, 78rem);
+  }
+
+  .secureLabel {
+    font-size: 0.62rem;
+  }
+
+  .inviteCardTopline,
+  .copyRow,
+  .setupSeatsHeading {
+    align-items: flex-start;
+  }
+
+  .copyRow,
+  .joinConfirmation {
+    grid-template-columns: 1fr;
+  }
+
+  .copyRow {
+    display: grid;
+  }
+
+  .copyButton,
+  .joinConfirmation .submitButton {
+    width: 100%;
   }
 }

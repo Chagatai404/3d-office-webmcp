@@ -1,4 +1,4 @@
-import type { CreatedRoom } from "@/contracts/room";
+import type { CreateRoomInput, CreatedRoom } from "@/contracts/room";
 
 /**
  * Volatile handoff for the single client-side transition from creation to setup.
@@ -6,14 +6,32 @@ import type { CreatedRoom } from "@/contracts/room";
  * A refresh intentionally clears this value; B2 can replace it with an
  * organizer-authorized refetch when that backend surface exists.
  */
-let pendingCreatedRoom: CreatedRoom | null = null;
+type PendingCreatedRoom = {
+  createdRoom: CreatedRoom;
+  /** Presentation metadata only; it grants no participant authority. */
+  input: CreateRoomInput;
+};
 
-export function stageCreatedRoomForSetup(createdRoom: CreatedRoom): void {
-  pendingCreatedRoom = createdRoom;
+let pendingCreatedRoom: PendingCreatedRoom | null = null;
+
+export function stageCreatedRoomForSetup(
+  createdRoom: CreatedRoom,
+  input: CreateRoomInput,
+): void {
+  pendingCreatedRoom = {
+    createdRoom,
+    input: {
+      title: input.title,
+      brief: input.brief,
+      participants: input.participants.map((participant) => ({ ...participant })),
+    },
+  };
 }
 
-export function readCreatedRoomForSetup(roomId: string): CreatedRoom | null {
-  return pendingCreatedRoom?.roomId === roomId ? pendingCreatedRoom : null;
+export function readCreatedRoomForSetup(roomId: string): PendingCreatedRoom | null {
+  return pendingCreatedRoom?.createdRoom.roomId === roomId
+    ? pendingCreatedRoom
+    : null;
 }
 
 export function clearCreatedRoomHandoff(): void {

@@ -142,7 +142,7 @@ export function CreateRoomForm({ client: suppliedClient }: CreateRoomFormProps) 
     setStatus("submitting");
     try {
       const createdRoom = await client.createRoom(input);
-      stageCreatedRoomForSetup(createdRoom);
+      stageCreatedRoomForSetup(createdRoom, input);
       setStatus("navigating");
       router.push(`/room/${encodeURIComponent(createdRoom.roomId)}/setup`);
     } catch {
