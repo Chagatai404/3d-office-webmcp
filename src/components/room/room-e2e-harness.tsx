@@ -20,6 +20,14 @@ export function RoomE2EHarness() {
   const [soloRole, setSoloRole] = useState<DemoHumanRole>("product");
 
   const decisionHash = room.finalDecisionPreview?.decisionHash ?? null;
+
+  /**
+   * The demo room is the only room the demo-only endpoints accept, so it is
+   * also the only room whose controls are offered here. A created room gets
+   * the production controls instead: readiness and the organizer phase route.
+   */
+  const isDemoRoom = room.id === "demo";
+
   const nextPhase: RoomPhase | null = room.phase === "input"
     ? "proposals"
     : room.phase === "proposals"
@@ -45,45 +53,50 @@ export function RoomE2EHarness() {
   return (
     <main className="shell room-shell" data-testid="e2e-room-harness">
       <p data-testid="connection-status">{status === "Saving…" ? "Saving…" : "Connected"}</p>
+      {/* The structured message of the last action, including a refusal. */}
+      <p data-testid="last-action">{status}</p>
+      <p data-testid="room-id">{room.id}</p>
       <p>Room · <span data-testid="room-phase">{room.phase}</span></p>
       <p>Version <span data-testid="room-version">{room.version}</span></p>
 
-      <section data-testid="demo-controls">
-        <p data-testid="demo-mode">Mode: {room.demoMode ?? "none"}</p>
-        <label>
-          Judge role
-          <select
-            data-testid="demo-human-role"
-            value={soloRole}
-            onChange={(event) => setSoloRole(event.target.value as DemoHumanRole)}
+      {isDemoRoom ? (
+        <section data-testid="demo-controls">
+          <p data-testid="demo-mode">Mode: {room.demoMode ?? "none"}</p>
+          <label>
+            Judge role
+            <select
+              data-testid="demo-human-role"
+              value={soloRole}
+              onChange={(event) => setSoloRole(event.target.value as DemoHumanRole)}
+            >
+              <option value="product">Product Manager</option>
+              <option value="engineer">Engineer</option>
+              <option value="designer">Designer</option>
+              <option value="marketing">Marketing Lead</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            data-testid="start-solo-demo"
+            onClick={() => void run(actions.startDemoScenario({
+              mode: "solo_judge",
+              humanRole: soloRole,
+            }))}
           >
-            <option value="product">Product Manager</option>
-            <option value="engineer">Engineer</option>
-            <option value="designer">Designer</option>
-            <option value="marketing">Marketing Lead</option>
-          </select>
-        </label>
-        <button
-          type="button"
-          data-testid="start-solo-demo"
-          onClick={() => void run(actions.startDemoScenario({
-            mode: "solo_judge",
-            humanRole: soloRole,
-          }))}
-        >
-          Start solo demo
-        </button>
-        <button
-          type="button"
-          data-testid="reset-multi-user-demo"
-          onClick={() => void run(actions.startDemoScenario({
-            mode: "multi_user",
-            humanRole: null,
-          }))}
-        >
-          Reset multi-user demo
-        </button>
-      </section>
+            Start solo demo
+          </button>
+          <button
+            type="button"
+            data-testid="reset-multi-user-demo"
+            onClick={() => void run(actions.startDemoScenario({
+              mode: "multi_user",
+              humanRole: null,
+            }))}
+          >
+            Reset multi-user demo
+          </button>
+        </section>
+      ) : null}
 
       <section aria-label="Participant seats">
         {room.participants.map((participant) => (
@@ -94,12 +107,15 @@ export function RoomE2EHarness() {
               {participant.kind === "simulation" ? "Simulated Participant" : "Human Participant"}
               {participant.requiredForApproval ? " · Required approver" : ""}
             </span>
-            <span>
+            <span data-testid={`participant-status-${participant.id}`}>
               {participant.id === room.selfParticipantId
                 ? "Your seat"
                 : participant.isClaimed
                   ? "Claimed"
                   : "Available"}
+            </span>
+            <span data-testid={`participant-ready-${participant.id}`}>
+              {participant.isReady ? "Ready" : "Not ready"}
             </span>
             {!self && participant.kind === "human" && !participant.isClaimed ? (
               <button
@@ -199,13 +215,38 @@ export function RoomE2EHarness() {
         </section>
       ) : null}
 
-      {self && room.demoMode !== "solo_judge" && nextPhase ? (
+      {self && isDemoRoom && room.demoMode !== "solo_judge" && nextPhase ? (
         <button
           type="button"
           data-testid="advance-phase"
           onClick={() => void run(actions.advanceDemoPhase(nextPhase))}
         >
           Advance demo to {nextPhase}
+        </button>
+      ) : null}
+
+      {/*
+        A created room progresses through the production route only. The button
+        is offered to every seated participant on purpose: the server, not this
+        harness, is what refuses a non-organizer.
+      */}
+      {self && !isDemoRoom && room.phase === "input" ? (
+        <button
+          type="button"
+          data-testid="mark-ready"
+          onClick={() => void run(actions.markMyInputReady())}
+        >
+          Mark my input ready
+        </button>
+      ) : null}
+
+      {self && !isDemoRoom && nextPhase ? (
+        <button
+          type="button"
+          data-testid="advance-room-phase"
+          onClick={() => void run(actions.advanceRoomPhase(nextPhase))}
+        >
+          Advance room to {nextPhase}
         </button>
       ) : null}
 
@@ -218,6 +259,15 @@ export function RoomE2EHarness() {
         </ul>
         <ul data-testid="proposals">
           {room.proposals.map((proposal) => <li key={proposal.id}>{proposal.title}: {proposal.summary} ({proposal.status})</li>)}
+        </ul>
+        <ul data-testid="proposal-lineage">
+          {room.proposals.map((proposal) => (
+            <li key={proposal.id}>
+              {proposal.title} ← {room.proposals.find(
+                (candidate) => candidate.id === proposal.parentProposalId,
+              )?.title ?? "root"}
+            </li>
+          ))}
         </ul>
         <ul data-testid="conflicts">
           {room.conflicts

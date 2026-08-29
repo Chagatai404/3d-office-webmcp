@@ -7,6 +7,8 @@ import {
   createRoom,
   getMeetingContext,
   previewRoomInvitation,
+  regenerateRoomInvitation,
+  revokeRoomInvitation,
 } from "@/domain/rooms/operations";
 import type { CreateRoomInput } from "@/contracts/room";
 import { SupabaseRoomRepository } from "@/lib/supabase/room-repository";
@@ -36,8 +38,7 @@ function localSecretKey(): string {
 }
 
 /**
- * Privileged client. Used only to age or revoke an invitation row, which has no
- * product surface until the P1 invite-management slice, and to prove that the
+ * Privileged client. Used only to age an invitation row and to prove that the
  * stored hash is the canonical SHA-256 of the raw capability.
  */
 const admin = createClient(url, localSecretKey(), {
@@ -169,7 +170,7 @@ describe.sequential("invitation preview", () => {
 
   it("refuses a revoked token", async () => {
     const room = await invitedRoom(organizer);
-    await revokeInvitation(room.roomId, room.engineer.participantId);
+    await directRevokeInvitation(room.roomId, room.engineer.participantId);
 
     expect(
       await previewRoomInvitation(
@@ -406,7 +407,7 @@ describe.sequential("invitation claim", () => {
     expect(expired.ok ? "" : expired.error.message).toMatch(/expired/i);
 
     const revokedRoom = await invitedRoom(organizer);
-    await revokeInvitation(revokedRoom.roomId, revokedRoom.engineer.participantId);
+    await directRevokeInvitation(revokedRoom.roomId, revokedRoom.engineer.participantId);
     const revoked = await claimRoomInvitation(
       engineer.repository,
       { inviteToken: revokedRoom.engineer.token },
@@ -461,6 +462,229 @@ describe.sequential("invitation claim", () => {
   });
 });
 
+describe.sequential("invitation management", () => {
+  let organizer: Actor;
+  let engineer: Actor;
+  let designer: Actor;
+  let outsider: Actor;
+
+  beforeAll(async () => {
+    organizer = await anonymousActor();
+    engineer = await anonymousActor();
+    designer = await anonymousActor();
+    outsider = await anonymousActor();
+  });
+
+  it("lets the organizer regenerate an unclaimed invite and invalidates the old token", async () => {
+    const room = await invitedRoom(organizer);
+
+    const regenerated = await regenerateRoomInvitation(
+      organizer.repository,
+      room.roomId,
+      { participantId: room.engineer.participantId },
+      { actor: actorOf(organizer), expectedRoomVersion: 0 },
+      inviteBaseUrl,
+    );
+    expect(regenerated).toMatchObject({
+      ok: true,
+      roomVersion: 1,
+      data: {
+        participantId: room.engineer.participantId,
+        role: "Engineer",
+      },
+    });
+    if (!regenerated.ok) throw new Error("Regeneration unexpectedly failed.");
+
+    expect(regenerated.data.inviteUrl).toMatch(
+      new RegExp(`^${inviteBaseUrl}/room/${room.roomId}/join\\?invite=`),
+    );
+    const freshToken = new URL(regenerated.data.inviteUrl).searchParams.get("invite")!;
+    expect(freshToken).not.toBe(room.engineer.token);
+
+    expect(
+      await previewRoomInvitation(
+        engineer.repository,
+        room.engineer.token,
+        actorOf(engineer),
+      ),
+    ).toMatchObject({
+      ok: true,
+      data: { inviteValid: false, alreadyClaimed: false },
+    });
+
+    expect(
+      await claimRoomInvitation(
+        engineer.repository,
+        { inviteToken: freshToken },
+        actorOf(engineer),
+      ),
+    ).toMatchObject({
+      ok: true,
+      roomVersion: 2,
+      data: { participantId: room.engineer.participantId },
+    });
+
+    const state = await getMeetingContext(
+      organizer.repository,
+      organizer.userId,
+      room.roomId,
+    );
+    expect(state?.version).toBe(2);
+    expect(
+      state?.activity.find((event) => event.action === "invitation.regenerated"),
+    ).toMatchObject({
+      actorType: "participant",
+      actorId: state?.participants[0]?.id,
+      origin: "manual_ui",
+      entityType: "participant",
+      entityId: room.engineer.participantId,
+      previousRoomVersion: 0,
+      resultingRoomVersion: 1,
+    });
+    expect(JSON.stringify(state)).not.toContain(freshToken);
+  });
+
+  it("lets the organizer revoke an unclaimed invite and keeps revocation idempotent", async () => {
+    const room = await invitedRoom(organizer);
+
+    const revoked = await revokeRoomInvitation(
+      organizer.repository,
+      room.roomId,
+      { participantId: room.designer.participantId },
+      { actor: actorOf(organizer), expectedRoomVersion: 0 },
+    );
+    expect(revoked).toMatchObject({ ok: true, roomVersion: 1 });
+
+    expect(
+      await previewRoomInvitation(
+        designer.repository,
+        room.designer.token,
+        actorOf(designer),
+      ),
+    ).toMatchObject({
+      ok: true,
+      data: { inviteValid: false, alreadyClaimed: false },
+    });
+    expect(
+      await claimRoomInvitation(
+        designer.repository,
+        { inviteToken: room.designer.token },
+        actorOf(designer),
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "NOT_AUTHORIZED",
+        message: expect.stringMatching(/revoked/i),
+      },
+      roomVersion: 1,
+    });
+
+    const again = await revokeRoomInvitation(
+      organizer.repository,
+      room.roomId,
+      { participantId: room.designer.participantId },
+      { actor: actorOf(organizer), expectedRoomVersion: 1 },
+    );
+    expect(again).toMatchObject({ ok: true, roomVersion: 1 });
+
+    const state = await getMeetingContext(
+      organizer.repository,
+      organizer.userId,
+      room.roomId,
+    );
+    expect(state?.version).toBe(1);
+    expect(
+      state?.activity.filter((event) => event.action === "invitation.revoked"),
+    ).toHaveLength(1);
+  });
+
+  it("rejects non-organizers, stale versions, authority injection and claimed seats", async () => {
+    const memberRoom = await invitedRoom(organizer);
+    const designerClaim = await claimRoomInvitation(
+      designer.repository,
+      { inviteToken: memberRoom.designer.token },
+      actorOf(designer),
+    );
+    expect(designerClaim.ok).toBe(true);
+
+    // A seated participant can read the room, but organizer authority still
+    // comes from `rooms.organizer_user_id`, not membership.
+    expect(
+      await regenerateRoomInvitation(
+        designer.repository,
+        memberRoom.roomId,
+        { participantId: memberRoom.engineer.participantId },
+        { actor: actorOf(designer), expectedRoomVersion: 1 },
+        inviteBaseUrl,
+      ),
+    ).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" } });
+
+    const room = await invitedRoom(organizer);
+
+    // A non-member never gets far enough to learn organizer state.
+    expect(
+      await regenerateRoomInvitation(
+        outsider.repository,
+        room.roomId,
+        { participantId: room.engineer.participantId },
+        { actor: actorOf(outsider), expectedRoomVersion: 0 },
+        inviteBaseUrl,
+      ),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" } });
+
+    expect(
+      await revokeRoomInvitation(
+        organizer.repository,
+        room.roomId,
+        { participantId: room.engineer.participantId },
+        { actor: actorOf(organizer), expectedRoomVersion: 99 },
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "STALE_ROOM_STATE" },
+      roomVersion: 0,
+    });
+
+    expect(
+      await revokeRoomInvitation(
+        organizer.repository,
+        room.roomId,
+        {
+          participantId: room.engineer.participantId,
+          actorId: room.designer.participantId,
+        } as never,
+        { actor: actorOf(organizer), expectedRoomVersion: 0 },
+      ),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" } });
+
+    const claim = await claimRoomInvitation(
+      engineer.repository,
+      { inviteToken: room.engineer.token },
+      actorOf(engineer),
+    );
+    expect(claim.ok).toBe(true);
+
+    expect(
+      await regenerateRoomInvitation(
+        organizer.repository,
+        room.roomId,
+        { participantId: room.engineer.participantId },
+        { actor: actorOf(organizer), expectedRoomVersion: 1 },
+        inviteBaseUrl,
+      ),
+    ).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" } });
+    expect(
+      await revokeRoomInvitation(
+        organizer.repository,
+        room.roomId,
+        { participantId: room.engineer.participantId },
+        { actor: actorOf(organizer), expectedRoomVersion: 1 },
+      ),
+    ).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" } });
+  });
+});
+
 /** No product surface ages an invitation, so the test does it directly. */
 async function expireInvitation(roomId: string, participantId: string) {
   const result = await admin
@@ -473,8 +697,7 @@ async function expireInvitation(roomId: string, participantId: string) {
   expect(result.data).toHaveLength(1);
 }
 
-/** Revocation is a P1 product feature; the guard it depends on ships now. */
-async function revokeInvitation(roomId: string, participantId: string) {
+async function directRevokeInvitation(roomId: string, participantId: string) {
   const result = await admin
     .from("room_invitations")
     .update({ revoked_at: new Date().toISOString() })

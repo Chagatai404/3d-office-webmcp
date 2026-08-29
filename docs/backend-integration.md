@@ -40,6 +40,23 @@ inside the `CreatedRoom.participantInvites[].inviteUrl` values
 table has RLS enabled with no policy and no role grants: it is reachable only
 through `SECURITY DEFINER` functions.
 
+Invitation preview and claim are pre-membership boundaries. They accept the raw
+capability in the POST body, not the URL path, and return only
+`RoomInvitePreview` or `ClaimInvitationResult`. A valid preview shows the room
+title, brief, and predetermined seat; invalid, expired, revoked, or
+foreign-claimed tokens use the `inviteValid: false` branch with no room details.
+Claiming is atomic, consumes the capability for other sessions, assigns
+`participants.user_id = auth.uid()`, bumps the room version, and audits
+`participant.seat_claimed`.
+
+Organizers can manage unclaimed invitations while the room is still in `input`.
+`regenerate_room_invitation` rotates the stored hash, clears expiry/revocation
+state, bumps the room version, audits `invitation.regenerated`, and returns a
+fresh invite URL. `revoke_room_invitation` marks the unclaimed capability
+revoked, bumps once, audits `invitation.revoked`, and is idempotent if repeated.
+Both operations derive organizer authority from `rooms.organizer_user_id`; the
+request body can only name the target participant seat.
+
 `RoomOnboardingClient` (`ApiRoomOnboardingClient`) is the browser surface for
 this pre-membership step; it is deliberately separate from `RoomClient`, carries
 no room version, and never touches room-runtime state.
@@ -73,11 +90,19 @@ Every successful mutation increments `rooms.version` and inserts its audit event
 in the same transaction. A stale version returns `STALE_ROOM_STATE` without a
 write. Once finalized, every room mutation returns `ALREADY_FINALIZED`.
 
+Readiness and production phase progression are regular room mutations. A
+claimed human can call `mark_my_input_ready` only during `input`, only for their
+own seat, and only after publishing a position. The organizer-only
+`advance_room_phase` route moves through `input → proposals → deliberation →
+voting → approval`, enforcing joined/position/ready prerequisites, an active
+proposal, no unresolved blocking conflict, and the shared voting rules.
+
 Participant votes are upserted by participant and proposal. Only the required
-human participants count toward approval readiness. The demo transition into
-approval requires one active proposal, no open blocking conflict, a vote from
-every required participant, no `request_changes` vote, and a strict majority of
-required participants supporting the proposal.
+human participants count toward approval readiness. Entering approval requires
+one active proposal, no open blocking conflict, a vote from every required
+participant, no `request_changes` vote, and a strict majority of required
+participants supporting the proposal. Demo and production phase functions share
+that decision logic.
 
 The approval candidate is stored as canonical JSON and hashed with SHA-256.
 Approvals are participant-scoped and bound to that exact hash. A changed hash
@@ -90,6 +115,10 @@ state.
 - `POST /api/rooms`
 - `GET /api/rooms/:roomId`
 - `POST /api/rooms/:roomId/claim-seat`
+- `POST /api/rooms/:roomId/ready`
+- `POST /api/rooms/:roomId/phase`
+- `POST /api/rooms/:roomId/invitations/regenerate`
+- `POST /api/rooms/:roomId/invitations/revoke`
 - `POST /api/rooms/:roomId/positions`
 - `POST /api/rooms/:roomId/proposals`
 - `POST /api/rooms/:roomId/objections`
@@ -98,10 +127,14 @@ state.
 - `GET /api/rooms/:roomId/final-decision`
 - `POST /api/rooms/:roomId/approval`
 - `GET /api/rooms/:roomId/decision-record`
+- `POST /api/invitations/preview`
+- `POST /api/invitations/claim`
 
 Mutation routes require `Authorization: Bearer <access-token>` and
-`If-Match: <room-version>`. `POST /api/rooms` is the exception: it requires the
-bearer token only, because the room does not exist yet. Bodies use the canonical contract schemas.
+`If-Match: <room-version>`. `POST /api/rooms` and the two `/api/invitations/*`
+routes are the exceptions: they require the bearer token only, because either
+the room does not exist yet or the caller cannot read its version before
+claiming. Bodies use the canonical contract schemas.
 
 The isolated `POST /api/dev/rooms/:roomId/phase` route exists only for the demo
 flow. It requires `ALLOW_DEMO_PHASE_TRANSITIONS=true`, a claimed participant,
@@ -124,6 +157,44 @@ record tools. `approve_final_decision` never records an approval directly: it
 returns `HUMAN_CONFIRMATION_REQUIRED`. The visible room UI displays the exact
 candidate and hash, requires an explicit confirmation checkbox, and then sends
 the approval through `ApiRoomClient`.
+
+WebMCP authority is the browser session's claimed participant, not a separate
+agent account. Read-only tools may be available before a seat is claimed if the
+session can already read the room, but participant mutation tools are hidden and
+guarded until `selfParticipantId` is non-null. Tool schemas contain no actor,
+participant, user, origin, role, or confirmation fields; the WebMCP context
+builds `origin = webmcp` and never forwards `humanConfirmed`.
+
+## Post-hackathon delegation design
+
+WebMCP is interactive browser-session delegation: an agent can prepare or
+request actions while the human is present, and the server still resolves the
+claimed participant from the browser's authenticated session. A future
+server-side delegated runner would be a distinct capability, not a reuse of
+WebMCP credentials.
+
+The proposed `participant_delegations` table should store `id`, `room_id`,
+`participant_id`, `created_by_user_id`, `delegate_subject`, `allowed_actions`,
+`action_budget`, `used_action_count`, `expires_at`, `revoked_at`, `created_at`,
+and `last_used_at`. It should have RLS enabled with no browser grants and be
+reachable only through narrowly scoped SECURITY DEFINER functions. The
+participant must already belong to `created_by_user_id`, and a unique active
+delegation constraint per participant/delegate pair should prevent ambiguous
+authority.
+
+If unattended delegation ships, add a distinct action origin such as
+`delegated_agent` rather than overloading `webmcp`. Domain operations should
+receive the same `MutationContext` shape, but a delegate resolver should derive
+the participant from an unexpired, unrevoked delegation row, decrement the
+budget in the same transaction as the write, and audit both the participant
+authority and delegated origin.
+
+Delegates must never be able to record final approval. Final approval should
+remain restricted to `origin = manual_ui`, an authenticated required human
+participant, `humanConfirmed = true`, and the exact reviewed decision hash. The
+delegation security suite should prove expiry, revocation, budget exhaustion,
+participant scoping, room scoping, immutable finalization, and final-approval
+refusal.
 
 ## Solo-judge orchestration
 

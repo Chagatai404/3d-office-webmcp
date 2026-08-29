@@ -62,6 +62,17 @@ export class RoomWebMcpContext {
     return this.observedRoom()?.version ?? 0;
   }
 
+  /**
+   * The seat this browser session has claimed, read from the snapshot the
+   * provider is already showing. `null` means the session is not a member of
+   * the room, which is what gates every participant mutation tool. The server
+   * derives the same seat from `auth.uid()`; this only stops a stale tool
+   * reference from reaching the domain at all.
+   */
+  getObservedSelfParticipantId(): string | null {
+    return this.observedRoom()?.selfParticipantId ?? null;
+  }
+
   private async getActorUserId(): Promise<string> {
     const client = createBrowserSupabaseClient();
     const existing = await client.auth.getUser();

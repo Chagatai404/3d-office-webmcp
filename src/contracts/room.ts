@@ -546,6 +546,26 @@ export type ClaimInvitationResult = z.infer<
   typeof claimInvitationResultSchema
 >;
 
+export const manageRoomInvitationInputSchema = z
+  .object({
+    participantId: idSchema,
+  })
+  .strict();
+export type ManageRoomInvitationInput = z.infer<
+  typeof manageRoomInvitationInputSchema
+>;
+
+export const regeneratedRoomInvitationSchema = z
+  .object({
+    participantId: idSchema,
+    role: z.string().min(1),
+    inviteUrl: z.string().min(1),
+  })
+  .strict();
+export type RegeneratedRoomInvitation = z.infer<
+  typeof regeneratedRoomInvitationSchema
+>;
+
 export interface RoomClient {
   getRoom(roomId: string): Promise<RoomState>;
 
@@ -608,5 +628,17 @@ export interface RoomClient {
   advanceRoomPhase(
     roomId: string,
     phase: RoomPhase,
+  ): Promise<ActionResult>;
+
+  /** Organizer-only rotation for an unclaimed participant invitation. */
+  regenerateInvitation(
+    roomId: string,
+    input: ManageRoomInvitationInput,
+  ): Promise<ActionResult<RegeneratedRoomInvitation>>;
+
+  /** Organizer-only revocation for an unclaimed participant invitation. */
+  revokeInvitation(
+    roomId: string,
+    input: ManageRoomInvitationInput,
   ): Promise<ActionResult>;
 }

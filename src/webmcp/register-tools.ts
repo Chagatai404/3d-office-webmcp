@@ -8,6 +8,9 @@ import { getRoomWebMcpToolsForPhase } from "./tool-definitions";
 export function useRoomWebMcpTools(roomId: string, room: RoomState | null) {
   const roomRef = useRef(room);
   const phase = room?.phase;
+  // A session with no claimed seat is never offered a participant mutation
+  // tool, so re-registration has to follow the claim, not only the phase.
+  const hasClaimedSeat = (room?.selfParticipantId ?? null) !== null;
 
   useEffect(() => {
     roomRef.current = room;
@@ -19,7 +22,7 @@ export function useRoomWebMcpTools(roomId: string, room: RoomState | null) {
 
     const controller = new AbortController();
     const context = new RoomWebMcpContext(roomId, () => roomRef.current);
-    const tools = getRoomWebMcpToolsForPhase(context, phase);
+    const tools = getRoomWebMcpToolsForPhase(context, phase, { hasClaimedSeat });
 
     void Promise.all(
       tools.map((tool) => modelContext.registerTool(tool, { signal: controller.signal })),
@@ -30,5 +33,5 @@ export function useRoomWebMcpTools(roomId: string, room: RoomState | null) {
     });
 
     return () => controller.abort();
-  }, [roomId, phase]);
+  }, [roomId, phase, hasClaimedSeat]);
 }

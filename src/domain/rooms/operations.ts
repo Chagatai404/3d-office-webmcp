@@ -6,7 +6,9 @@ import {
   claimSeatInputSchema,
   createRoomInputSchema,
   createdRoomSchema,
+  manageRoomInvitationInputSchema,
   raiseObjectionInputSchema,
+  regeneratedRoomInvitationSchema,
   proposeTradeoffInputSchema,
   resolveObjectionInputSchema,
   roomPhaseSchema,
@@ -24,7 +26,9 @@ import {
   type CreateRoomInput,
   type DecisionRecord,
   type FinalDecisionPreview,
+  type ManageRoomInvitationInput,
   type RaiseObjectionInput,
+  type RegeneratedRoomInvitation,
   type ProposeTradeoffInput,
   type ResolveObjectionInput,
   type RoomInvitePreview,
@@ -54,7 +58,7 @@ async function prepareMutation(
   roomId: string,
   context: MutationContext,
   allowedPhases: RoomPhase[],
-): Promise<RoomState | ActionResult> {
+): Promise<RoomState | ActionResult<never>> {
   if (!context.actor.authUserId) {
     return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
   }
@@ -444,6 +448,57 @@ export async function advanceRoomPhase(
     );
   }
   return repository.advanceRoomPhase(roomId, parsed.data, context);
+}
+
+/**
+ * Organizer-only rotation for an unclaimed seat invitation.
+ *
+ * The participant id names the target seat, not the actor. Organizer authority
+ * is resolved in the database from `auth.uid()`, and the raw token is returned
+ * only as a fresh invite URL.
+ */
+export async function regenerateRoomInvitation(
+  repository: RoomRepository,
+  roomId: string,
+  input: ManageRoomInvitationInput,
+  context: MutationContext,
+  inviteBaseUrl: string,
+): Promise<ActionResult<RegeneratedRoomInvitation>> {
+  const parsed = manageRoomInvitationInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Invitation management input is invalid.", context.expectedRoomVersion);
+  }
+  const room = await prepareMutation(repository, roomId, context, ["input"]);
+  if ("ok" in room) return room;
+  const result = await repository.regenerateInvitation(roomId, parsed.data, context);
+  if (!result.ok) return result;
+  return {
+    ...result,
+    data: regeneratedRoomInvitationSchema.parse({
+      participantId: result.data.participantId,
+      role: result.data.role,
+      inviteUrl: buildInviteUrl(inviteBaseUrl, roomId, result.data.inviteToken),
+    }),
+  };
+}
+
+/**
+ * Organizer-only revocation for an unclaimed seat invitation. A revoked link
+ * stops preview/claim but never removes or changes the participant seat.
+ */
+export async function revokeRoomInvitation(
+  repository: RoomRepository,
+  roomId: string,
+  input: ManageRoomInvitationInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = manageRoomInvitationInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Invitation management input is invalid.", context.expectedRoomVersion);
+  }
+  const room = await prepareMutation(repository, roomId, context, ["input"]);
+  if ("ok" in room) return room;
+  return repository.revokeInvitation(roomId, parsed.data, context);
 }
 
 export async function advanceDemoRoomPhase(

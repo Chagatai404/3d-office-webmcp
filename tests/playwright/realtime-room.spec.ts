@@ -1,69 +1,5 @@
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-
-async function installWebMcpShim(context: BrowserContext) {
-  await context.addInitScript(() => {
-    class TestModelContext extends EventTarget {
-      private readonly tools = new Map<string, WebMcpToolDefinition>();
-
-      async registerTool(
-        definition: WebMcpToolDefinition,
-        options?: { signal?: AbortSignal },
-      ) {
-        this.tools.set(definition.name, definition);
-        this.dispatchEvent(new Event("toolchange"));
-        options?.signal?.addEventListener("abort", () => {
-          if (this.tools.get(definition.name) === definition) {
-            this.tools.delete(definition.name);
-            this.dispatchEvent(new Event("toolchange"));
-          }
-        }, { once: true });
-      }
-
-      async getTools(): Promise<WebMcpRegisteredTool[]> {
-        return [...this.tools.values()]
-          .sort((left, right) => left.name.localeCompare(right.name))
-          .map(({ name, description, inputSchema, annotations }) => ({
-            name,
-            description,
-            inputSchema,
-            ...(annotations ? { annotations } : {}),
-          }));
-      }
-
-      async executeTool(
-        tool: WebMcpRegisteredTool,
-        inputJson: string,
-        options?: { signal?: AbortSignal },
-      ) {
-        const definition = this.tools.get(tool.name);
-        if (!definition) throw new Error(`Tool ${tool.name} is unavailable.`);
-        return definition.execute(JSON.parse(inputJson), {
-          signal: options?.signal ?? new AbortController().signal,
-        });
-      }
-    }
-
-    Object.defineProperty(document, "modelContext", {
-      configurable: true,
-      value: new TestModelContext(),
-    });
-  });
-}
-
-async function toolNames(page: Page) {
-  return page.evaluate(async () =>
-    (await document.modelContext!.getTools()).map((tool) => tool.name),
-  );
-}
-
-async function executeTool(page: Page, name: string, input: unknown) {
-  return page.evaluate(async ({ toolName, toolInput }) => {
-    const modelContext = document.modelContext!;
-    const tool = (await modelContext.getTools()).find((candidate) => candidate.name === toolName);
-    if (!tool) throw new Error(`Tool ${toolName} was not discovered.`);
-    return modelContext.executeTool(tool, JSON.stringify(toolInput));
-  }, { toolName: name, toolInput: input });
-}
+import { expect, test } from "@playwright/test";
+import { executeTool, installWebMcpShim, toolNames } from "./helpers";
 
 test("two sessions collaborate through phase-aware WebMCP and canonical realtime state", async ({ browser }) => {
   test.setTimeout(120_000);
@@ -77,6 +13,21 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   await expect(engineer.getByTestId("connection-status")).toHaveText("Connected");
   await expect(designer.getByTestId("connection-status")).toHaveText("Connected");
 
+  // Before a claim, a session gets orientation and no write surface at all.
+  await expect.poll(() => toolNames(engineer)).toEqual(["get_meeting_context"]);
+  await expect.poll(() => toolNames(designer)).toEqual(["get_meeting_context"]);
+  const preClaimContext = JSON.parse(String(await executeTool(engineer, "get_meeting_context", {})));
+  expect(preClaimContext).toMatchObject({
+    ok: true,
+    data: { roomId: "demo", phase: "input", currentParticipant: null },
+  });
+  await expect(executeTool(engineer, "add_my_position", {
+    summary: "Write without holding a seat.",
+    category: null,
+    priority: null,
+    constraints: [],
+  })).rejects.toThrow("Tool add_my_position was not discovered.");
+
   await engineer.getByTestId("claim-demo-engineer").click();
   await expect(engineer.getByText("Your seat")).toBeVisible();
   await expect(designer.getByTestId("room-version")).toHaveText("1");
@@ -86,6 +37,10 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   await expect(engineer.getByTestId("room-version")).toHaveText("2");
 
   await expect.poll(() => toolNames(engineer)).toEqual([
+    "add_my_position",
+    "get_meeting_context",
+  ]);
+  await expect.poll(() => toolNames(designer)).toEqual([
     "add_my_position",
     "get_meeting_context",
   ]);
@@ -100,6 +55,16 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
       currentParticipant: { participantId: "demo-engineer", role: "Engineer" },
     },
   });
+
+  // Two browser contexts, two participant authorities, one shared room.
+  const designerContextSnapshot = JSON.parse(
+    String(await executeTool(designer, "get_meeting_context", {})),
+  );
+  expect(designerContextSnapshot.data.currentParticipant).toMatchObject({
+    participantId: "demo-designer",
+    role: "Designer",
+  });
+  expect(designerContextSnapshot.data.roomId).toBe(meetingContext.data.roomId);
 
   const positionResult = JSON.parse(String(await executeTool(engineer, "add_my_position", {
     summary: "Ship an accessible thin slice.",
@@ -130,6 +95,23 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
     (item: { text: string }) => item.text === "No authentication rewrite in this milestone.",
   );
   expect(constraint.id).toBeTruthy();
+
+  const impersonatedProposal = JSON.parse(String(await executeTool(engineer, "submit_proposal", {
+    title: "Proposal attributed to the Designer",
+    summary: "Submitted from the engineer's session as someone else.",
+    rationale: "Impersonation attempt.",
+    expectedOutcomes: ["Should never be recorded"],
+    referencedConstraintIds: [constraint.id],
+    participantId: "demo-designer",
+  })));
+  expect(impersonatedProposal).toMatchObject({
+    ok: false,
+    error: { code: "VALIDATION_ERROR" },
+    roomVersion: 4,
+  });
+  await expect(designer.getByTestId("proposals")).not.toContainText(
+    "Proposal attributed to the Designer",
+  );
 
   const proposalResult = JSON.parse(String(await executeTool(engineer, "submit_proposal", {
     title: "Progressive onboarding hints",
@@ -203,6 +185,18 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
 
   const votingContext = JSON.parse(String(await executeTool(engineer, "get_meeting_context", {})));
   const activeProposalId = votingContext.data.activeProposal.id;
+  const impersonatedVote = JSON.parse(String(await executeTool(engineer, "cast_my_vote", {
+    proposalId: activeProposalId,
+    choice: "oppose",
+    comment: null,
+    participantId: "demo-designer",
+  })));
+  expect(impersonatedVote).toMatchObject({
+    ok: false,
+    error: { code: "VALIDATION_ERROR" },
+    roomVersion: 10,
+  });
+
   const engineerVote = JSON.parse(String(await executeTool(engineer, "cast_my_vote", {
     proposalId: activeProposalId,
     choice: "support",
@@ -210,8 +204,40 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   })));
   expect(engineerVote).toMatchObject({ ok: true, roomVersion: 11 });
   await expect(designer.getByTestId("votes")).toContainText("demo-engineer: support");
+  await expect(designer.getByTestId("votes").locator("li")).toHaveCount(1);
   await expect(designer.getByTestId("approvals")).toBeEmpty();
   await expect(designer.getByTestId("activity")).toContainText("vote.cast · webmcp · v11");
+
+  // The same refusal without WebMCP: the manual HTTP path is no weaker.
+  const impersonatedHttpVote = await engineer.evaluate(async ({ proposalId }) => {
+    const storedSession = Object.values(localStorage)
+      .map((value) => {
+        try { return JSON.parse(value) as { access_token?: string }; } catch { return null; }
+      })
+      .find((value) => value?.access_token);
+    if (!storedSession?.access_token) throw new Error("Supabase session not found.");
+    const response = await fetch("/api/rooms/demo/votes", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${storedSession.access_token}`,
+        "Content-Type": "application/json",
+        "If-Match": "11",
+      },
+      body: JSON.stringify({
+        proposalId,
+        choice: "oppose",
+        comment: null,
+        participantId: "demo-designer",
+      }),
+    });
+    return response.json();
+  }, { proposalId: activeProposalId });
+  expect(impersonatedHttpVote).toMatchObject({
+    ok: false,
+    error: { code: "VALIDATION_ERROR" },
+    roomVersion: 11,
+  });
+  await expect(designer.getByTestId("votes").locator("li")).toHaveCount(1);
 
   const designerVote = JSON.parse(String(await executeTool(designer, "cast_my_vote", {
     proposalId: activeProposalId,
@@ -454,6 +480,12 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   await expect(page.getByTestId("room-version")).toHaveText("3");
   await expect(page.getByTestId("conflicts")).toBeEmpty();
   await expect(page.getByTestId("votes")).toBeEmpty();
+
+  // The replay releases the seat, so the write tools leave with it until the
+  // judge claims again.
+  await expect.poll(() => toolNames(page)).toEqual(["get_meeting_context"]);
+  await page.getByTestId("claim-demo-product").click();
+  await expect(page.getByText("Your seat")).toBeVisible();
   await expect.poll(() => toolNames(page)).toEqual([
     "add_my_position",
     "get_meeting_context",

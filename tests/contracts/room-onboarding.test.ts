@@ -4,6 +4,8 @@ import {
   claimInvitationResultSchema,
   createRoomInputSchema,
   createdRoomSchema,
+  manageRoomInvitationInputSchema,
+  regeneratedRoomInvitationSchema,
   roomInvitePreviewSchema,
   roomStateSchema,
   type CreateRoomInput,
@@ -233,6 +235,43 @@ describe("invitation claim contract", () => {
     expect(claimInvitationResultSchema.parse(result)).toEqual(result);
     expect(
       claimInvitationResultSchema.safeParse({ ...result, inviteToken: "raw" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("invitation management contract", () => {
+  it("accepts only a target participant seat", () => {
+    expect(
+      manageRoomInvitationInputSchema.parse({ participantId: "participant-engineer" }),
+    ).toEqual({ participantId: "participant-engineer" });
+  });
+
+  it.each(["actorId", "actorType", "authUserId", "userId", "origin", "role"])(
+    "rejects browser-supplied %s authority",
+    (field) => {
+      expect(
+        manageRoomInvitationInputSchema.safeParse({
+          participantId: "participant-engineer",
+          [field]: "smuggled",
+        }).success,
+      ).toBe(false);
+    },
+  );
+
+  it("returns only a shareable URL when an invitation is regenerated", () => {
+    const regenerated = {
+      participantId: "participant-engineer",
+      role: "Engineer",
+      inviteUrl:
+        "https://app.example/room/rm_7P3KQ8M2/join?invite=fresh-capability",
+    };
+
+    expect(regeneratedRoomInvitationSchema.parse(regenerated)).toEqual(regenerated);
+    expect(
+      regeneratedRoomInvitationSchema.safeParse({
+        ...regenerated,
+        inviteToken: "fresh-capability",
+      }).success,
     ).toBe(false);
   });
 });

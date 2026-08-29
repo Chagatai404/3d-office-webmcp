@@ -10,8 +10,10 @@ import {
   type DecisionRecord,
   type FinalDecisionPreview,
   type JsonValue,
+  type ManageRoomInvitationInput,
   type Participant,
   type Position,
+  type RegeneratedRoomInvitation,
   type ResolveObjectionInput,
   type RoomClient,
   type RoomPhase,
@@ -354,6 +356,30 @@ export class MockRoomClient implements RoomClient {
       "Advancing the production room phase is not implemented in the mock client.",
       this.#state.version,
       "Use ApiRoomClient for backend-backed production phase progression.",
+    );
+  }
+
+  regenerateInvitation(
+    roomId: string,
+    input: ManageRoomInvitationInput,
+  ): Promise<ActionResult<RegeneratedRoomInvitation>> {
+    void input;
+    return Promise.resolve(
+      this.#notInThisMilestone(
+        roomId,
+        "input",
+        "Regenerating an invitation",
+      ),
+    );
+  }
+
+  revokeInvitation(
+    roomId: string,
+    input: ManageRoomInvitationInput,
+  ): Promise<ActionResult> {
+    void input;
+    return Promise.resolve(
+      this.#notInThisMilestone(roomId, "input", "Revoking an invitation"),
     );
   }
 
