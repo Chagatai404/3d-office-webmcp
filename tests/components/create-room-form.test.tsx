@@ -7,14 +7,13 @@ import { CreateRoomForm } from "@/components/onboarding/create-room-form";
 import type { RoomOnboardingClient } from "@/clients/room-onboarding-client";
 import type { CreatedRoom } from "@/contracts/room";
 
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: navigation.push }) }));
-
 declare global { var IS_REACT_ACT_ENVIRONMENT: boolean; }
 
 const createdRoom: CreatedRoom = {
   roomId: "rm_created-room",
   ownerParticipantId: "participant-owner",
+  inviteUrl: "https://app.example/room/rm_created-room/join?invite=raw-capability",
+  passcode: "AB12CD34",
 };
 
 let container: HTMLDivElement;
@@ -23,12 +22,16 @@ let root: Root;
 function makeClient(createRoom: RoomOnboardingClient["createRoom"]): RoomOnboardingClient {
   return {
     createRoom,
-    previewInvitation: async () => ({ inviteValid: false, alreadyClaimed: false }),
-    claimInvitation: async () => ({
-      ok: false,
-      error: { code: "NOT_AUTHORIZED", message: "Not used by this test." },
-      roomVersion: 0,
-    }),
+    previewInvite: async () => ({ inviteValid: false }),
+    requestJoinByPasscode: async () => {
+      throw new Error("Not used by this test.");
+    },
+    requestJoinByInvite: async () => {
+      throw new Error("Not used by this test.");
+    },
+    getMyJoinRequest: async () => {
+      throw new Error("Not used by this test.");
+    },
   };
 }
 
@@ -74,7 +77,6 @@ async function submit() {
 
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  navigation.push.mockReset();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -86,10 +88,11 @@ afterEach(async () => {
 });
 
 describe("product entry", () => {
-  it("offers distinct create-room and demo paths", async () => {
+  it("offers distinct create-room, join-meeting, and demo paths", async () => {
     await act(async () => { root.render(<Home />); });
     const links = [...container.querySelectorAll("a")];
     expect(links.some((link) => link.getAttribute("href") === "/new")).toBe(true);
+    expect(links.some((link) => link.getAttribute("href") === "/join")).toBe(true);
     expect(links.some((link) => link.getAttribute("href") === "/room/demo")).toBe(true);
   });
 });
@@ -119,16 +122,27 @@ describe("creator-only room form", () => {
       creatorRole: "Product Manager",
     });
     expect(JSON.stringify(createRoom.mock.calls[0]?.[0])).not.toMatch(
-      /participants|ownerParticipantId|userId|meetingRole|decisionRole|origin/,
+      /participants|ownerParticipantId|userId|meetingRole|decisionRole|origin|passcode|inviteUrl/,
     );
   });
 
-  it("routes the already-bound owner directly into the room", async () => {
+  it("shows the room ID, plaintext passcode, and generic invite link only once, after creation", async () => {
     const createRoom = vi.fn<RoomOnboardingClient["createRoom"]>().mockResolvedValue(createdRoom);
     await mount(makeClient(createRoom));
     await fillValidForm();
     await submit();
-    expect(navigation.push).toHaveBeenCalledWith("/room/rm_created-room");
+
+    expect(container.textContent).toContain(createdRoom.roomId);
+    expect(container.textContent).toContain(createdRoom.passcode);
+    const inviteField = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Generic invite link"]',
+    );
+    expect(inviteField?.value).toBe(createdRoom.inviteUrl);
+
+    const enterLink = container.querySelector<HTMLAnchorElement>(
+      `a[href="/room/${createdRoom.roomId}"]`,
+    );
+    expect(enterLink?.textContent).toContain("Enter meeting");
   });
 
   it("keeps entries after a failed request and allows retry", async () => {
@@ -143,6 +157,6 @@ describe("creator-only room form", () => {
     expect(field("creatorName")).toHaveProperty("value", "Maya");
     await submit();
     expect(createRoom).toHaveBeenCalledTimes(2);
-    expect(navigation.push).toHaveBeenCalledWith("/room/rm_created-room");
+    expect(container.textContent).toContain(createdRoom.roomId);
   });
 });

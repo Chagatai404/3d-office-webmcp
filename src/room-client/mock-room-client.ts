@@ -10,10 +10,10 @@ import {
   type DecisionRecord,
   type FinalDecisionPreview,
   type JsonValue,
-  type ManageRoomInvitationInput,
+  type JoinRequest,
+  type ManageJoinRequestInput,
   type Participant,
   type Position,
-  type RegeneratedRoomInvitation,
   type ResolveObjectionInput,
   type RoomClient,
   type RoomPhase,
@@ -359,28 +359,18 @@ export class MockRoomClient implements RoomClient {
     );
   }
 
-  regenerateInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-  ): Promise<ActionResult<RegeneratedRoomInvitation>> {
-    void input;
-    return Promise.resolve(
-      this.#notInThisMilestone(
-        roomId,
-        "input",
-        "Regenerating an invitation",
-      ),
-    );
+  listJoinRequests(roomId: string): Promise<ActionResult<JoinRequest[]>> {
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Listing join requests"));
   }
 
-  revokeInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-  ): Promise<ActionResult> {
+  admitJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
     void input;
-    return Promise.resolve(
-      this.#notInThisMilestone(roomId, "input", "Revoking an invitation"),
-    );
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Admitting a join request"));
+  }
+
+  rejectJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
+    void input;
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Rejecting a join request"));
   }
 
   #snapshot(): RoomState {

@@ -42,17 +42,17 @@ Before coding, all agents must treat the following as canonical.
 
 ## Join model
 
-- [ ] Creating a room must not require a seat count.
-- [ ] Creating a room must not require pre-creating all participants.
-- [ ] Seats/chairs are created dynamically as participants are admitted.
-- [ ] Landing page must expose both:
-  - [ ] Create meeting
-  - [ ] Join meeting
-- [ ] Joining must support:
-  - [ ] Room ID + passcode
-  - [ ] Invite link
-- [ ] New joiners enter a waiting room unless the room is explicitly configured otherwise.
-- [ ] The meeting owner controls admission.
+- [x] Creating a room must not require a seat count.
+- [x] Creating a room must not require pre-creating all participants.
+- [x] Seats/chairs are created dynamically as participants are admitted.
+- [x] Landing page must expose both:
+  - [x] Create meeting
+  - [x] Join meeting
+- [x] Joining must support:
+  - [x] Room ID + passcode
+  - [x] Invite link
+- [x] New joiners enter a waiting room unless the room is explicitly configured otherwise.
+- [x] The meeting owner controls admission.
 
 ## Human interaction model
 
@@ -114,78 +114,78 @@ Before coding, all agents must treat the following as canonical.
 
 ## Meeting roles
 
-- [ ] Add `MeetingRole`:
-  - [ ] `owner`
-  - [ ] `cohost`
-  - [ ] `participant`
-- [ ] Add meeting role to human participants.
-- [ ] Enforce exactly one active owner per room.
-- [ ] Add `ownerParticipantId` to canonical room state.
-- [ ] Decide whether co-host ships now or remains hidden behind the domain model.
-- [ ] Make all owner-only actions derive owner authority server-side.
+- [x] Add `MeetingRole`:
+  - [x] `owner`
+  - [x] `cohost`
+  - [x] `participant`
+- [x] Add meeting role to human participants.
+- [x] Enforce exactly one active owner per room.
+- [x] Add `ownerParticipantId` to canonical room state.
+- [ ] Decide whether co-host ships now or remains hidden behind the domain model. (Enum value exists; no co-host promotion flow -- Slice 3.)
+- [x] Make all owner-only actions derive owner authority server-side.
 
 ## Decision roles
 
-- [ ] Add `DecisionRole`:
-  - [ ] `decision_maker`
-  - [ ] `contributor`
-  - [ ] `advisor`
-- [ ] Human participants may be decision-makers or contributors.
-- [ ] Expert actors are advisors only.
-- [ ] Simulated demo participants must have explicit, non-deceptive actor type / kind.
+- [x] Add `DecisionRole`:
+  - [x] `decision_maker`
+  - [x] `contributor`
+  - [x] `advisor`
+- [x] Human participants may be decision-makers or contributors.
+- [x] Expert actors are advisors only.
+- [x] Simulated demo participants must have explicit, non-deceptive actor type / kind.
 
 ## Decision policy
 
-- [ ] Add:
+- [x] Add:
   ```ts
   type DecisionPolicy =
     | "owner_decides"
     | "equal_authority_consensus";
   ```
-- [ ] Store decision policy on the room.
-- [ ] Include decision policy in `RoomState`.
-- [ ] Default creation to `owner_decides`.
-- [ ] Validate policy transitions.
-- [ ] Decide whether policy may change after deliberation begins.
-- [ ] If policy changes after decision-making state exists, invalidate incompatible alignment/approval state.
+- [x] Store decision policy on the room.
+- [x] Include decision policy in `RoomState`.
+- [x] Default creation to `owner_decides`.
+- [ ] Validate policy transitions. (Slice 4: no policy-change operation exists yet, so there is nothing to validate a transition of.)
+- [ ] Decide whether policy may change after deliberation begins. (Slice 4.)
+- [ ] If policy changes after decision-making state exists, invalidate incompatible alignment/approval state. (Slice 4.)
 
 ## Room creation contract
 
-- [ ] Remove `participants[]` from normal `CreateRoomInput`.
-- [ ] Remove minimum participant count requirement.
-- [ ] Create only the room creator participant during room creation.
-- [ ] Creator receives:
-  - [ ] `meetingRole = owner`
-  - [ ] `decisionRole = decision_maker`
-- [ ] Generate room ID automatically.
-- [ ] Generate passcode automatically or accept secure server-generated default.
-- [ ] Return initial invite URL.
-- [ ] Preserve organizer/owner audit event.
+- [x] Remove `participants[]` from normal `CreateRoomInput`.
+- [x] Remove minimum participant count requirement.
+- [x] Create only the room creator participant during room creation.
+- [x] Creator receives:
+  - [x] `meetingRole = owner`
+  - [x] `decisionRole = decision_maker`
+- [x] Generate room ID automatically.
+- [x] Generate passcode automatically or accept secure server-generated default.
+- [x] Return initial invite URL.
+- [x] Preserve organizer/owner audit event.
 
 ## Dynamic participants
 
-- [ ] Remove production dependence on predetermined seats.
-- [ ] Keep any predetermined-seat logic isolated to backwards compatibility or delete it if no longer needed.
-- [ ] Participant records should be created only after admission.
-- [ ] Participant ordering must be deterministic.
-- [ ] Chair count in 3D must derive from admitted participants.
+- [x] Remove production dependence on predetermined seats.
+- [x] Keep any predetermined-seat logic isolated to backwards compatibility or delete it if no longer needed.
+- [x] Participant records should be created only after admission.
+- [x] Participant ordering must be deterministic.
+- [x] Chair count in 3D must derive from admitted participants.
 
 ## Remove old assumptions
 
-- [ ] Remove "first listed seat belongs to organizer" logic from new room creation.
-- [ ] Remove required approval flags as the default authority model.
-- [ ] Remove strict-majority finalization as the default.
-- [ ] Preserve old vote/approval data only if needed for migration or demo compatibility.
-- [ ] Do not expose obsolete participant setup fields in the new meeting creation UI.
+- [x] Remove "first listed seat belongs to organizer" logic from new room creation.
+- [ ] Remove required approval flags as the default authority model. (Slice 4: still a private legacy compatibility field, not canonical DTO authority.)
+- [ ] Remove strict-majority finalization as the default. (Slice 4.)
+- [x] Preserve old vote/approval data only if needed for migration or demo compatibility.
+- [x] Do not expose obsolete participant setup fields in the new meeting creation UI.
 
 ### Acceptance criteria
 
-- [ ] `CreateRoomInput` can create a valid room with one human creator only.
-- [ ] Creator is immediately the owner and a decision-maker.
-- [ ] Room loads successfully with one admitted participant.
-- [ ] No frontend path expects pre-created participant seats.
-- [ ] `npm run typecheck` passes after contract migration.
-- [ ] Existing tests are updated rather than disabled.
+- [x] `CreateRoomInput` can create a valid room with one human creator only.
+- [x] Creator is immediately the owner and a decision-maker.
+- [x] Room loads successfully with one admitted participant.
+- [x] No frontend path expects pre-created participant seats.
+- [x] `npm run typecheck` passes after contract migration.
+- [x] Existing tests are updated rather than disabled.
 
 ---
 
@@ -193,100 +193,107 @@ Before coding, all agents must treat the following as canonical.
 
 ## Room identifiers
 
-- [ ] Keep room IDs opaque and non-security-sensitive.
-- [ ] Add user-friendly display formatting if desired.
-- [ ] Add room passcode.
-- [ ] Store passcode as a secure hash, not plaintext.
-- [ ] Room ID alone must not authorize admission.
+- [x] Keep room IDs opaque and non-security-sensitive.
+- [x] Add user-friendly display formatting if desired.
+- [x] Add room passcode.
+- [x] Store passcode as a secure hash, not plaintext.
+- [x] Room ID alone must not authorize admission.
 
 ## Invite links
 
-- [ ] Preserve capability-token semantics for invite links.
-- [ ] Store only invite-token hashes.
-- [ ] Never place raw invite token in `RoomState`.
-- [ ] Support invite expiration.
-- [ ] Support invite revocation.
-- [ ] Support invite regeneration.
-- [ ] Make invite replay behavior explicit and tested.
+- [x] Preserve capability-token semantics for invite links.
+- [x] Store only invite-token hashes.
+- [x] Never place raw invite token in `RoomState`.
+- [x] Support invite expiration. (`expires_at` is enforced by `request_join_by_invite` whenever set; no owner-facing operation sets it yet -- out of scope per brief §25.)
+- [x] Support invite revocation. (`revoked_at` is enforced the same way; no owner-facing revoke operation exists yet -- out of scope per brief §25, "invite revocation management UI beyond what is necessary for correctness.")
+- [ ] Support invite regeneration. (Out of scope for Gate 2 per brief §25; the single invite created at room creation is reusable, not rotated.)
+- [x] Make invite replay behavior explicit and tested. (Reusable by multiple prospective participants until revoked/expired -- see `tests/domain/join-requests.test.ts`.)
 
 ## Join request domain model
 
-- [ ] Add `JoinRequest`.
-- [ ] Suggested fields:
-  - [ ] `id`
-  - [ ] `roomId`
-  - [ ] `authUserId`
-  - [ ] `displayName`
-  - [ ] `requestedRole?`
-  - [ ] `status`
-  - [ ] `createdAt`
-  - [ ] `resolvedAt?`
-  - [ ] `resolvedByParticipantId?`
-- [ ] Suggested statuses:
-  - [ ] `waiting`
-  - [ ] `admitted`
-  - [ ] `rejected`
-  - [ ] `cancelled`
-- [ ] Add canonical DTOs for waiting-room preview.
-- [ ] Do not leak sensitive room details for invalid credentials.
+- [x] Add `JoinRequest`.
+- [x] Suggested fields (canonical shape landed with slightly different naming
+      than the suggestion -- `resolvedByParticipantId` and `requestedRole` are
+      private DB columns / narrowed to `role`, not canonical DTO fields, per
+      the brief's own suggested `JoinRequest` shape in §5):
+  - [x] `id`
+  - [x] `roomId`
+  - [ ] `authUserId` (deliberately never exposed on the canonical DTO -- see brief §5)
+  - [x] `displayName`
+  - [x] `requestedRole?` (as `role`)
+  - [x] `status`
+  - [x] `createdAt`
+  - [x] `resolvedAt?`
+  - [ ] `resolvedByParticipantId?` (private DB column only; owner-only list omits it too)
+- [x] Suggested statuses:
+  - [x] `waiting`
+  - [x] `admitted`
+  - [x] `rejected`
+  - [x] `cancelled`
+- [x] Add canonical DTOs for waiting-room preview.
+- [x] Do not leak sensitive room details for invalid credentials.
 
 ## Join by room ID + passcode
 
-- [ ] Add landing-page join form.
-- [ ] Validate room ID.
-- [ ] Validate passcode server-side.
-- [ ] Create a join request after credentials are valid.
-- [ ] Do not create a participant record yet.
-- [ ] Show waiting state to requester.
-- [ ] Realtime-update waiting state when admitted/rejected.
+- [x] Add landing-page join form.
+- [x] Validate room ID.
+- [x] Validate passcode server-side.
+- [x] Create a join request after credentials are valid.
+- [x] Do not create a participant record yet.
+- [x] Show waiting state to requester.
+- [x] Realtime-update waiting state when admitted/rejected. (Bounded polling of the requester's own status; see backend-integration.md's Realtime section for why polling was chosen over widening room RLS.)
 
 ## Join by invite URL
 
-- [ ] Resolve valid invite capability.
-- [ ] Create join request or directly admit only if intentionally configured.
-- [ ] For default behavior, route invite joiners into waiting room.
-- [ ] Invalid / expired / revoked invite must return a generic safe failure state.
+- [x] Resolve valid invite capability.
+- [x] Create join request or directly admit only if intentionally configured.
+- [x] For default behavior, route invite joiners into waiting room.
+- [x] Invalid / expired / revoked invite must return a generic safe failure state.
 
 ## Owner admission
 
-- [ ] Add owner-only `listJoinRequests`.
-- [ ] Add owner-only `admitParticipant`.
-- [ ] Add owner-only `rejectJoinRequest`.
-- [ ] Admission transaction must:
-  - [ ] verify owner;
-  - [ ] lock relevant room/join request rows;
-  - [ ] verify request still waiting;
-  - [ ] create participant;
-  - [ ] assign authenticated user;
-  - [ ] mark request admitted;
-  - [ ] bump room version;
-  - [ ] create audit event.
-- [ ] Rejection transaction must be idempotent.
-- [ ] Concurrent double-admission must not create duplicate participants.
+- [x] Add owner-only `listJoinRequests`.
+- [x] Add owner-only `admitParticipant`. (Named `admitJoinRequest`.)
+- [x] Add owner-only `rejectJoinRequest`.
+- [x] Admission transaction must:
+  - [x] verify owner;
+  - [x] lock relevant room/join request rows;
+  - [x] verify request still waiting;
+  - [x] create participant;
+  - [x] assign authenticated user;
+  - [x] mark request admitted;
+  - [x] bump room version;
+  - [x] create audit event.
+- [x] Rejection transaction must be idempotent.
+- [x] Concurrent double-admission must not create duplicate participants.
 
 ## Waiting room UI
 
-- [ ] Add waiting room inside Participants drawer or compact management UI.
-- [ ] Show requester display name.
-- [ ] Show admit/reject controls to owner only.
-- [ ] Participant requester sees:
-  - [ ] waiting;
-  - [ ] admitted;
-  - [ ] rejected;
-  - [ ] room locked / meeting ended where applicable.
-- [ ] Non-owner participants cannot see owner management controls.
+- [x] Add waiting room inside Participants drawer or compact management UI.
+- [x] Show requester display name.
+- [x] Show admit/reject controls to owner only.
+- [x] Participant requester sees:
+  - [x] waiting;
+  - [x] admitted;
+  - [x] rejected;
+  - [ ] room locked / meeting ended where applicable. (Meeting lock is out of scope for Gate 2 per brief §25.)
+- [x] Non-owner participants cannot see owner management controls.
 
 ### Acceptance criteria
 
-- [ ] Browser A creates room.
-- [ ] Browser B joins with room ID + passcode.
-- [ ] Browser B remains outside the room until admitted.
-- [ ] Browser A sees waiting request.
-- [ ] Browser A admits.
-- [ ] Browser B becomes participant.
-- [ ] New participant chair appears from real room state.
-- [ ] Same flow works through invite link.
-- [ ] Invalid invite cannot reveal private room content.
+- [x] Browser A creates room.
+- [x] Browser B joins with room ID + passcode.
+- [x] Browser B remains outside the room until admitted.
+- [x] Browser A sees waiting request.
+- [x] Browser A admits.
+- [x] Browser B becomes participant.
+- [x] New participant chair appears from real room state.
+- [x] Same flow works through invite link.
+- [x] Invalid invite cannot reveal private room content.
+
+Verified by `tests/playwright/join-admission.spec.ts` (two-browser passcode
+admission, invite-link rejection, and unknown/revoked invite non-disclosure)
+and `tests/domain/join-requests.test.ts`.
 
 ---
 
@@ -812,15 +819,15 @@ Before coding, all agents must treat the following as canonical.
 
 ## Invite/passcode security
 
-- [ ] Hash passcodes.
-- [ ] Hash invite tokens.
-- [ ] Test expired invite.
-- [ ] Test revoked invite.
-- [ ] Test replayed invite.
-- [ ] Test guessed room ID.
-- [ ] Test wrong passcode.
-- [ ] Add sensible rate limiting / abuse mitigation where feasible.
-- [ ] Avoid leaking whether private room exists beyond intended UX.
+- [x] Hash passcodes. (bcrypt via pgcrypto, `hash_room_passcode`.)
+- [x] Hash invite tokens. (SHA-256, `hash_invite_token`, reused from Gate 1's primitive.)
+- [x] Test expired invite.
+- [x] Test revoked invite.
+- [x] Test replayed invite. (Reuse of a valid, unexpired, unrevoked invite by a second prospective participant is intended and tested; a single-use *seat* invite is the legacy model, not this one.)
+- [x] Test guessed room ID. (A correct room ID with a wrong passcode is refused; see `tests/domain/join-requests.test.ts` and `tests/playwright/join-admission.spec.ts`.)
+- [x] Test wrong passcode.
+- [ ] Add sensible rate limiting / abuse mitigation where feasible. (Not implemented this pass -- see Remaining issues in the Slice 2 completion report.)
+- [x] Avoid leaking whether private room exists beyond intended UX. (`INVALID_JOIN_CREDENTIALS` is identical for "room not found" and "wrong passcode"; an unknown/expired/revoked invite all answer `inviteValid: false` with no room fields.)
 
 ## Sensitive operations
 
@@ -928,11 +935,11 @@ Treat the following as untrusted content:
 
 ## Playwright multi-browser
 
-- [ ] Browser A creates room.
-- [ ] Browser B joins.
-- [ ] A admits B.
-- [ ] B sees room.
-- [ ] Chair count updates.
+- [x] Browser A creates room.
+- [x] Browser B joins.
+- [x] A admits B.
+- [x] B sees room.
+- [x] Chair count updates.
 - [ ] B shares context.
 - [ ] A sees it.
 - [ ] Proposal is created.
@@ -978,13 +985,13 @@ Attempt all of the following manually.
 
 ## Join abuse
 
-- [ ] Guess room ID.
-- [ ] Wrong passcode repeatedly.
-- [ ] Reuse invite.
-- [ ] Revoked invite.
-- [ ] Expired invite.
-- [ ] Use invite for wrong room.
-- [ ] Duplicate join request from same auth session.
+- [x] Guess room ID. (Room IDs are not secret by design; a guessed room ID still needs the correct passcode, which is refused identically to an unknown room.)
+- [ ] Wrong passcode repeatedly. (Refused every time; no rate limit yet -- see "Invite/passcode security" above.)
+- [x] Reuse invite. (Intended: a live invite is reusable until revoked/expired.)
+- [x] Revoked invite.
+- [x] Expired invite.
+- [x] Use invite for wrong room. (Structurally not possible: `request_join_by_invite` derives the room from the token itself, not from a caller-supplied `roomId`.)
+- [x] Duplicate join request from same auth session.
 
 ## Decision abuse
 
@@ -1142,20 +1149,26 @@ Own:
 
 ## Gate 1 — Contract green
 
-- [ ] new canonical roles/policy compile;
-- [ ] room creation no longer expects seat array;
-- [ ] tests updated;
-- [ ] frontend mocks compile.
+- [x] new canonical roles/policy compile;
+- [x] room creation no longer expects seat array;
+- [x] tests updated;
+- [x] frontend mocks compile.
 
 **Do not start full join UI before this is green.**
 
 ## Gate 2 — Dynamic join green
 
-- [ ] create room;
-- [ ] join by passcode;
-- [ ] waiting room;
-- [ ] admit;
-- [ ] realtime participant appears.
+- [x] create room;
+- [x] join by passcode;
+- [x] waiting room;
+- [x] admit;
+- [x] realtime participant appears.
+
+Implementation complete and verified this pass (`npm run check`, `npm run
+test:domain`, `npm run test:e2e`, `npm run build` -- see the Slice 2
+completion report for exact results). Per the Slice 2 brief, this agent does
+not self-certify the gate; a human reviewer should confirm before Slice 3
+(owner lifecycle) begins.
 
 **Do not migrate decision flow before this is stable.**
 
@@ -1219,21 +1232,21 @@ Own:
 
 The implementation is successful when this exact journey works.
 
-- [ ] User opens landing page.
-- [ ] User clicks **Create meeting**.
-- [ ] User enters decision title + short brief.
-- [ ] No seat count is requested.
-- [ ] Room is created.
-- [ ] Creator is owner + decision-maker.
-- [ ] Creator copies invite link or room ID + passcode.
-- [ ] Second browser opens **Join meeting**.
-- [ ] Second user enters credentials.
-- [ ] Second user enters waiting room.
-- [ ] Owner receives an admission attention item.
-- [ ] Owner admits user.
-- [ ] User becomes participant.
-- [ ] New participant chair appears.
-- [ ] Both participants can connect their browser agents.
+- [x] User opens landing page.
+- [x] User clicks **Create meeting**.
+- [x] User enters decision title + short brief.
+- [x] No seat count is requested.
+- [x] Room is created.
+- [x] Creator is owner + decision-maker.
+- [x] Creator copies invite link or room ID + passcode.
+- [x] Second browser opens **Join meeting**.
+- [x] Second user enters credentials.
+- [x] Second user enters waiting room.
+- [ ] Owner receives an admission attention item. (Owner sees the waiting-room list/badge in the Participants drawer; a dedicated cross-workspace "attention item" surface is not part of Gate 2.)
+- [x] Owner admits user.
+- [x] User becomes participant.
+- [x] New participant chair appears.
+- [ ] Both participants can connect their browser agents. (Unchanged from Gate 1 for an admitted participant; not re-verified specifically chained after a Gate 2 admission this pass.)
 - [ ] User gives a natural-language constraint.
 - [ ] Agent publishes structured context via WebMCP.
 - [ ] Shared state updates in realtime.

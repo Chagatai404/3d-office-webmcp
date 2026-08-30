@@ -71,9 +71,11 @@ class B3RoomClient implements RoomClient {
     this.unavailable();
   startDemoScenario: RoomClient["startDemoScenario"] = async () =>
     this.unavailable();
-  regenerateInvitation: RoomClient["regenerateInvitation"] = async () =>
+  listJoinRequests: RoomClient["listJoinRequests"] = async () =>
     this.unavailable();
-  revokeInvitation: RoomClient["revokeInvitation"] = async () =>
+  admitJoinRequest: RoomClient["admitJoinRequest"] = async () =>
+    this.unavailable();
+  rejectJoinRequest: RoomClient["rejectJoinRequest"] = async () =>
     this.unavailable();
 
   advanceDemoPhase: RoomClient["advanceDemoPhase"] = async (_roomId, phase) => {

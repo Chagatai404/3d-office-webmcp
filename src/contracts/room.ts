@@ -60,6 +60,27 @@ export const decisionPolicySchema = z.enum([
 ]);
 export type DecisionPolicy = z.infer<typeof decisionPolicySchema>;
 
+export const joinRequestStatusSchema = z.enum([
+  "waiting",
+  "admitted",
+  "rejected",
+  "cancelled",
+]);
+export type JoinRequestStatus = z.infer<typeof joinRequestStatusSchema>;
+
+export const joinRequestSchema = z
+  .object({
+    id: idSchema,
+    roomId: idSchema,
+    displayName: z.string().min(1),
+    role: z.string().min(1),
+    status: joinRequestStatusSchema,
+    createdAt: timestampSchema,
+    resolvedAt: timestampSchema.nullable(),
+  })
+  .strict();
+export type JoinRequest = z.infer<typeof joinRequestSchema>;
+
 export const participantSchema = z
   .object({
     id: idSchema,
@@ -425,6 +446,9 @@ export const actionErrorCodeSchema = z.enum([
   "HUMAN_CONFIRMATION_REQUIRED",
   "DECISION_CHANGED",
   "ALREADY_FINALIZED",
+  "INVALID_JOIN_CREDENTIALS",
+  "ALREADY_PARTICIPANT",
+  "REQUEST_ALREADY_RESOLVED",
 ]);
 export type ActionErrorCode = z.infer<typeof actionErrorCodeSchema>;
 
@@ -487,103 +511,53 @@ export const createRoomInputSchema = z
   .strict();
 export type CreateRoomInput = z.infer<typeof createRoomInputSchema>;
 
-/**
- * @deprecated Slice 2 replaces predetermined-seat invitation APIs with a
- * general room admission capability. Kept only for existing legacy routes.
- */
-export const createdRoomParticipantInviteSchema = z
-  .object({
-    participantId: idSchema,
-    role: z.string().min(1),
-    inviteUrl: z.string().min(1),
-  })
-  .strict();
-export type CreatedRoomParticipantInvite = z.infer<
-  typeof createdRoomParticipantInviteSchema
->;
-
 export const createdRoomSchema = z
   .object({
     roomId: idSchema,
     ownerParticipantId: idSchema,
+    inviteUrl: z.string().url(),
+    passcode: z.string().min(6),
   })
   .strict();
 export type CreatedRoom = z.infer<typeof createdRoomSchema>;
 
-/**
- * @deprecated Legacy predetermined-seat invitation boundary. Slice 2 will
- * replace preview/claim/manage DTOs with general admission contracts. Normal
- * room creation does not produce these capabilities.
- */
-const roomInvitePreviewParticipantSchema = z
-  .object({
-    id: idSchema,
-    name: z.string().min(1),
-    role: z.string().min(1),
-  })
-  .strict();
-
-/**
- * Discriminated on `inviteValid` so an unknown/expired/revoked/claimed
- * token never has to be answered with room details: the `false` branch
- * carries no room/participant fields at all.
- */
 export const roomInvitePreviewSchema = z.discriminatedUnion("inviteValid", [
-  z
-    .object({
-      inviteValid: z.literal(true),
-      alreadyClaimed: z.boolean(),
-      roomId: idSchema,
-      title: z.string().min(1),
-      brief: z.string().min(1),
-      participant: roomInvitePreviewParticipantSchema,
-    })
-    .strict(),
-  z
-    .object({
-      inviteValid: z.literal(false),
-      alreadyClaimed: z.boolean(),
-    })
-    .strict(),
+  z.object({
+    inviteValid: z.literal(true),
+    roomId: idSchema,
+    title: z.string().min(1),
+    brief: z.string().min(1),
+    ownerDisplayName: z.string().min(1),
+  }).strict(),
+  z.object({ inviteValid: z.literal(false) }).strict(),
 ]);
 export type RoomInvitePreview = z.infer<typeof roomInvitePreviewSchema>;
 
-export const claimInvitationInputSchema = z
-  .object({
-    inviteToken: z.string().min(1),
-  })
-  .strict();
-export type ClaimInvitationInput = z.infer<typeof claimInvitationInputSchema>;
+export const requestJoinByPasscodeInputSchema = z.object({
+  roomId: idSchema,
+  passcode: z.string().min(1).max(64),
+  displayName: z.string().trim().min(1).max(120),
+  role: z.string().trim().min(1).max(120),
+}).strict();
+export type RequestJoinByPasscodeInput = z.infer<typeof requestJoinByPasscodeInputSchema>;
 
-export const claimInvitationResultSchema = z
-  .object({
-    roomId: idSchema,
-    participantId: idSchema,
-  })
-  .strict();
-export type ClaimInvitationResult = z.infer<
-  typeof claimInvitationResultSchema
->;
+export const requestJoinByInviteInputSchema = z.object({
+  inviteToken: z.string().min(1).max(512),
+  displayName: z.string().trim().min(1).max(120),
+  role: z.string().trim().min(1).max(120),
+}).strict();
+export type RequestJoinByInviteInput = z.infer<typeof requestJoinByInviteInputSchema>;
 
-export const manageRoomInvitationInputSchema = z
-  .object({
-    participantId: idSchema,
-  })
-  .strict();
-export type ManageRoomInvitationInput = z.infer<
-  typeof manageRoomInvitationInputSchema
->;
+export const manageJoinRequestInputSchema = z.object({
+  joinRequestId: idSchema,
+}).strict();
+export type ManageJoinRequestInput = z.infer<typeof manageJoinRequestInputSchema>;
 
-export const regeneratedRoomInvitationSchema = z
-  .object({
-    participantId: idSchema,
-    role: z.string().min(1),
-    inviteUrl: z.string().min(1),
-  })
-  .strict();
-export type RegeneratedRoomInvitation = z.infer<
-  typeof regeneratedRoomInvitationSchema
->;
+export const joinRequestResultSchema = z.object({
+  roomId: idSchema,
+  joinRequest: joinRequestSchema,
+}).strict();
+export type JoinRequestResult = z.infer<typeof joinRequestResultSchema>;
 
 export interface RoomClient {
   getRoom(roomId: string): Promise<RoomState>;
@@ -649,15 +623,15 @@ export interface RoomClient {
     phase: RoomPhase,
   ): Promise<ActionResult>;
 
-  /** @deprecated Predetermined-seat compatibility path pending Slice 2. */
-  regenerateInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-  ): Promise<ActionResult<RegeneratedRoomInvitation>>;
+  listJoinRequests(roomId: string): Promise<ActionResult<JoinRequest[]>>;
 
-  /** @deprecated Predetermined-seat compatibility path pending Slice 2. */
-  revokeInvitation(
+  admitJoinRequest(
     roomId: string,
-    input: ManageRoomInvitationInput,
-  ): Promise<ActionResult>;
+    input: ManageJoinRequestInput,
+  ): Promise<ActionResult<JoinRequest>>;
+
+  rejectJoinRequest(
+    roomId: string,
+    input: ManageJoinRequestInput,
+  ): Promise<ActionResult<JoinRequest>>;
 }

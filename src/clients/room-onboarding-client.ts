@@ -1,24 +1,22 @@
 import type {
   ActionResult,
-  ClaimInvitationInput,
-  ClaimInvitationResult,
   CreateRoomInput,
   CreatedRoom,
+  JoinRequest,
+  JoinRequestResult,
+  RequestJoinByInviteInput,
+  RequestJoinByPasscodeInput,
   RoomInvitePreview,
 } from "@/contracts/room";
 
 /**
- * Pre-membership onboarding surface: room creation and invitation
- * preview/claim. The invitation methods are deprecated predetermined-seat
- * compatibility APIs pending Slice 2. Kept separate from `RoomClient` because these operations
- * happen before a caller has an authenticated seat in a room.
+ * Narrow pre-membership surface. None of these calls returns RoomState.
  */
 export interface RoomOnboardingClient {
   createRoom(input: CreateRoomInput): Promise<CreatedRoom>;
 
-  previewInvitation(inviteToken: string): Promise<RoomInvitePreview>;
-
-  claimInvitation(
-    input: ClaimInvitationInput,
-  ): Promise<ActionResult<ClaimInvitationResult>>;
+  previewInvite(inviteToken: string): Promise<RoomInvitePreview>;
+  requestJoinByPasscode(input: RequestJoinByPasscodeInput): Promise<ActionResult<JoinRequestResult>>;
+  requestJoinByInvite(input: RequestJoinByInviteInput): Promise<ActionResult<JoinRequestResult>>;
+  getMyJoinRequest(joinRequestId: string): Promise<ActionResult<JoinRequest>>;
 }

@@ -15,9 +15,7 @@ import type {
   Conflict,
   DecisionRecord,
   FinalDecisionPreview,
-  ManageRoomInvitationInput,
   Proposal,
-  RegeneratedRoomInvitation,
   RoomClient,
   RoomPhase,
   RoomState,
@@ -142,18 +140,14 @@ class FakeRoomClient implements RoomClient {
     return this.ok(`Room phase advanced to ${phase}.`);
   };
 
-  regenerateInvitation: RoomClient["regenerateInvitation"] = async (
-    _roomId,
-    input: ManageRoomInvitationInput,
-  ) =>
-    this.ok<RegeneratedRoomInvitation>("Invitation regenerated.", {
-      participantId: input.participantId,
-      role: "Unassigned",
-      inviteUrl: `https://example.test/invite/${input.participantId}`,
-    });
-
-  revokeInvitation: RoomClient["revokeInvitation"] = async () =>
-    this.ok("Invitation revoked.");
+  listJoinRequests: RoomClient["listJoinRequests"] = async () =>
+    this.ok("Waiting room loaded.", []);
+  admitJoinRequest: RoomClient["admitJoinRequest"] = async () => {
+    throw new Error("Not used by this test.");
+  };
+  rejectJoinRequest: RoomClient["rejectJoinRequest"] = async () => {
+    throw new Error("Not used by this test.");
+  };
 
   publish(apply: (draft: RoomState) => void) {
     const draft = this.snapshot();

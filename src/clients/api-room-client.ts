@@ -5,7 +5,7 @@ import {
   actionResultSchema,
   decisionRecordSchema,
   finalDecisionPreviewSchema,
-  regeneratedRoomInvitationSchema,
+  joinRequestSchema,
   roomStateSchema,
   type ActionResult,
   type AddPositionInput,
@@ -13,10 +13,10 @@ import {
   type ClaimSeatInput,
   type DecisionRecord,
   type FinalDecisionPreview,
-  type ManageRoomInvitationInput,
+  type ManageJoinRequestInput,
+  type JoinRequest,
   type ProposeTradeoffInput,
   type RaiseObjectionInput,
-  type RegeneratedRoomInvitation,
   type ResolveObjectionInput,
   type RoomClient,
   type RoomPhase,
@@ -155,23 +155,16 @@ export class ApiRoomClient implements RoomClient {
     return this.mutate(roomId, "phase", { phase });
   }
 
-  regenerateInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-  ): Promise<ActionResult<RegeneratedRoomInvitation>> {
-    return this.mutateWithData(
-      roomId,
-      "invitations/regenerate",
-      input,
-      regeneratedRoomInvitationSchema,
-    );
+  listJoinRequests(roomId: string): Promise<ActionResult<JoinRequest[]>> {
+    return this.readAction(roomId, "join-requests", z.array(joinRequestSchema));
   }
 
-  revokeInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-  ): Promise<ActionResult> {
-    return this.mutate(roomId, "invitations/revoke", input);
+  admitJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
+    return this.mutateWithData(roomId, "join-requests/admit", input, joinRequestSchema);
+  }
+
+  rejectJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
+    return this.mutateWithData(roomId, "join-requests/reject", input, joinRequestSchema);
   }
 
   private async ensureAnonymousSession(): Promise<string> {

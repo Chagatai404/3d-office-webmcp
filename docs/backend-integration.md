@@ -10,8 +10,8 @@ The browser implementation is `ApiRoomClient` in
 `src/clients/api-room-client.ts`. It implements the canonical `RoomClient`
 interface. The implemented flow covers room loading, legacy demo seat claiming,
 position and constraint creation, proposal submission, deliberation, voting,
-exact-decision preview, human approval, finalization, and snapshot
-subscriptions.
+exact-decision preview, human approval, finalization, owner-side join-request
+admission, and snapshot subscriptions.
 
 ## Room creation and canonical authority
 
@@ -22,12 +22,102 @@ origin, or a participant array. Missing policy defaults to `owner_decides` in
 trusted domain logic.
 
 `public.create_room` derives identity from `auth.uid()` and atomically creates
-the room plus exactly one claimed human participant. That participant receives
+the room plus exactly one claimed human participant, a bcrypt-hashed room
+passcode, and one generic invite capability. That participant receives
 `meeting_role = owner` and `decision_role = decision_maker`; its ID is stored as
 `rooms.owner_participant_id`. The room stores `decision_policy` as either
-`owner_decides` or `equal_authority_consensus` and returns only `roomId` plus
-`ownerParticipantId`. Normal production creation creates no placeholder seats
-and no invitation capabilities.
+`owner_decides` or `equal_authority_consensus` and returns `roomId`,
+`ownerParticipantId`, `inviteUrl`, and the plaintext `passcode` -- the only
+moment the plaintext passcode exists outside the owner's own memory. Normal
+production creation creates no placeholder seats.
+
+## Dynamic join, passcode, and generic invite
+
+Slice 2 replaces predetermined-seat invitations with owner-controlled dynamic
+admission for every normal production room. Nothing about this model changes
+demo rooms, which keep their explicit seeded fixtures.
+
+**Passcode.** `rooms.passcode_hash` stores a bcrypt hash
+(`crypt(passcode, gen_salt('bf', 10))`) of an 8-character passcode generated
+server-side by `generate_room_passcode()` from `gen_random_bytes`. Plaintext is
+never persisted; `request_join_by_passcode` verifies it with
+`verify_room_passcode` inside a `SECURITY DEFINER` function and the column is
+excluded from the table-level grant given to `authenticated`
+(`revoke select on table public.rooms from authenticated; grant select (...)
+`), so no PostgREST query -- from the owner or anyone else -- can read it back.
+Room ID alone never authorizes anything; every passcode check requires the
+matching hash.
+
+**Passcode entropy and abuse considerations.** The generated passcode draws 8
+bytes from `gen_random_bytes` (64 bits), base64-encoded and folded into an
+8-character uppercase alphanumeric string -- enough that offline brute force
+is impractical, but not enough on its own against sustained *online* guessing
+against one room, because there is currently no rate limiting or lockout on
+`request_join_by_passcode`. This is a known gap for a hackathon-scoped
+deployment (see `docs/status.md` / the Slice 2 completion report) and should
+be closed before a real deployment, most simply with a per-`(room_id,
+requester or IP)` attempt counter and backoff in the RPC, or a Postgres-level
+`pg_cron`-swept attempts table, before opening the app to the public internet.
+
+**Generic invite.** `room_invites` stores `token_hash` (SHA-256 of the raw
+token, the same hashing primitive Gate 1's seat invitations used), the
+creating participant, and optional `expires_at` / `revoked_at`. The raw token
+only ever leaves the server inside the `inviteUrl` returned at creation time
+(`buildInviteUrl` in `src/domain/rooms/invitations.ts`); it is never written to
+`RoomState`, never re-derivable from the hash, and the token grants only the
+ability to submit a join request -- it carries no participant id, no role, and
+no owner authority, and it stays valid for repeated use by different
+prospective participants until revoked or expired.
+
+**`JoinRequest` lifecycle.** `join_requests` rows move through
+`waiting -> admitted | rejected | cancelled`. `create_or_reuse_join_request`
+(driven by either `request_join_by_passcode` or `request_join_by_invite`)
+refuses a caller who is already a room member (`ALREADY_PARTICIPANT`) and
+reuses an existing waiting row for the same `(room_id, requester_user_id)`
+pair instead of creating a duplicate, enforced by a partial unique index. A
+request is not a participant: nothing about creating one grants room read
+access, and `join_requests` carries its own RLS policy
+(`join_requests_read_own`, `using (requester_user_id = auth.uid())`) so a
+waiting outsider can read only their own request's narrow status --
+`id, roomId, displayName, role, status, createdAt, resolvedAt` -- and nothing
+about any other waiting request or the room itself.
+
+**Owner admission.** `resolve_join_request` (wrapped by `admit_join_request`
+and `reject_join_request`) locks the room and the target request, re-derives
+owner authority the same way every other owner-only action does
+(`participants.meeting_role = 'owner'` bound through `rooms.owner_participant_id`
+to `auth.uid()` -- never the deprecated `organizer_user_id`), confirms the
+request still belongs to the target room and is still `waiting`, and only then
+creates the participant: `kind = human`, `meeting_role = participant`,
+`decision_role = contributor`. The requester cannot choose a different
+authority; the admitted default is fixed server-side. The whole thing is one
+transaction: participant insert, request status update, `resolved_at` /
+`resolved_by_participant_id`, exactly one `rooms.version` bump, and an
+`join.admitted` (or `join.rejected`) audit event all commit together or not at
+all. A second resolution of an already-resolved request fails safely with
+`REQUEST_ALREADY_RESOLVED` rather than double-admitting.
+
+**Domain authority derivation.** `listJoinRequests` /
+`admitJoinRequest` / `rejectJoinRequest` in `src/domain/rooms/operations.ts`
+additionally check the caller's own canonical `selfParticipantId` against
+`room.ownerParticipantId` and `meetingRole === "owner"` before ever reaching
+the database, so a spoofed or stale client cannot even construct a request
+that looks like an owner action; the database repeats the same check from
+`auth.uid()` regardless.
+
+**Realtime and polling.** Admitted room participants keep the existing
+`rooms` table realtime invalidation -- an admission bumps `rooms.version`, so
+every connected participant's `ApiRoomClient` refetches and the new chair
+appears from real state. A waiting outsider is not a room member, so they
+cannot subscribe to room-scoped realtime without weakening `rooms` RLS. Instead
+`JoinRoom` (`src/components/onboarding/join-room.tsx`) polls
+`GET /api/join-requests/:joinRequestId` every two seconds while `status`
+remains `waiting`; this is the same `join_requests_read_own` RLS boundary, so
+the poll is not a wider read than the outsider already has. On `admitted` the
+page navigates into `/room/:roomId`, where `getRoom` now succeeds because
+membership exists. This bounded polling approach was chosen over widening
+realtime access specifically so waiting-room status never has to weaken room
+RLS.
 
 Room ids are opaque and collision-retried (`rm_7P3KQ8M2`). The room id is not a
 security boundary. The bound owner participant makes `can_read_room` true for
@@ -40,34 +130,30 @@ meeting role per room, and deferred cross-table triggers that require exactly
 one matching owner at transaction commit. Browser roles have no write grant on
 these tables.
 
-## Deprecated seat invitations
+## Legacy seat invitations (removed from production, retained for demo compatibility only)
 
-The pre-Slice-1 invitation preview, claim, regenerate, and revoke contracts and
-routes remain temporarily isolated for backward compatibility and demo-era
-fixtures. Normal creation no longer calls them and cannot produce a
-predetermined seat. Slice 2 will replace them with general room admission and
-passcode capability behavior; do not extend the legacy seat model.
+The pre-Slice-2 predetermined-seat invitation model -- one invitation per
+specific participant seat, claimed to bind that exact seat -- is no longer part
+of the production join path. `previewInvitation`, `claimInvitation`, and the
+organizer-only regenerate/revoke operations were removed from
+`src/contracts/room.ts`, `src/domain/rooms/operations.ts`,
+`RoomOnboardingClient`, and every browser-reachable route
+(`/api/invitations/claim` and `/api/rooms/:roomId/invitations/*` are deleted;
+`POST /api/invitations/preview` now resolves the new generic invite instead).
+`claim_participant_seat` and the underlying `preview_room_invitation` /
+`claim_room_invitation` / `regenerate_room_invitation` /
+`revoke_room_invitation` database functions still exist -- unclaimed seats are
+exactly how the seeded `multi_user` demo room lets a judge pick a role -- but
+Slice 2's migration explicitly revokes `EXECUTE` on the three
+preview/claim/regenerate/revoke functions from `authenticated`, so only the
+internal demo-reset fixture (via the service-role key) can reach them; a normal
+production room has no unclaimed seats for `claim_participant_seat` to find,
+so the route is inert there by construction, not by a special-cased check.
 
-Invitation preview and claim are pre-membership boundaries. They accept the raw
-capability in the POST body, not the URL path, and return only
-`RoomInvitePreview` or `ClaimInvitationResult`. A valid preview shows the room
-title, brief, and predetermined seat; invalid, expired, revoked, or
-foreign-claimed tokens use the `inviteValid: false` branch with no room details.
-Claiming is atomic, consumes the capability for other sessions, assigns
-`participants.user_id = auth.uid()`, bumps the room version, and audits
-`participant.seat_claimed`.
-
-Organizers can manage unclaimed invitations while the room is still in `input`.
-`regenerate_room_invitation` rotates the stored hash, clears expiry/revocation
-state, bumps the room version, audits `invitation.regenerated`, and returns a
-fresh invite URL. `revoke_room_invitation` marks the unclaimed capability
-revoked, bumps once, audits `invitation.revoked`, and is idempotent if repeated.
-Both operations derive organizer authority from `rooms.organizer_user_id`; the
-request body can only name the target participant seat.
-
-`RoomOnboardingClient` (`ApiRoomOnboardingClient`) remains the browser surface
-for creation and the deprecated preview/claim endpoints. It is separate from
-`RoomClient` and carries no room version.
+`RoomOnboardingClient` (`ApiRoomOnboardingClient`) is the browser surface for
+creation, invite preview, and both join-request submission paths. It is
+separate from `RoomClient` and carries no room version, because the caller
+holds no seat -- and therefore no readable room version -- until admitted.
 
 ## Authentication
 
@@ -123,11 +209,12 @@ state.
 
 - `POST /api/rooms`
 - `GET /api/rooms/:roomId`
-- `POST /api/rooms/:roomId/claim-seat` (legacy/demo compatibility)
+- `POST /api/rooms/:roomId/claim-seat` (legacy/demo compatibility only; inert for production rooms)
 - `POST /api/rooms/:roomId/ready`
 - `POST /api/rooms/:roomId/phase`
-- `POST /api/rooms/:roomId/invitations/regenerate` (deprecated)
-- `POST /api/rooms/:roomId/invitations/revoke` (deprecated)
+- `GET /api/rooms/:roomId/join-requests` (owner-only)
+- `POST /api/rooms/:roomId/join-requests/admit` (owner-only)
+- `POST /api/rooms/:roomId/join-requests/reject` (owner-only)
 - `POST /api/rooms/:roomId/positions`
 - `POST /api/rooms/:roomId/proposals`
 - `POST /api/rooms/:roomId/objections`
@@ -136,14 +223,23 @@ state.
 - `GET /api/rooms/:roomId/final-decision`
 - `POST /api/rooms/:roomId/approval`
 - `GET /api/rooms/:roomId/decision-record`
-- `POST /api/invitations/preview` (deprecated)
-- `POST /api/invitations/claim` (deprecated)
+- `POST /api/invitations/preview` (resolves the generic invite; pre-membership)
+- `POST /api/join-requests/passcode` (pre-membership)
+- `POST /api/join-requests/invite` (pre-membership)
+- `GET /api/join-requests/:joinRequestId` (the requester's own status only)
 
 Mutation routes require `Authorization: Bearer <access-token>` and
-`If-Match: <room-version>`. `POST /api/rooms` and the two `/api/invitations/*`
-routes are the exceptions: they require the bearer token only, because either
-the room does not exist yet or the caller cannot read its version before
-claiming. Bodies use the canonical contract schemas.
+`If-Match: <room-version>`. `POST /api/rooms`, `POST /api/invitations/preview`,
+`POST /api/join-requests/passcode`, and `POST /api/join-requests/invite` are
+the exceptions: they require the bearer token only, because either the room
+does not exist yet or the caller cannot read its version before joining.
+`GET /api/join-requests/:joinRequestId` requires only the bearer token, since
+the requester is not yet a room member. `admit`/`reject` still require
+`If-Match` against the room version the owner is currently viewing. Bodies use
+the canonical contract schemas, which are `.strict()` and reject
+`participantId`, `ownerParticipantId`, `authUserId`, `userId`, `meetingRole`,
+`decisionRole`, `actorId`, and `origin` as caller-supplied fields on every join
+input.
 
 The isolated `POST /api/dev/rooms/:roomId/phase` route exists only for the demo
 flow. It requires `ALLOW_DEMO_PHASE_TRANSITIONS=true`, a claimed participant,

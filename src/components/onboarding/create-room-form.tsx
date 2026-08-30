@@ -2,10 +2,9 @@
 
 import { type FormEvent, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ApiRoomOnboardingClient } from "@/clients/api-room-onboarding-client";
 import type { RoomOnboardingClient } from "@/clients/room-onboarding-client";
-import type { CreateRoomInput } from "@/contracts/room";
+import type { CreateRoomInput, CreatedRoom } from "@/contracts/room";
 
 const CREATOR_ROLES = [
   "Founder",
@@ -43,7 +42,6 @@ function validate(
 }
 
 export function CreateRoomForm({ client: suppliedClient }: CreateRoomFormProps) {
-  const router = useRouter();
   const [client] = useState<RoomOnboardingClient>(
     () => suppliedClient ?? new ApiRoomOnboardingClient(),
   );
@@ -53,6 +51,7 @@ export function CreateRoomForm({ client: suppliedClient }: CreateRoomFormProps) 
   const [creatorRole, setCreatorRole] = useState<string>(CREATOR_ROLES[0]);
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<FormStatus>("idle");
+  const [createdRoom, setCreatedRoom] = useState<CreatedRoom | null>(null);
   const submissionInFlight = useRef(false);
   const isBusy = status === "submitting" || status === "navigating";
 
@@ -78,20 +77,39 @@ export function CreateRoomForm({ client: suppliedClient }: CreateRoomFormProps) 
     setStatus("submitting");
     try {
       const createdRoom = await client.createRoom(input);
+      setCreatedRoom(createdRoom);
       setStatus("navigating");
-      router.push(`/room/${encodeURIComponent(createdRoom.roomId)}`);
     } catch {
       submissionInFlight.current = false;
       setStatus("failure");
     }
   }
 
+  if (createdRoom) {
+    return (
+      <section className="flow-card" aria-labelledby="access-title">
+        <p className="flow-eyebrow">Meeting created</p>
+        <h1 className="flow-card-title" id="access-title">Share access, then enter.</h1>
+        <p className="flow-card-lede">The passcode is shown only now. Save it before leaving this page.</p>
+        <dl>
+          <div><dt>Room ID</dt><dd><code>{createdRoom.roomId}</code></dd></div>
+          <div><dt>Passcode</dt><dd><code>{createdRoom.passcode}</code></dd></div>
+          <div><dt>Generic invite link</dt><dd><input aria-label="Generic invite link" readOnly value={createdRoom.inviteUrl} /></dd></div>
+        </dl>
+        <div className="flow-form-actions">
+          <button type="button" className="flow-btn flow-btn-ghost" onClick={() => void navigator.clipboard.writeText(`${createdRoom.inviteUrl}\nRoom ID: ${createdRoom.roomId}\nPasscode: ${createdRoom.passcode}`)}>Copy invite</button>
+          <Link className="flow-btn flow-btn-primary" href={`/room/${encodeURIComponent(createdRoom.roomId)}`}>Enter meeting</Link>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <form className="flow-card" onSubmit={handleSubmit} noValidate>
       <h1 className="flow-card-title">Set the question this room decides.</h1>
       <p className="flow-card-lede">
-        Create the meeting as its owner. Participant admission arrives in the
-        next slice.
+        Create the meeting as its owner. You’ll receive a reusable invite and
+        one-time passcode display next.
       </p>
 
       <fieldset className="flow-fieldset" disabled={isBusy}>

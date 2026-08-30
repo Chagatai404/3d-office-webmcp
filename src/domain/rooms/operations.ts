@@ -2,13 +2,13 @@ import {
   addPositionInputSchema,
   approveFinalDecisionInputSchema,
   castVoteInputSchema,
-  claimInvitationInputSchema,
   claimSeatInputSchema,
   createRoomInputSchema,
   createdRoomSchema,
-  manageRoomInvitationInputSchema,
+  manageJoinRequestInputSchema,
+  requestJoinByInviteInputSchema,
+  requestJoinByPasscodeInputSchema,
   raiseObjectionInputSchema,
-  regeneratedRoomInvitationSchema,
   proposeTradeoffInputSchema,
   resolveObjectionInputSchema,
   roomPhaseSchema,
@@ -19,16 +19,17 @@ import {
   type AddPositionInput,
   type ApproveFinalDecisionInput,
   type CastVoteInput,
-  type ClaimInvitationInput,
-  type ClaimInvitationResult,
   type ClaimSeatInput,
   type CreatedRoom,
   type CreateRoomInput,
   type DecisionRecord,
   type FinalDecisionPreview,
-  type ManageRoomInvitationInput,
+  type JoinRequest,
+  type JoinRequestResult,
+  type ManageJoinRequestInput,
+  type RequestJoinByInviteInput,
+  type RequestJoinByPasscodeInput,
   type RaiseObjectionInput,
-  type RegeneratedRoomInvitation,
   type ProposeTradeoffInput,
   type ResolveObjectionInput,
   type RoomInvitePreview,
@@ -92,6 +93,7 @@ async function prepareMutation(
 
 export interface CreateRoomContext {
   actor: DomainActor;
+  baseUrl?: string;
 }
 
 /**
@@ -122,23 +124,22 @@ export async function createRoom(
   );
   if (!created.ok) return created;
 
+  // A caller without an HTTP request (a direct domain-layer test, for
+  // instance) has no origin to derive; fall back to a placeholder absolute
+  // origin so the invite URL stays a valid, shareable link either way.
+  const baseUrl = (context.baseUrl?.replace(/\/+$/, "") || null) ?? "http://localhost:3000";
   return {
     ...created,
-    data: createdRoomSchema.parse(created.data),
+    data: createdRoomSchema.parse({
+      roomId: created.data.roomId,
+      ownerParticipantId: created.data.ownerParticipantId,
+      passcode: created.data.passcode,
+      inviteUrl: buildInviteUrl(baseUrl, created.data.roomId, created.data.inviteToken),
+    }),
   };
 }
 
-/**
- * @deprecated Predetermined-seat compatibility path. Slice 2 replaces it with
- * general admission; normal creation no longer generates these tokens.
- * Resolves a raw invitation token into the narrow pre-membership preview.
- *
- * An unknown, expired, revoked or foreign-claimed token is not an error: it is
- * answered with the `inviteValid: false` branch, which carries no room or
- * participant fields. Only a missing token is a validation failure, because
- * there is nothing to resolve.
- */
-export async function previewRoomInvitation(
+export async function previewRoomInvite(
   repository: RoomRepository,
   inviteToken: unknown,
   actor: DomainActor,
@@ -149,29 +150,69 @@ export async function previewRoomInvitation(
   if (typeof inviteToken !== "string" || inviteToken.length === 0) {
     return failure("VALIDATION_ERROR", "An invitation token is required.", 0);
   }
-  return repository.previewInvitation(inviteToken, actor);
+  return repository.previewInvite(inviteToken, actor);
 }
 
-/**
- * @deprecated Predetermined-seat compatibility path pending Slice 2.
- * Binds the authenticated session to the one seat its capability names. The
- * input carries no seat, participant or user field, so the claimed seat is
- * always the one the token was minted for; the database performs the whole
- * claim atomically and increments the room version once.
- */
-export async function claimRoomInvitation(
+export async function requestJoinByPasscode(
   repository: RoomRepository,
-  input: ClaimInvitationInput,
+  input: RequestJoinByPasscodeInput,
   actor: DomainActor,
-): Promise<ActionResult<ClaimInvitationResult>> {
-  const parsed = claimInvitationInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return failure("VALIDATION_ERROR", "Invitation claim input is invalid.", 0);
-  }
+): Promise<ActionResult<JoinRequestResult>> {
+  const parsed = requestJoinByPasscodeInputSchema.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION_ERROR", "Join request input is invalid.", 0);
   if (!actor.authUserId) {
     return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
   }
-  return repository.claimInvitation(parsed.data, actor);
+  return repository.requestJoinByPasscode(parsed.data, actor);
+}
+
+export async function requestJoinByInvite(
+  repository: RoomRepository,
+  input: RequestJoinByInviteInput,
+  actor: DomainActor,
+): Promise<ActionResult<JoinRequestResult>> {
+  const parsed = requestJoinByInviteInputSchema.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION_ERROR", "Join request input is invalid.", 0);
+  if (!actor.authUserId) return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
+  return repository.requestJoinByInvite(parsed.data, actor);
+}
+
+export function getMyJoinRequest(repository: RoomRepository, joinRequestId: string, actor: DomainActor) {
+  if (!actor.authUserId || !joinRequestId) return Promise.resolve(failure<JoinRequest>("NOT_AUTHORIZED", "Join request unavailable.", 0));
+  return repository.getMyJoinRequest(joinRequestId, actor);
+}
+
+export function listJoinRequests(repository: RoomRepository, roomId: string, actor: DomainActor) {
+  if (!actor.authUserId) return Promise.resolve(failure<JoinRequest[]>("NOT_AUTHORIZED", "Owner authority is required.", 0));
+  return repository.listJoinRequests(roomId, actor);
+}
+
+async function manageJoinRequest(
+  repository: RoomRepository,
+  roomId: string,
+  input: ManageJoinRequestInput,
+  context: MutationContext,
+  action: "admit" | "reject",
+): Promise<ActionResult<JoinRequest>> {
+  const parsed = manageJoinRequestInputSchema.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION_ERROR", "Join request input is invalid.", context.expectedRoomVersion);
+  const room = await prepareMutation(repository, roomId, context, ["input", "proposals", "deliberation", "voting", "approval"]);
+  if ("ok" in room) return room;
+  const self = room.participants.find((participant) => participant.id === room.selfParticipantId);
+  if (!self || self.id !== room.ownerParticipantId || self.meetingRole !== "owner") {
+    return failure("NOT_AUTHORIZED", "Only the current room owner can manage the waiting room.", room.version);
+  }
+  return action === "admit"
+    ? repository.admitJoinRequest(roomId, parsed.data, context)
+    : repository.rejectJoinRequest(roomId, parsed.data, context);
+}
+
+export function admitJoinRequest(repository: RoomRepository, roomId: string, input: ManageJoinRequestInput, context: MutationContext) {
+  return manageJoinRequest(repository, roomId, input, context, "admit");
+}
+
+export function rejectJoinRequest(repository: RoomRepository, roomId: string, input: ManageJoinRequestInput, context: MutationContext) {
+  return manageJoinRequest(repository, roomId, input, context, "reject");
 }
 
 export function getMeetingContext(
@@ -431,59 +472,6 @@ export async function advanceRoomPhase(
     );
   }
   return repository.advanceRoomPhase(roomId, parsed.data, context);
-}
-
-/**
- * @deprecated Predetermined-seat compatibility path pending Slice 2.
- * Organizer-only rotation for an unclaimed seat invitation.
- *
- * The participant id names the target seat, not the actor. Organizer authority
- * is resolved in the database from `auth.uid()`, and the raw token is returned
- * only as a fresh invite URL.
- */
-export async function regenerateRoomInvitation(
-  repository: RoomRepository,
-  roomId: string,
-  input: ManageRoomInvitationInput,
-  context: MutationContext,
-  inviteBaseUrl: string,
-): Promise<ActionResult<RegeneratedRoomInvitation>> {
-  const parsed = manageRoomInvitationInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return failure("VALIDATION_ERROR", "Invitation management input is invalid.", context.expectedRoomVersion);
-  }
-  const room = await prepareMutation(repository, roomId, context, ["input"]);
-  if ("ok" in room) return room;
-  const result = await repository.regenerateInvitation(roomId, parsed.data, context);
-  if (!result.ok) return result;
-  return {
-    ...result,
-    data: regeneratedRoomInvitationSchema.parse({
-      participantId: result.data.participantId,
-      role: result.data.role,
-      inviteUrl: buildInviteUrl(inviteBaseUrl, roomId, result.data.inviteToken),
-    }),
-  };
-}
-
-/**
- * @deprecated Predetermined-seat compatibility path pending Slice 2.
- * Organizer-only revocation for an unclaimed seat invitation. A revoked link
- * stops preview/claim but never removes or changes the participant seat.
- */
-export async function revokeRoomInvitation(
-  repository: RoomRepository,
-  roomId: string,
-  input: ManageRoomInvitationInput,
-  context: MutationContext,
-): Promise<ActionResult> {
-  const parsed = manageRoomInvitationInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return failure("VALIDATION_ERROR", "Invitation management input is invalid.", context.expectedRoomVersion);
-  }
-  const room = await prepareMutation(repository, roomId, context, ["input"]);
-  if ("ok" in room) return room;
-  return repository.revokeInvitation(roomId, parsed.data, context);
 }
 
 export async function advanceDemoRoomPhase(

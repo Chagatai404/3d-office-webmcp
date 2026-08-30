@@ -65,8 +65,20 @@ describe.sequential("creator-only room creation", () => {
     expect(created.data).toEqual({
       roomId: created.data.roomId,
       ownerParticipantId: created.data.ownerParticipantId,
+      inviteUrl: created.data.inviteUrl,
+      passcode: created.data.passcode,
     });
     expect(created.data.roomId).toMatch(/^rm_[0-9A-Z]{8}$/);
+    expect(created.data.passcode).toMatch(/^[0-9A-Z]{6,}$/);
+    expect(created.data.inviteUrl).toMatch(
+      new RegExp(`^http://localhost:3000/room/${created.data.roomId}/join\\?invite=.+`),
+    );
+
+    const passcodeHash = await creator.client
+      .from("rooms")
+      .select("passcode_hash")
+      .eq("id", created.data.roomId);
+    expect(passcodeHash.error).toBeTruthy();
 
     const room = await getMeetingContext(creator.repository, creator.userId, created.data.roomId);
     expect(room).toMatchObject({

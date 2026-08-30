@@ -20,13 +20,15 @@ test("normal creation binds one authenticated owner and creates no seats", async
   const creator = creatorSession.page;
   const outsider = outsiderSession.page;
 
-  const { roomId, ownerParticipantId } = await createRoomThroughOnboarding(
+  const { roomId, ownerParticipantId, passcode, inviteUrl } = await createRoomThroughOnboarding(
     creator,
     roomInput,
   );
   expect(roomId).toMatch(/^rm_[23456789ABCDEFGHJKMNPQRSTVWXYZ]{8}$/);
   expect(ownerParticipantId).toBeTruthy();
-  await expect(creator.getByTestId("created-room")).not.toContainText("invite");
+  // Exactly one generic, reusable invite capability -- never a per-seat list.
+  expect(passcode).toMatch(/^[0-9A-Z]{6,}$/);
+  expect(inviteUrl).toMatch(new RegExp(`^http://127\\.0\\.0\\.1:3000/room/${roomId}/join\\?invite=.+`));
 
   await creator.goto(`/room/${roomId}`);
   await expect(creator.getByTestId("connection-status")).toHaveText("Connected");

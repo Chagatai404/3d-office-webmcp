@@ -1,34 +1,51 @@
 # Repository status
 
-Last updated: 2026-08-30.
+Last updated: 2026-08-30 (Slice 2 / Gate 2).
 
 ## Core platform
 
 The backend/core workstream is considered integrated in this snapshot:
 
-- canonical room contract;
-- creator-only runtime room creation;
+- canonical room contract, including `JoinRequest` and its status lifecycle;
+- creator-only runtime room creation, now returning a generic invite URL and a
+  one-time plaintext passcode display alongside `roomId` / `ownerParticipantId`;
 - explicit meeting roles, decision roles, owner pointer, and decision policy;
 - anonymous auth with the creator atomically bound as owner and decision-maker;
-- deprecated seat invitation endpoints retained only for compatibility;
+- dynamic, owner-controlled admission: a room passcode and a reusable generic
+  invite token each authorize only a waiting `JoinRequest`, never a
+  participant; admission is the only thing that creates one, atomically, with
+  `meetingRole = participant` / `decisionRole = contributor`;
+- the pre-Slice-2 predetermined-seat invitation endpoints (participant-specific
+  preview/claim/regenerate/revoke) are removed from every browser-reachable
+  route and from the canonical contract; the underlying database functions are
+  retained, `EXECUTE`-revoked from `authenticated`, and reachable only by the
+  seeded `multi_user` demo room's internal reset fixture -- see
+  [`backend-integration.md`](backend-integration.md);
 - phase transitions;
 - positions, proposals, objections, trade-offs, voting, and approval;
 - exact decision hash and immutable final record;
-- realtime invalidation/refetch;
+- realtime invalidation/refetch for admitted participants; bounded polling for
+  a waiting outsider's own join-request status (never a widened room-read);
 - participant-scoped WebMCP tools;
 - solo-judge demo orchestration;
-- domain, WebMCP, and multi-browser coverage.
+- domain, contract, component, and multi-browser coverage.
 
-Normal room creation now creates only the authenticated creator. The creator is
-the initial owner and decision-maker, and `owner_decides` is the default policy.
-Production participant admission will be implemented in the next slice. The
-seeded demo remains allowed to create explicit internal simulation fixtures and
-does not change production creation behavior.
+Normal room creation still creates only the authenticated creator as the
+initial owner/decision-maker with `owner_decides` as the default policy.
+Everyone else now reaches a room exclusively through a waiting `JoinRequest`
+that the owner admits or rejects from the Participants drawer (or the
+`RoomE2EHarness` / `OnboardingE2EHarness` browser-integration surfaces used by
+Playwright). The seeded demo remains allowed to create explicit internal
+simulation fixtures and does not change production creation or admission
+behavior; `claim_participant_seat` remains demo-only in practice because a
+normal production room never has an unclaimed seat for it to find.
 
-The full voting/alignment/finalization rewrite is not part of Slice 1. Legacy
-decision functions temporarily retain the private database
+The full voting/alignment/finalization rewrite is not part of Slice 1 or 2.
+Legacy decision functions temporarily retain the private database
 `required_for_approval` compatibility field; it is no longer a canonical DTO
-authority primitive.
+authority primitive. Owner removal, ownership transfer, co-host promotion,
+meeting lock, passcode regeneration, and invite-revocation UI are explicitly
+out of scope for Gate 2 and remain for a later slice.
 
 See [`backend-integration.md`](backend-integration.md) and
 [`workstreams/core-platform-completed.md`](workstreams/core-platform-completed.md)
@@ -66,38 +83,30 @@ See [`product-ux.md`](product-ux.md).
   the new meeting-room design;
 - rewrote the README and canonical shared context around the new UX contract.
 
-## Transitional code still present
+## Meeting shell
 
-The current `/room/[roomId]` runtime still uses the legacy `DesktopShell` and
-legacy office scene while the new meeting shell is implemented. Those files are
-migration code, not a design contract.
-
-Do not add new product behavior to:
-
-- `src/components/shell/**`;
-- mini-office/common-area/free-roaming scene patterns;
-- god-view navigation.
-
-Delete those paths after the new `meeting-shell` and camera-driven workspace
-scene are feature-complete.
+`/room/[roomId]` now renders `MeetingShell` (`src/components/shell/**`) --
+the 3D room, the meeting toolbar, the workspace dock, and one drawer at a
+time (`DrawerHost`) -- rather than the legacy `DesktopShell`. `DesktopShell`
+and the legacy office scene remain only as `RoomE2EHarness`'s
+non-visual counterpart for Playwright coverage
+(`E2E_ROOM_HARNESS=true`, set globally in `playwright.config.ts`); they are not
+reachable in a normal deployment. The Participants drawer
+(`src/components/shell/drawers/participants-drawer.tsx`) is where Gate 2's
+owner waiting-room controls live.
 
 ## Next implementation slice
 
-1. Create `MeetingShell` as the new `/room/[roomId]` runtime surface.
-2. Add the meeting toolbar and workspace dock using semantic DOM controls.
-3. Add presentation-only `MeetingWorkspace` state.
-4. Replace god-view/free-flight controls with fixed camera poses + transitions.
-5. Build the neutral procedural meeting-room shell.
-6. Implement board workspaces one at a time, starting with Constraints,
-   Proposals, and Issues.
-7. Preserve existing domain actions and `RoomProvider`; this overhaul should be
-   primarily presentation-layer work.
-8. Once the new route is green, remove `src/components/shell/**` and obsolete
-   office-layout scene components/tests.
+Gate 2 (dynamic join, generic invite, passcode, waiting room, owner admission)
+is implemented; see `backend-integration.md` for the design and the Slice 2
+completion report for verification detail. Slice 3 (owner removal, ownership
+transfer, co-host promotion, meeting lock, decision-policy-aware alignment and
+finalization) has not been started.
 
 ## Verification note
 
-This cleanup snapshot was edited without changing the canonical domain contract
-or backend operations. Dependency installation in the sandbox did not complete,
-so the full npm test/build suite should be run immediately after applying these
-changes in the real repository.
+Run `npm run check`, `npm run test:domain`, `npm run test:e2e`, and
+`npm run build` after applying any change in this area; `test:domain` and
+`test:e2e` require a local Supabase instance (`npm run supabase:start`, or let
+the scripts' own `supabase db reset` provision one) and will fail fast with a
+connection error if Docker/Supabase is unavailable in the current environment.

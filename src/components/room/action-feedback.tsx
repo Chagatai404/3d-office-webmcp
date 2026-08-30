@@ -27,6 +27,12 @@ const DEFAULT_RECOVERY: Record<ActionErrorCode, string> = {
     "The final decision changed since you reviewed it. Return to final review and approve the updated plan.",
   ALREADY_FINALIZED:
     "This room is finalized. Its decision record is immutable.",
+  INVALID_JOIN_CREDENTIALS:
+    "Check the room ID, passcode, or invite link and try again.",
+  ALREADY_PARTICIPANT:
+    "This session is already a member of the room. Open it directly.",
+  REQUEST_ALREADY_RESOLVED:
+    "This join request was already resolved and cannot be resolved again.",
 };
 
 const ERROR_TITLE: Record<ActionErrorCode, string> = {
@@ -38,6 +44,9 @@ const ERROR_TITLE: Record<ActionErrorCode, string> = {
   HUMAN_CONFIRMATION_REQUIRED: "Human confirmation required",
   DECISION_CHANGED: "The decision changed",
   ALREADY_FINALIZED: "Already finalized",
+  INVALID_JOIN_CREDENTIALS: "That room access is invalid",
+  ALREADY_PARTICIPANT: "Already a participant",
+  REQUEST_ALREADY_RESOLVED: "Request already resolved",
 };
 
 export function ActionFeedback({

@@ -3,6 +3,7 @@ import { createRoom } from "@/domain/rooms/operations";
 import {
   actionResponse,
   authenticateRoomRequest,
+  requestBaseUrl,
 } from "@/app/api/_shared/request";
 
 /**
@@ -17,6 +18,7 @@ export async function POST(request: Request) {
   return actionResponse(
     await createRoom(auth.repository, body, {
       actor: { authUserId: auth.userId, origin: "manual_ui" },
+      baseUrl: requestBaseUrl(request),
     }),
   );
 }

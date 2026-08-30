@@ -4,13 +4,15 @@ import type {
   AddPositionInput,
   ApproveFinalDecisionInput,
   CastVoteInput,
-  ClaimInvitationInput,
-  ClaimInvitationResult,
   ClaimSeatInput,
   CreateRoomInput,
   DecisionRecord,
   FinalDecisionPreview,
-  ManageRoomInvitationInput,
+  JoinRequest,
+  JoinRequestResult,
+  ManageJoinRequestInput,
+  RequestJoinByInviteInput,
+  RequestJoinByPasscodeInput,
   RaiseObjectionInput,
   ResolveObjectionInput,
   ProposeTradeoffInput,
@@ -36,13 +38,8 @@ export interface MutationContext {
 export interface CreatedRoomRecord {
   roomId: string;
   ownerParticipantId: string;
-}
-
-/** @deprecated Slice 2 replaces predetermined-seat invitation management. */
-export interface RegeneratedRoomInvitationRecord {
-  participantId: string;
-  role: string;
   inviteToken: string;
+  passcode: string;
 }
 
 export interface RoomRepository {
@@ -51,14 +48,19 @@ export interface RoomRepository {
     input: CreateRoomInput,
     actor: DomainActor,
   ): Promise<ActionResult<CreatedRoomRecord>>;
-  previewInvitation(
+  previewInvite(
     inviteToken: string,
     actor: DomainActor,
   ): Promise<ActionResult<RoomInvitePreview>>;
-  claimInvitation(
-    input: ClaimInvitationInput,
+  requestJoinByPasscode(
+    input: RequestJoinByPasscodeInput,
     actor: DomainActor,
-  ): Promise<ActionResult<ClaimInvitationResult>>;
+  ): Promise<ActionResult<JoinRequestResult>>;
+  requestJoinByInvite(input: RequestJoinByInviteInput, actor: DomainActor): Promise<ActionResult<JoinRequestResult>>;
+  getMyJoinRequest(joinRequestId: string, actor: DomainActor): Promise<ActionResult<JoinRequest>>;
+  listJoinRequests(roomId: string, actor: DomainActor): Promise<ActionResult<JoinRequest[]>>;
+  admitJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext): Promise<ActionResult<JoinRequest>>;
+  rejectJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext): Promise<ActionResult<JoinRequest>>;
   claimSeat(
     roomId: string,
     input: ClaimSeatInput,
@@ -114,16 +116,6 @@ export interface RoomRepository {
   advanceRoomPhase(
     roomId: string,
     nextPhase: RoomPhase,
-    context: MutationContext,
-  ): Promise<ActionResult>;
-  regenerateInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-    context: MutationContext,
-  ): Promise<ActionResult<RegeneratedRoomInvitationRecord>>;
-  revokeInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
     context: MutationContext,
   ): Promise<ActionResult>;
   advanceDemoPhase(

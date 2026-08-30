@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import type { ActionResult, DemoHumanRole, RoomPhase } from "@/contracts/room";
+import { useEffect, useState } from "react";
+import type { ActionResult, DemoHumanRole, JoinRequest, RoomPhase } from "@/contracts/room";
 import { useRoom } from "./room-provider";
 
 /**
@@ -27,6 +27,37 @@ export function RoomE2EHarness() {
    * the production controls instead: readiness and the owner phase route.
    */
   const isDemoRoom = room.id === "demo";
+  const isOwner = self?.id === room.ownerParticipantId && self?.meetingRole === "owner";
+
+  const [waitingRequests, setWaitingRequests] = useState<JoinRequest[]>([]);
+  const [waitingBusyId, setWaitingBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOwner) return;
+    let active = true;
+    const refresh = async () => {
+      const result = await actions.listJoinRequests();
+      if (active && result.ok) setWaitingRequests(result.data);
+    };
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 500);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [actions, isOwner]);
+
+  async function resolveWaitingRequest(request: JoinRequest, decision: "admit" | "reject") {
+    setWaitingBusyId(request.id);
+    const result = decision === "admit"
+      ? await actions.admitJoinRequest({ joinRequestId: request.id })
+      : await actions.rejectJoinRequest({ joinRequestId: request.id });
+    setWaitingBusyId(null);
+    if (result.ok) {
+      const refreshed = await actions.listJoinRequests();
+      if (refreshed.ok) setWaitingRequests(refreshed.data);
+    }
+  }
 
   const nextPhase: RoomPhase | null = room.phase === "input"
     ? "proposals"
@@ -129,6 +160,32 @@ export function RoomE2EHarness() {
           </article>
         ))}
       </section>
+
+      {isOwner ? (
+        <section data-testid="waiting-room">
+          {waitingRequests.map((request) => (
+            <article key={request.id} data-testid={`join-request-${request.id}`}>
+              <span>{request.displayName} · {request.role} · {request.status}</span>
+              <button
+                type="button"
+                data-testid={`admit-${request.id}`}
+                disabled={waitingBusyId === request.id}
+                onClick={() => void resolveWaitingRequest(request, "admit")}
+              >
+                Admit
+              </button>
+              <button
+                type="button"
+                data-testid={`reject-${request.id}`}
+                disabled={waitingBusyId === request.id}
+                onClick={() => void resolveWaitingRequest(request, "reject")}
+              >
+                Reject
+              </button>
+            </article>
+          ))}
+        </section>
+      ) : null}
 
       {self && room.phase === "deliberation" && room.activeProposalId ? (
         <form

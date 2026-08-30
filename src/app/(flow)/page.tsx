@@ -60,6 +60,9 @@ export default function Home() {
             >
               Create a meeting
             </Link>
+            <Link className="flow-btn flow-btn-primary" href="/join">
+              Join a meeting
+            </Link>
             <Link className="flow-btn flow-btn-ghost" href="/room/demo">
               Open the demo room
             </Link>

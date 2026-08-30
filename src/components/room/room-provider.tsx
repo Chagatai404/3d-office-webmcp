@@ -17,6 +17,8 @@ import type {
   ClaimSeatInput,
   DecisionRecord,
   FinalDecisionPreview,
+  JoinRequest,
+  ManageJoinRequestInput,
   Participant,
   ProposeTradeoffInput,
   RaiseObjectionInput,
@@ -93,6 +95,10 @@ export interface RoomActions {
 
   /** Owner-only production phase advance. Kept separate from `advanceDemoPhase`. */
   advanceRoomPhase(phase: RoomPhase): Promise<ActionResult>;
+
+  listJoinRequests(): Promise<ActionResult<JoinRequest[]>>;
+  admitJoinRequest(input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>>;
+  rejectJoinRequest(input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>>;
 }
 
 export interface RoomContextValue {
@@ -246,6 +252,10 @@ export function RoomProvider({
 
       advanceRoomPhase: (phase) =>
         client.advanceRoomPhase(roomId, phase),
+
+      listJoinRequests: () => client.listJoinRequests(roomId),
+      admitJoinRequest: (input) => client.admitJoinRequest(roomId, input),
+      rejectJoinRequest: (input) => client.rejectJoinRequest(roomId, input),
     }),
     [client, roomId],
   );
