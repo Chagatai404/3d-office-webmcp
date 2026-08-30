@@ -25,6 +25,19 @@
   --font-display: "Newsreader", Georgia, serif;
   --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* The welcome frame. The stage is a fixed sibling of the page, so both read
+     the frame's edges from here and cannot drift apart. `lead` is the band the
+     reading column holds on the left; the frame begins where it ends. */
+  --flow-frame-edge: 1.5rem;
+  --flow-frame-lead: clamp(21rem, 32vw, 30rem);
+  /* The room's own silhouette is a wide one. A full-height panel beside a
+     readable column is far too tall for it, and fitting the model into that
+     leaves the frame mostly empty above and below; these bring the panel back
+     to roughly the shape of the thing inside it. */
+  --flow-frame-head: clamp(1.5rem, 11vh, 7rem);
+  --flow-frame-foot: var(--flow-frame-head);
+  --flow-flight: 900ms;
+  --flow-flight-ease: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 * {
@@ -1970,5 +1983,1219 @@ select {
 
   .meeting-control-version {
     display: none;
+  }
+}
+
+/* ------------------------------------------------- meeting flow (pre-room) */
+
+/* Welcome, Create and Lobby share one layout: the 3D meeting room as a fixed
+   backdrop, a gradient scrim, and one DOM surface floating in front. Ported
+   from the imported "Meeting Flow" design; every value reuses the room's own
+   tokens so the pre-meeting screens and the room read as one product. */
+
+.flow-page {
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  /* The persistent stage is a fixed sibling behind this element; a solid
+     background here would paint over it. The page ground comes from <body>. */
+  background: transparent;
+}
+
+.flow-stage,
+.flow-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+/* The room either fills the window or is held in a frame on the page. The two
+   are one animation: the frame opens out as the camera flies in, so pressing
+   "Create a meeting" reads as moving deeper into the same room rather than
+   loading a second screen. On welcome the frame is the right-hand panel, so
+   opening it out also carries the room to the centre of the window — one move,
+   not two. Same duration and easing as the camera flight. */
+.flow-stage {
+  border-radius: 0;
+  box-shadow: none;
+  transition:
+    inset var(--flow-flight) var(--flow-flight-ease),
+    border-radius var(--flow-flight) var(--flow-flight-ease),
+    box-shadow var(--flow-flight) var(--flow-flight-ease);
+}
+
+.flow-stage-framed {
+  inset: var(--flow-frame-head) var(--flow-frame-edge) var(--flow-frame-foot)
+    var(--flow-frame-lead);
+  overflow: hidden;
+  border-radius: 1.75rem;
+  box-shadow:
+    0 0 0 1px rgba(46, 43, 39, 0.05),
+    0 22px 60px rgba(46, 43, 39, 0.09);
+}
+
+.flow-stage-canvas {
+  display: block;
+}
+
+.flow-scrim {
+  pointer-events: none;
+  animation: flowScrimIn 0.4s ease-out both;
+}
+
+@keyframes flowScrimIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.flow-scrim-panel {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--background) 98%, transparent) 0 46%,
+    color-mix(in srgb, var(--background) 78%, transparent) 62%,
+    color-mix(in srgb, var(--background) 30%, transparent) 78%,
+    transparent 90%
+  );
+}
+
+.flow-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding: 1.4rem 1.6rem 2rem;
+}
+
+.flow-content-centered {
+  justify-content: center;
+  align-items: center;
+}
+
+/* --- top chrome --- */
+
+.flow-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.flow-topbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.flow-brand,
+.flow-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.68rem 1rem;
+  border-radius: 0.9rem;
+  background: var(--surface-quiet);
+  box-shadow: 0 6px 20px rgba(46, 43, 39, 0.09);
+  text-decoration: none;
+  color: var(--text);
+}
+
+.flow-brand-mark {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 0.2rem;
+  background: var(--accent);
+}
+
+.flow-brand-name {
+  font-weight: 800;
+  font-size: 0.88rem;
+  letter-spacing: -0.01em;
+}
+
+.flow-chip-name {
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.flow-brand-divider,
+.flow-chip-divider {
+  width: 1px;
+  height: 0.95rem;
+  background: var(--border-strong);
+}
+
+.flow-brand-tag,
+.flow-chip-step {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.flow-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.68rem 0.95rem;
+  border: 0;
+  border-radius: 0.9rem;
+  background: var(--surface-quiet);
+  box-shadow: 0 6px 20px rgba(46, 43, 39, 0.09);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.flow-back:hover {
+  background: #fff;
+}
+
+.flow-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.62rem 0.9rem;
+  border-radius: 0.9rem;
+  background: var(--surface-quiet);
+  box-shadow: 0 6px 20px rgba(46, 43, 39, 0.09);
+  font-weight: 600;
+  font-size: 0.76rem;
+}
+
+.flow-status-dot {
+  position: relative;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.flow-status-dot::after {
+  content: "";
+  position: absolute;
+  inset: -0.25rem;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: msPulse 2.2s ease-out infinite;
+}
+
+/* --- shared flow controls --- */
+
+.flow-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.flow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  padding-top: 0.25rem;
+}
+
+.flow-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.85rem;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.flow-btn-primary {
+  background: var(--dark);
+  color: var(--dark-ink);
+  box-shadow: 0 10px 26px rgba(46, 43, 39, 0.18);
+}
+
+.flow-btn-primary:hover {
+  background: var(--dark-strong);
+}
+
+.flow-btn-ghost {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text);
+}
+
+.flow-btn-ghost:hover {
+  background: #fff;
+}
+
+.flow-agent-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: fit-content;
+  margin-top: 0.4rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.9rem;
+  background: var(--surface-quiet);
+  box-shadow: 0 6px 20px rgba(46, 43, 39, 0.09);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.flow-agent-note-dot {
+  position: relative;
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.flow-agent-note-dot::after {
+  content: "";
+  position: absolute;
+  inset: -0.25rem;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: msPulse 2.2s ease-out infinite;
+}
+
+.flow-caption {
+  position: fixed;
+  right: 2rem;
+  bottom: 1.9rem;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  max-width: min(24rem, calc(100% - 4rem));
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  background: var(--surface-strong);
+  box-shadow: 0 10px 30px rgba(46, 43, 39, 0.12);
+  animation: flowRise 0.45s var(--flow-flight-ease) both;
+}
+
+.flow-caption-fact {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.flow-caption-label {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.flow-caption-value {
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.flow-caption-divider {
+  width: 1px;
+  height: 1.75rem;
+  background: var(--border-strong);
+}
+
+.flow-caption-note {
+  max-width: 11rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+/* --- welcome --- */
+
+/* One screen, split in two: a single reading column on the left holding
+   identity, the question the product answers, the way in and the one thing
+   the room cannot say for itself; the framed room on the right. Nothing
+   scrolls, nothing overlaps the room, and nothing sits here that the room
+   itself already shows. The right column is empty on purpose — the persistent
+   stage is fixed behind the page and shows through it. */
+
+.welcome {
+  display: grid;
+  grid-template-columns: var(--flow-frame-lead) minmax(0, 1fr);
+  height: 100dvh;
+}
+
+/* Brand at the top, the intro on the optical centre line, the agent note
+   resting on the floor of the column — the same three-part reading the framed
+   room has on the other side. */
+.welcome-lead {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.25rem, 3vh, 2.25rem);
+  padding: var(--flow-frame-edge)
+    clamp(1.25rem, 2.5vw, 2.25rem)
+    var(--flow-frame-edge)
+    calc(var(--flow-frame-edge) + clamp(0.5rem, 1.5vw, 1.75rem));
+}
+
+.welcome .flow-brand {
+  align-self: flex-start;
+}
+
+.welcome-intro {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(0.9rem, 2.2vh, 1.4rem);
+  max-width: 27rem;
+}
+
+.welcome-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: clamp(2.1rem, 3.1vw, 3.1rem);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.welcome-lede {
+  margin: 0;
+  max-width: 24rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.welcome-note {
+  align-items: flex-start;
+  max-width: 22rem;
+  margin: 0;
+  font-weight: 500;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.welcome-note .flow-agent-note-dot {
+  margin-top: 0.32rem;
+}
+
+/* The two ways in read as one primary and one aside, not as a pair. */
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: clamp(0.35rem, 1.2vh, 0.9rem);
+}
+
+.welcome-actions .flow-btn {
+  padding: 0.9rem 1.4rem;
+  border-radius: 0.85rem;
+  font-size: 0.88rem;
+}
+
+.welcome-actions .flow-btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.welcome-actions .flow-btn-ghost:hover {
+  background: var(--surface-quiet);
+  color: var(--text);
+}
+
+.welcome-lead {
+  animation: flowRise 0.5s var(--flow-flight-ease) both;
+}
+
+/* The camera has left; the welcome chrome goes with it, so the room is the
+   only thing on screen while the frame opens around it. */
+.welcome[data-leaving] .welcome-lead {
+  animation: none;
+  opacity: 0;
+  transform: translateX(-10px);
+  pointer-events: none;
+  transition:
+    opacity 0.32s ease-in,
+    transform 0.32s ease-in;
+}
+
+@keyframes flowRise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- create: the floating form card --- */
+
+.flow-card {
+  width: min(40rem, 100%);
+  margin: 1.5rem 0 4rem;
+  padding: 1.75rem;
+  border-radius: 1.5rem;
+  background: var(--surface-strong);
+  box-shadow: 0 16px 44px rgba(46, 43, 39, 0.14);
+  animation: flowRise 0.42s var(--flow-flight-ease) both;
+}
+
+.flow-card-title {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 1.6rem;
+  letter-spacing: -0.01em;
+}
+
+.flow-card-lede {
+  margin: 0 0 1.4rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.flow-fieldset {
+  display: grid;
+  gap: 1.1rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.flow-fieldset + .flow-fieldset {
+  margin-top: 1.4rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--border);
+}
+
+.flow-fieldset > legend {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.flow-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.flow-field > span:first-child {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.flow-input,
+.flow-textarea,
+.flow-select {
+  width: 100%;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+.flow-input-title {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 1.2rem;
+}
+
+.flow-textarea {
+  min-height: 5.5rem;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.flow-select {
+  cursor: pointer;
+}
+
+.flow-field-hint,
+.flow-note {
+  color: var(--muted-2);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.flow-field-error {
+  color: var(--warn-ink);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.flow-seat-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.flow-seat-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.55rem 0.7rem;
+  padding: 0.85rem;
+  border-radius: 0.85rem;
+  background: var(--surface);
+}
+
+.flow-seat-row-self {
+  background: var(--accent-bg);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.flow-seat-avatar {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  grid-row: span 2;
+  align-self: start;
+  border-radius: 0.6rem;
+  background: var(--border-strong);
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.flow-seat-avatar-self {
+  background: var(--dark);
+  color: var(--accent);
+}
+
+.flow-seat-avatar-open {
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  color: var(--muted-2);
+}
+
+/* used by the lobby aside, where the avatar is a single-row cell */
+.lobby-seats .flow-seat-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.lobby-seats .flow-seat-avatar {
+  grid-row: auto;
+  align-self: center;
+}
+
+.flow-seat-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.flow-seat-fields .flow-input {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.flow-seat-fields .flow-select {
+  flex: 0 0 10.5rem;
+}
+
+.flow-seat-main {
+  min-width: 0;
+  display: grid;
+  gap: 0.1rem;
+}
+
+.flow-seat-name {
+  font-weight: 700;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.flow-seat-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+}
+
+.flow-seat-sub {
+  flex: 1 1 auto;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.flow-seat-self-sub {
+  color: var(--accent-ink);
+}
+
+.flow-seat-error {
+  grid-column: 2;
+}
+
+.flow-seat-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.flow-seat-check input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent-ink);
+}
+
+.flow-seat-remove {
+  flex-shrink: 0;
+  padding: 0.3rem 0.5rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--muted-2);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.flow-seat-remove:hover {
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+}
+
+.flow-add-seat {
+  justify-self: start;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.75rem;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.flow-add-seat:hover {
+  background: rgba(46, 43, 39, 0.06);
+}
+
+.flow-form-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+}
+
+.flow-form-actions .flow-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 0.95rem 1.25rem;
+}
+
+.flow-form-actions .flow-btn-ghost {
+  flex: 0 0 auto;
+}
+
+.flow-alert {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 1.1rem;
+  padding: 0.8rem 0.95rem;
+  border-radius: 0.75rem;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  font-size: 0.82rem;
+}
+
+.flow-alert strong {
+  font-weight: 800;
+}
+
+.flow-form-footer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.flow-form-footer p {
+  flex: 1;
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+/* --- lobby --- */
+
+.flow-lobby {
+  display: grid;
+  grid-template-columns: minmax(0, 23rem) minmax(0, 25rem);
+  gap: 1.25rem;
+  align-content: start;
+  justify-content: center;
+  flex: 1;
+  padding: 2rem 0 9rem;
+  animation: flowRise 0.42s var(--flow-flight-ease) both;
+}
+
+.lobby-card {
+  padding: 1.35rem;
+  border-radius: 1.35rem;
+  background: var(--surface-strong);
+  box-shadow: 0 18px 46px rgba(46, 43, 39, 0.18);
+}
+
+.lobby-card-dark {
+  background: var(--dark);
+  color: var(--dark-ink);
+}
+
+.lobby-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+}
+
+.lobby-card-head h2,
+.lobby-card-head h3 {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.lobby-card-head-meta {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.lobby-card-dark .lobby-card-head-meta {
+  color: rgba(241, 238, 231, 0.55);
+}
+
+.lobby-col {
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+}
+
+.lobby-seats {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.flow-seat-status {
+  flex-shrink: 0;
+  align-self: start;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--accent-ink);
+}
+
+.flow-seat-status-muted {
+  color: var(--muted-2);
+}
+
+.lobby-code-fact {
+  display: grid;
+  gap: 0;
+}
+
+.lobby-code-value {
+  display: block;
+}
+
+.lobby-invite-seat {
+  display: grid;
+  gap: 0;
+}
+
+.lobby-invite-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.85rem;
+  background: var(--surface);
+}
+
+.lobby-note {
+  margin: 0 0 0.4rem;
+  color: var(--muted-2);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.lobby-card-dark .lobby-note {
+  color: rgba(241, 238, 231, 0.6);
+}
+
+.lobby-code {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.85rem;
+  background: var(--dark);
+  color: var(--dark-ink);
+}
+
+.lobby-code-label {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.lobby-code-value {
+  margin-top: 0.3rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+}
+
+.lobby-code-note {
+  margin-left: auto;
+  max-width: 9rem;
+  color: rgba(241, 238, 231, 0.6);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.lobby-copy-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.lobby-copy-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.7rem;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+}
+
+.lobby-copy-button {
+  flex-shrink: 0;
+  padding: 0.7rem 1rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-weight: 800;
+  font-size: 0.76rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lobby-copy-button:hover {
+  filter: brightness(1.03);
+}
+
+.lobby-copy-status {
+  min-height: 1rem;
+  margin: 0.4rem 0 0;
+  color: var(--accent-ink);
+  font-size: 0.72rem;
+}
+
+.lobby-dock {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  z-index: 1;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 1.15rem;
+  width: min(72rem, calc(100% - 2rem));
+  padding: 1rem 1.25rem;
+  border-radius: 1.5rem;
+  background: var(--surface-quiet);
+  box-shadow: 0 18px 48px rgba(46, 43, 39, 0.16);
+  animation: sceneFadeUp 0.45s ease-out both;
+}
+
+.lobby-dock-fact {
+  display: inline-grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.lobby-dock-label {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.lobby-dock-value {
+  font-weight: 700;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lobby-dock-fact-brief {
+  max-width: 20rem;
+}
+
+.lobby-dock-value-quiet {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.lobby-dock-value-warn {
+  color: var(--warn-ink);
+}
+
+.lobby-dock-divider {
+  width: 1px;
+  height: 2.2rem;
+  flex-shrink: 0;
+  background: var(--border-strong);
+}
+
+.lobby-dock-cta {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.85rem 1.25rem;
+  border: 0;
+  border-radius: 0.85rem;
+  background: var(--dark);
+  color: var(--dark-ink);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.lobby-dock-cta:hover {
+  background: var(--dark-strong);
+}
+
+.flow-toast {
+  position: fixed;
+  left: 50%;
+  top: 1.6rem;
+  z-index: 2;
+  transform: translateX(-50%);
+  padding: 0.62rem 1.1rem;
+  border-radius: 999px;
+  background: var(--dark);
+  color: var(--dark-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 10px 26px rgba(46, 43, 39, 0.24);
+  animation: msFade 0.25s ease-out;
+}
+
+.flow-recovery {
+  width: min(34rem, 100%);
+  margin: auto;
+  padding: 1.75rem;
+  border-radius: 1.5rem;
+  background: var(--surface-strong);
+  box-shadow: 0 16px 44px rgba(46, 43, 39, 0.14);
+  text-align: left;
+}
+
+.flow-recovery h1 {
+  margin: 0.5rem 0 0.75rem;
+  max-width: none;
+  font-size: 1.7rem;
+  line-height: 1.15;
+}
+
+.flow-recovery p {
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 60rem) {
+  .flow-lobby {
+    grid-template-columns: minmax(0, 32rem);
+  }
+
+  /* Too narrow to read beside the room: the column stacks above it and the
+     frame keeps the full width, starting where the column ends. `head` is the
+     column's height, so the two are the same number by construction — the
+     type below is sized to sit inside it. */
+  :root {
+    --flow-frame-lead: var(--flow-frame-edge);
+    --flow-frame-head: 24rem;
+    --flow-frame-foot: var(--flow-frame-edge);
+  }
+
+  .welcome {
+    display: block;
+  }
+
+  .welcome-lead {
+    height: var(--flow-frame-head);
+    padding-right: var(--flow-frame-edge);
+    gap: 1rem;
+  }
+
+  .welcome-intro {
+    flex: 0 1 auto;
+    justify-content: flex-start;
+    gap: 0.85rem;
+    max-width: 36rem;
+  }
+
+  .welcome-title {
+    font-size: clamp(1.7rem, 4.4vw, 2.3rem);
+    line-height: 1.1;
+  }
+
+  .welcome-lede {
+    max-width: 30rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+
+  .welcome-actions {
+    margin-top: 0.2rem;
+  }
+
+  .welcome-note {
+    display: none;
+  }
+
+  .lobby-dock {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .lobby-dock-cta {
+    margin-left: 0;
+    width: 100%;
+    text-align: center;
+  }
+}
+
+@media (max-width: 48rem) {
+  .flow-content {
+    padding: 1rem 1rem 2rem;
+  }
+
+  .flow-topbar {
+    flex-wrap: wrap;
+  }
+
+  .flow-caption {
+    display: none;
+  }
+
+  /* The room takes the band left under the stacked column. The actions go
+     full width here, so the column is a little taller than on a tablet. */
+  :root {
+    --flow-frame-edge: 0.9rem;
+    --flow-frame-head: 27.5rem;
+    --flow-frame-foot: 0.9rem;
+  }
+
+  .welcome-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: min(22rem, 100%);
+  }
+
+  .welcome-actions .flow-btn {
+    justify-content: center;
+  }
+
+  .welcome-actions .flow-btn-ghost {
+    border-color: var(--border-strong);
+  }
+
+  .flow-form-actions {
+    flex-wrap: wrap;
+  }
+
+  .flow-form-actions .flow-btn {
+    flex-basis: 100%;
+  }
+}
+
+/* Reduced motion: the frame and the panels change without travelling, to
+   match the camera, which cuts straight to its next pose. */
+@media (prefers-reduced-motion: reduce) {
+  .flow-stage {
+    transition: none;
+  }
+
+  .welcome-lead,
+  .flow-card,
+  .flow-caption,
+  .flow-lobby {
+    animation-duration: 0.01ms;
+  }
+
+  .welcome[data-leaving] .welcome-lead {
+    transition: none;
   }
 }

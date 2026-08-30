@@ -31,10 +31,18 @@ export function CentralMeetingRoom({
   view,
   activeWorkspace,
   reducedMotion,
+  footing = "ground",
 }: {
   view: RoomVisualizationState;
   activeWorkspace: WorkspaceId;
   reducedMotion: boolean;
+  /**
+   * How the room meets what it stands on. `ground` is its own open ground,
+   * filling the frame. `surface` gives it no ground of its own: only the
+   * shadow it casts lands on whatever it is being presented on, so the
+   * welcome shot reads as a model resting on the page.
+   */
+  footing?: "ground" | "surface";
 }) {
   const { width: W, depth: D, wallHeight: H } = ROOM;
   const seats = meetingSeats(Math.max(view.participants.length, 1));
@@ -60,7 +68,7 @@ export function CentralMeetingRoom({
 
   return (
     <group>
-      <Floor width={W} depth={D} />
+      <Floor width={W} depth={D} footing={footing} />
       <GlassShell width={W} depth={D} height={H} />
 
       <MeetingTable radius={tableRadius(view.participants.length)} />
@@ -176,20 +184,45 @@ function boardHighlight(board: (typeof BOARDS)[keyof typeof BOARDS]) {
   };
 }
 
-function Floor({ width, depth }: { width: number; depth: number }) {
+function Floor({
+  width,
+  depth,
+  footing,
+}: {
+  width: number;
+  depth: number;
+  footing: "ground" | "surface";
+}) {
   return (
     <group>
-      <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[80, 80]} />
-        <meshStandardMaterial color={SURFACE.ground} roughness={0.98} />
+      {/* Reaches well past the camera's pull-back and fades into fog, so no
+          ground edge can swing into frame from the pre-meeting poses. Sits
+          low enough to clear the recessed dark rim below. Presented on a
+          surface it does not own, the same plane carries only the shadow, so
+          the room is grounded without painting a ground. */}
+      <mesh position={[0, -0.09, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[400, 400]} />
+        {footing === "ground" ? (
+          <meshStandardMaterial color={SURFACE.ground} roughness={0.98} />
+        ) : (
+          <shadowMaterial transparent opacity={0.13} color={SURFACE.frame} />
+        )}
       </mesh>
       <mesh position={[0, 0.08, 0]} castShadow receiveShadow>
         <boxGeometry args={[width, 0.16, depth]} />
         <meshStandardMaterial color={SURFACE.floor} roughness={0.95} />
       </mesh>
-      <mesh position={[0, 0.17, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      {/* Lifted clear of the floor slab with a polygon offset — coplanar, the
+          two faces z-fought and flashed white as the camera moved. */}
+      <mesh position={[0, 0.195, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[4.6, 48]} />
-        <meshStandardMaterial color={SURFACE.inlay} roughness={0.98} />
+        <meshStandardMaterial
+          color={SURFACE.inlay}
+          roughness={0.98}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
       </mesh>
     </group>
   );
@@ -261,7 +294,9 @@ function GlassShell({ width: W, depth: D, height: H }: { width: number; depth: n
         />
       </mesh>
 
-      {beam(W + 0.3, 0.2, D + 0.3, 0, 0.06, 0, "base")}
+      {/* A recessed rim, not a slab flush with the floor: coplanar tops
+          z-fought and flashed the floor white when the camera pulled back. */}
+      {beam(W + 0.3, 0.2, D + 0.3, 0, 0.04, 0, "base")}
       {beam(W + 0.3, 0.16, 0.2, 0, H + 0.24, -D / 2 - 0.05, "cap-back")}
       {beam(W + 0.3, 0.16, 0.2, 0, H + 0.24, D / 2 + 0.05, "cap-front")}
       {beam(0.2, 0.16, D + 0.3, -W / 2 - 0.05, H + 0.24, 0, "cap-left")}

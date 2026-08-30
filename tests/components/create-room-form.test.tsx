@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import Home from "@/app/page";
+import Home from "@/app/(flow)/page";
 import { CreateRoomForm } from "@/components/onboarding/create-room-form";
 import { clearCreatedRoomHandoff } from "@/components/onboarding/created-room-handoff";
 import type { RoomOnboardingClient } from "@/clients/room-onboarding-client";
@@ -127,18 +127,20 @@ describe("product entry", () => {
     });
 
     const links = [...container.querySelectorAll("a")];
-    expect(container.textContent).toContain("Agents negotiate. People decide.");
+    expect(container.textContent).toContain(
+      "Walk in with a question. Leave with a decision.",
+    );
     expect(
       links.some(
         (link) =>
-          link.textContent?.includes("Create decision room") &&
+          link.textContent?.includes("Create a meeting") &&
           link.getAttribute("href") === "/new",
       ),
     ).toBe(true);
     expect(
       links.some(
         (link) =>
-          link.textContent?.includes("Open demo") &&
+          /demo/i.test(link.textContent ?? "") &&
           link.getAttribute("href") === "/room/demo",
       ),
     ).toBe(true);

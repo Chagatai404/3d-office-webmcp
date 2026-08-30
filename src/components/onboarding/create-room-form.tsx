@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiRoomOnboardingClient } from "@/clients/api-room-onboarding-client";
 import type { RoomOnboardingClient } from "@/clients/room-onboarding-client";
@@ -9,7 +10,6 @@ import type {
   CreateRoomParticipantInput,
 } from "@/contracts/room";
 import { stageCreatedRoomForSetup } from "@/components/onboarding/created-room-handoff";
-import styles from "@/components/onboarding/onboarding.module.css";
 
 const DEFAULT_ROLES = [
   "Product Manager",
@@ -42,6 +42,11 @@ function createDefaultParticipants(): CreateRoomParticipantInput[] {
     role,
     requiredForApproval: false,
   }));
+}
+
+function initials(name: string, fallback: string): string {
+  const trimmed = name.trim();
+  return (trimmed ? trimmed.slice(0, 2) : fallback).toUpperCase();
 }
 
 function validate(
@@ -152,16 +157,20 @@ export function CreateRoomForm({ client: suppliedClient }: CreateRoomFormProps) 
   }
 
   return (
-    <form className={styles.createForm} onSubmit={handleSubmit} noValidate>
-      <fieldset className={styles.formSection} disabled={isBusy}>
-        <legend>
-          <span>Decision</span>
-          What needs to be decided?
-        </legend>
+    <form className="flow-card" onSubmit={handleSubmit} noValidate>
+      <h1 className="flow-card-title">Set the question this room decides.</h1>
+      <p className="flow-card-lede">
+        You take the first seat as organizer. Every other seat is claimed by
+        whoever opens its private link.
+      </p>
 
-        <label className={styles.field}>
+      <fieldset className="flow-fieldset" disabled={isBusy}>
+        <legend className="visually-hidden">The question</legend>
+
+        <label className="flow-field">
           <span>Decision title</span>
           <input
+            className="flow-input flow-input-title"
             name="title"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -171,165 +180,205 @@ export function CreateRoomForm({ client: suppliedClient }: CreateRoomFormProps) 
             autoComplete="off"
           />
           {errors.title ? (
-            <small id="title-error" className={styles.fieldError}>
+            <small id="title-error" className="flow-field-error">
               {errors.title}
             </small>
-          ) : null}
+          ) : (
+            <span className="flow-field-hint">
+              One question per room. If it splits in two, open a second room.
+            </span>
+          )}
         </label>
 
-        <label className={styles.field}>
-          <span>Brief</span>
+        <label className="flow-field">
+          <span>Short brief</span>
           <textarea
+            className="flow-textarea"
             name="brief"
             value={brief}
             onChange={(event) => setBrief(event.target.value)}
             placeholder="Give participants the context, constraints, and outcome you need."
-            rows={4}
+            rows={3}
             aria-invalid={Boolean(errors.brief)}
             aria-describedby={errors.brief ? "brief-error" : "brief-help"}
           />
           {errors.brief ? (
-            <small id="brief-error" className={styles.fieldError}>
+            <small id="brief-error" className="flow-field-error">
               {errors.brief}
             </small>
           ) : (
-            <small id="brief-help">Keep it focused; everyone will see this.</small>
+            <span id="brief-help" className="flow-field-hint">
+              Keep it focused; everyone will see this.
+            </span>
           )}
         </label>
       </fieldset>
 
-      <fieldset className={styles.formSection} disabled={isBusy}>
+      <fieldset className="flow-fieldset" disabled={isBusy}>
         <legend>
-          <span>Participants</span>
-          Who should shape the decision?
-        </legend>
-        <div className={styles.participantHeading}>
-          <p>Start with at least two perspectives.</p>
+          <span>Seats at the table</span>
           <span>{participants.length} seats</span>
-        </div>
+        </legend>
 
         {errors.participantCount ? (
-          <p className={styles.sectionError} role="alert">
+          <p className="flow-field-error" role="alert">
             {errors.participantCount}
           </p>
         ) : null}
 
-        <div className={styles.participantList}>
+        <div className="flow-seat-list">
           {participants.map((participant, index) => {
             const rowError = errors.participantRows?.[index];
             const isOrganizer = index === 0;
+            const seatName = isOrganizer
+              ? "your seat"
+              : `participant ${index + 1}`;
+
             return (
-              <div className={styles.participantRow} key={index}>
-                <div className={styles.participantRowHeader}>
-                  <div>
-                    <span className={styles.seatNumber} aria-hidden="true">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <strong>
-                      {isOrganizer ? "You / Organizer" : `Participant ${index + 1}`}
-                    </strong>
-                  </div>
+              <div
+                className={
+                  isOrganizer
+                    ? "flow-seat-row flow-seat-row-self"
+                    : "flow-seat-row"
+                }
+                key={index}
+              >
+                <span
+                  aria-hidden="true"
+                  className={
+                    isOrganizer
+                      ? "flow-seat-avatar flow-seat-avatar-self"
+                      : "flow-seat-avatar"
+                  }
+                >
+                  {initials(participant.name, isOrganizer ? "YOU" : `S${index + 1}`)}
+                </span>
+
+                <div className="flow-seat-fields">
+                  <input
+                    className="flow-input"
+                    name={`participant-${index}-name`}
+                    value={participant.name}
+                    onChange={(event) =>
+                      updateParticipant(index, { name: event.target.value })
+                    }
+                    placeholder={isOrganizer ? "Your name" : "Participant name"}
+                    aria-label={
+                      isOrganizer ? "Your name" : `Participant ${index + 1} name`
+                    }
+                    aria-invalid={Boolean(rowError)}
+                    autoComplete="off"
+                  />
+                  <select
+                    className="flow-select"
+                    name={`participant-${index}-role`}
+                    value={participant.role}
+                    onChange={(event) =>
+                      updateParticipant(index, { role: event.target.value })
+                    }
+                    aria-label={`Role for ${seatName}`}
+                  >
+                    {DEFAULT_ROLES.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                    {DEFAULT_ROLES.includes(
+                      participant.role as (typeof DEFAULT_ROLES)[number],
+                    ) ? null : (
+                      <option value={participant.role}>{participant.role}</option>
+                    )}
+                  </select>
+                </div>
+
+                <div className="flow-seat-meta">
+                  <span
+                    className={
+                      isOrganizer
+                        ? "flow-seat-sub flow-seat-self-sub"
+                        : "flow-seat-sub"
+                    }
+                  >
+                    {isOrganizer
+                      ? "You · Organizer"
+                      : "Open seat · claimed from the link"}
+                  </span>
+                  <label className="flow-seat-check">
+                    <input
+                      type="checkbox"
+                      name={`participant-${index}-required`}
+                      checked={participant.requiredForApproval}
+                      onChange={(event) =>
+                        updateParticipant(index, {
+                          requiredForApproval: event.target.checked,
+                        })
+                      }
+                    />
+                    <span>Required approver</span>
+                  </label>
                   <button
                     type="button"
-                    className={styles.removeButton}
+                    className="flow-seat-remove"
                     onClick={() => removeParticipant(index)}
-                    aria-label={`Remove ${isOrganizer ? "organizer seat" : `participant ${index + 1}`}`}
+                    aria-label={`Remove ${
+                      isOrganizer ? "organizer seat" : `participant ${index + 1}`
+                    }`}
                   >
                     Remove
                   </button>
                 </div>
 
-                {isOrganizer ? (
-                  <p className={styles.organizerNote}>
-                    Your signed-in session claims this first seat. No identity is
-                    sent from this form.
-                  </p>
-                ) : null}
-
-                <div className={styles.participantFields}>
-                  <label className={styles.field}>
-                    <span>Name</span>
-                    <input
-                      name={`participant-${index}-name`}
-                      value={participant.name}
-                      onChange={(event) =>
-                        updateParticipant(index, { name: event.target.value })
-                      }
-                      placeholder={isOrganizer ? "Your name" : "Participant name"}
-                      aria-invalid={Boolean(rowError)}
-                      autoComplete="off"
-                    />
-                  </label>
-                  <label className={styles.field}>
-                    <span>Role</span>
-                    <input
-                      name={`participant-${index}-role`}
-                      value={participant.role}
-                      onChange={(event) =>
-                        updateParticipant(index, { role: event.target.value })
-                      }
-                      placeholder="Role or perspective"
-                      aria-invalid={Boolean(rowError)}
-                      autoComplete="organization-title"
-                    />
-                  </label>
-                </div>
-
-                <label className={styles.checkboxField}>
-                  <input
-                    type="checkbox"
-                    name={`participant-${index}-required`}
-                    checked={participant.requiredForApproval}
-                    onChange={(event) =>
-                      updateParticipant(index, {
-                        requiredForApproval: event.target.checked,
-                      })
-                    }
-                  />
-                  <span>
-                    <strong>Required approver</strong>
-                    Their approval is needed before the decision can be final.
-                  </span>
-                </label>
                 {rowError ? (
-                  <small className={styles.fieldError}>{rowError}</small>
+                  <small className="flow-seat-error flow-field-error">{rowError}</small>
                 ) : null}
               </div>
             );
           })}
         </div>
 
-        <button type="button" className={styles.addButton} onClick={addParticipant}>
-          <span aria-hidden="true">+</span> Add participant
+        {participants[0] ? (
+          <p className="flow-note">
+            Your authenticated session claims the first seat. No identity is sent
+            from this form.
+          </p>
+        ) : null}
+
+        <button type="button" className="flow-add-seat" onClick={addParticipant}>
+          <span aria-hidden="true">+</span> Add a seat
         </button>
       </fieldset>
 
       {status === "failure" ? (
-        <div className={styles.failureNotice} role="alert">
+        <div className="flow-alert" role="alert">
           <strong>We couldn’t create the room.</strong>
           <span>Check your connection and try again. Your entries are still here.</span>
         </div>
       ) : null}
 
       {status === "validation-error" && !errors.participantCount ? (
-        <p className={styles.validationSummary} role="alert">
+        <p className="flow-alert" role="alert">
           Review the highlighted fields, then try again.
         </p>
       ) : null}
 
-      <div className={styles.formFooter}>
+      <div className="flow-form-actions">
+        <button type="submit" className="flow-btn flow-btn-primary" disabled={isBusy}>
+          {status === "submitting"
+            ? "Creating meeting…"
+            : status === "navigating"
+              ? "Opening the lobby…"
+              : "Create meeting"}
+        </button>
+        <Link className="flow-btn flow-btn-ghost" href="/">
+          Cancel
+        </Link>
+      </div>
+
+      <div className="flow-form-footer">
         <p>
           Invitations are generated securely after creation and are not saved in
           browser storage.
         </p>
-        <button type="submit" className={styles.submitButton} disabled={isBusy}>
-          {status === "submitting"
-            ? "Creating room…"
-            : status === "navigating"
-              ? "Opening setup…"
-              : "Create room"}
-          {!isBusy ? <span aria-hidden="true">→</span> : null}
-        </button>
       </div>
     </form>
   );

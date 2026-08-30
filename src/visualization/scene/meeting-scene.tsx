@@ -39,6 +39,11 @@ export function MeetingScene({
       />
       <CameraController request={request} reducedMotion={reducedMotion} onArrive={onArrive} />
 
+      {/* Linear fog fades the far ground into the page backdrop so no horizon
+          seam swings into frame when the camera pulls back to the pre-meeting
+          poses. `near` sits well beyond every workspace vantage point. */}
+      <fog attach="fog" args={["#ede9e0", 34, 96]} />
+
       <hemisphereLight args={["#ffffff", "#dfd8c9", 1.15]} />
       <directionalLight position={[9, 15, 11]} intensity={1.35} color="#fff7ea" castShadow />
       <directionalLight position={[-10, 7, -6]} intensity={0.32} color="#eaf1ff" />
@@ -49,7 +54,7 @@ export function MeetingScene({
         rotation={[-Math.PI / 2, 0, 0]}
         onClick={() => onSelect(null)}
       >
-        <planeGeometry args={[80, 80]} />
+        <planeGeometry args={[400, 400]} />
         <meshBasicMaterial visible={false} />
       </mesh>
 

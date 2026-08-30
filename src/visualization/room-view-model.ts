@@ -118,6 +118,51 @@ function ratio(numerator: number, denominator: number): number {
 }
 
 /**
+ * A neutral, empty projection for surfaces that render the room before any
+ * canonical `RoomState` exists — the pre-meeting flow's decorative 3D
+ * backdrop. It carries no real participants, boards, or activity: just enough
+ * seats for the table to read as a meeting room behind the onboarding panels.
+ */
+export function createPlaceholderVisualizationState(
+  options: { seatCount?: number; roomId?: string } = {},
+): RoomVisualizationState {
+  const seatCount = Math.max(0, options.seatCount ?? 4);
+
+  const participants: VisualParticipant[] = Array.from(
+    { length: seatCount },
+    (_unused, index) => ({
+      id: `placeholder-seat-${index}`,
+      name: `Seat ${index + 1}`,
+      role: "",
+      kind: "human",
+      isClaimed: false,
+      isSelf: false,
+      seatIndex: index,
+      requiredForApproval: false,
+      vote: null,
+      hasApprovedCurrentDecision: false,
+    }),
+  );
+
+  return {
+    roomId: options.roomId ?? "",
+    phase: "input",
+    version: 0,
+    participants,
+    constraints: [],
+    proposals: [],
+    activeProposal: null,
+    conflicts: [],
+    recentActivity: [],
+    consensus: {
+      voteProgress: 0,
+      approvalProgress: 0,
+      hasBlockingConflict: false,
+    },
+  };
+}
+
+/**
  * Pure projection for the 3D scene. It performs no I/O and owns no canonical
  * state or business decisions.
  */
