@@ -2,13 +2,13 @@ import { z } from "zod";
 import {
   addPositionInputSchema,
   approveFinalDecisionInputSchema,
-  castVoteInputSchema,
+  expressAlignmentInputSchema,
   type RoomPhase,
 } from "@/contracts/room";
 import {
   addParticipantPosition,
   approveParticipantFinalDecision,
-  castParticipantVote,
+  expressMyAlignment,
   proposeParticipantTradeoff,
   raiseParticipantObjection,
   submitParticipantProposal,
@@ -26,7 +26,7 @@ export const ROOM_TOOL_NAMES_BY_PHASE = {
     "propose_tradeoff",
     "raise_objection",
   ],
-  voting: ["cast_my_vote", "get_meeting_context", "get_open_issues"],
+  voting: ["express_my_alignment", "get_alignment", "get_meeting_context", "get_open_issues"],
   approval: [
     "approve_final_decision",
     "get_meeting_context",
@@ -45,7 +45,7 @@ export const PARTICIPANT_MUTATION_TOOL_NAMES: ReadonlySet<string> = new Set([
   "submit_proposal",
   "raise_objection",
   "propose_tradeoff",
-  "cast_my_vote",
+  "express_my_alignment",
   "approve_final_decision",
 ]);
 
@@ -193,7 +193,7 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext) {
             constraintCount: room.constraints.length,
             openIssueCount: room.conflicts.filter((conflict) => conflict.status === "open").length,
             tradeoffCount: room.tradeoffs.length,
-            voteCount: room.votes.length,
+            alignmentCount: room.alignments.length,
             approvalCount: room.finalDecisionPreview?.approvals.length ?? 0,
             missingApprovalCount:
               room.finalDecisionPreview?.missingApprovalParticipantIds.length ?? 0,
@@ -379,17 +379,17 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext) {
         );
       }),
     },
-    cast_my_vote: {
-      name: "cast_my_vote",
+    express_my_alignment: {
+      name: "express_my_alignment",
       description:
-        "Cast or update only the authenticated human participant's vote for the active candidate in the shared room state. A support vote is not final approval, and no argument can cast a vote for anyone else.",
+        "Share or update only the authenticated human participant's own alignment (support, concern, strong objection, or need for clarification) on the active candidate in the shared room state. Alignment informs the responsible decision authority; it never mechanically decides the outcome, and no argument can share alignment for anyone else.",
       inputSchema: {
         type: "object",
         properties: {
           proposalId: { type: "string", minLength: 1 },
           choice: {
             type: "string",
-            enum: ["support", "oppose", "abstain", "request_changes"],
+            enum: ["support", "concern", "strong_objection", "needs_clarification"],
           },
           comment: nullableString,
         },
@@ -398,8 +398,8 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext) {
       },
       annotations: { readOnlyHint: false, untrustedContentHint: true },
       execute: asClaimedParticipant(async (rawInput) => {
-        const input = castVoteInputSchema.parse(rawInput);
-        return castParticipantVote(
+        const input = expressAlignmentInputSchema.parse(rawInput);
+        return expressMyAlignment(
           context.repository,
           context.roomId,
           input,
@@ -407,10 +407,43 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext) {
         );
       }),
     },
+    get_alignment: {
+      name: "get_alignment",
+      description:
+        "Read every participant's current alignment on the active proposal from the shared room state: who supports it, who has concerns or strong objections, and who has not shared alignment yet. This is informative context for the responsible decision authority, not a vote tally, and it never determines the outcome by itself.",
+      inputSchema: noInputSchema,
+      annotations: { readOnlyHint: true, untrustedContentHint: true },
+      execute: () => safely(async () => {
+        const room = await context.getRoom();
+        const activeAlignments = room.alignments.filter(
+          (alignment) => alignment.proposalId === room.activeProposalId,
+        );
+        const byParticipantId = new Map(
+          activeAlignments.map((alignment) => [alignment.participantId, alignment]),
+        );
+        const activeHumans = room.participants.filter(
+          (participant) => participant.status === "active" && participant.kind === "human",
+        );
+        return readToolSuccess({
+          activeProposalId: room.activeProposalId,
+          alignment: activeHumans.map((participant) => {
+            const entry = byParticipantId.get(participant.id);
+            return {
+              participantId: participant.id,
+              name: participant.name,
+              role: participant.role,
+              choice: entry?.choice ?? null,
+              comment: entry?.comment ?? null,
+            };
+          }),
+          notSharedCount: activeHumans.filter((participant) => !byParticipantId.has(participant.id)).length,
+        }, room.version, "Alignment loaded.");
+      }),
+    },
     preview_final_decision: {
       name: "preview_final_decision",
       description:
-        "Read the exact approval candidate in the shared room state: stable decision hash, votes, dissent, warnings, completed approvals, and missing independent approvals. Voting is not approval.",
+        "Read the exact decision candidate in the shared room state: stable decision hash, alignment, dissent, warnings, completed approvals, and missing required approvals. Alignment is not approval.",
       inputSchema: noInputSchema,
       annotations: { readOnlyHint: true, untrustedContentHint: true },
       execute: () => safely(() => context.previewFinalDecision()),
@@ -441,7 +474,7 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext) {
     get_decision_record: {
       name: "get_decision_record",
       description:
-        "Read the immutable decision record persisted in the shared room state after finalization, including exact decision, votes, approvals, trade-offs, and provenance.",
+        "Read the immutable decision record persisted in the shared room state after finalization, including exact decision, alignment, approvals, trade-offs, and provenance.",
       inputSchema: noInputSchema,
       annotations: { readOnlyHint: true, untrustedContentHint: true },
       execute: () => safely(() => context.getDecisionRecord()),

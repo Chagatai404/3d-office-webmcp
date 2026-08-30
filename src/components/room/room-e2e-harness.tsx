@@ -132,8 +132,8 @@ export function RoomE2EHarness() {
       <section aria-label="Participant seats">
         {/* A removed participant's chair disappears from the live roster the
             same way it disappears from the 3D room; their historical rows
-            (positions, votes, activity) stay inspectable through the other
-            testids below regardless of status. */}
+            (positions, alignments, activity) stay inspectable through the
+            other testids below regardless of status. */}
         {room.participants.filter((participant) => participant.status === "active").map((participant) => (
           <article key={participant.id}>
             <strong>{participant.role}</strong>
@@ -177,11 +177,51 @@ export function RoomE2EHarness() {
                 >
                   Make owner
                 </button>
+                <button
+                  type="button"
+                  data-testid={`make-decision-maker-${participant.id}`}
+                  onClick={() => void run(actions.setParticipantDecisionRole({
+                    participantId: participant.id, decisionRole: "decision_maker",
+                  }))}
+                >
+                  Make decision maker
+                </button>
+                <button
+                  type="button"
+                  data-testid={`make-contributor-${participant.id}`}
+                  onClick={() => void run(actions.setParticipantDecisionRole({
+                    participantId: participant.id, decisionRole: "contributor",
+                  }))}
+                >
+                  Make contributor
+                </button>
               </>
             ) : null}
           </article>
         ))}
       </section>
+
+      {isOwner ? (
+        <section data-testid="decision-policy-controls">
+          <p data-testid="decision-policy">{room.decisionPolicy}</p>
+          <button
+            type="button"
+            data-testid="set-policy-owner-decides"
+            onClick={() => void run(actions.setDecisionPolicy({ decisionPolicy: "owner_decides" }))}
+          >
+            Responsible owner decides
+          </button>
+          <button
+            type="button"
+            data-testid="set-policy-consensus"
+            onClick={() => void run(actions.setDecisionPolicy({ decisionPolicy: "equal_authority_consensus" }))}
+          >
+            Equal decision-makers must agree
+          </button>
+        </section>
+      ) : (
+        <p data-testid="decision-policy">{room.decisionPolicy}</p>
+      )}
 
       {isOwner ? (
         <section data-testid="lock-controls">
@@ -376,8 +416,8 @@ export function RoomE2EHarness() {
         <ul data-testid="tradeoffs">
           {room.tradeoffs.map((tradeoff) => <li key={tradeoff.id}>{tradeoff.description}: {tradeoff.expectedEffect}</li>)}
         </ul>
-        <ul data-testid="votes">
-          {room.votes.map((vote) => <li key={`${vote.proposalId}:${vote.participantId}`}>{vote.participantId}: {vote.choice}</li>)}
+        <ul data-testid="alignments">
+          {room.alignments.map((alignment) => <li key={`${alignment.proposalId}:${alignment.participantId}`}>{alignment.participantId}: {alignment.choice}</li>)}
         </ul>
         <ul data-testid="approvals">
           {room.approvals.map((approval) => <li key={approval.participantId}>{approval.participantId}: {approval.decisionHash}</li>)}

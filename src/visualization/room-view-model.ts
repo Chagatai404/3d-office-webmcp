@@ -1,12 +1,12 @@
 import type {
   ActionOrigin,
   ActorType,
+  AlignmentChoice,
   DecisionRole,
   MeetingRole,
   ProposalStatus,
   RoomPhase,
   RoomState,
-  VoteChoice,
 } from "@/contracts/room";
 
 /**
@@ -31,7 +31,10 @@ export interface VisualParticipant {
   seatIndex: number;
   meetingRole: MeetingRole;
   decisionRole: DecisionRole;
-  vote: VoteChoice | null;
+  alignment: AlignmentChoice | null;
+  alignmentComment: string | null;
+  /** Whether this participant is currently a required approver under the room's decision policy. */
+  isRequiredApprover: boolean;
   hasApprovedCurrentDecision: boolean;
 }
 
@@ -81,8 +84,11 @@ export interface RoomVisualizationState {
   conflicts: VisualConflict[];
   recentActivity: VisualActivity[];
 
+  decisionPolicy: RoomState["decisionPolicy"];
+
   consensus: {
-    voteProgress: number;
+    /** Share of active humans who have shared alignment on the active proposal. Informative only — never decisive. */
+    alignmentProgress: number;
     approvalProgress: number;
     hasBlockingConflict: boolean;
   };
@@ -143,7 +149,9 @@ export function createPlaceholderVisualizationState(
       seatIndex: index,
       meetingRole: "participant",
       decisionRole: "contributor",
-      vote: null,
+      alignment: null,
+      alignmentComment: null,
+      isRequiredApprover: false,
       hasApprovedCurrentDecision: false,
     }),
   );
@@ -158,8 +166,9 @@ export function createPlaceholderVisualizationState(
     activeProposal: null,
     conflicts: [],
     recentActivity: [],
+    decisionPolicy: "owner_decides",
     consensus: {
-      voteProgress: 0,
+      alignmentProgress: 0,
       approvalProgress: 0,
       hasBlockingConflict: false,
     },
@@ -173,10 +182,10 @@ export function createPlaceholderVisualizationState(
 export function createRoomVisualizationState(
   room: RoomState,
 ): RoomVisualizationState {
-  const votesByParticipant = new Map(
-    room.votes
-      .filter((vote) => vote.proposalId === room.activeProposalId)
-      .map((vote) => [vote.participantId, vote.choice]),
+  const alignmentByParticipant = new Map(
+    room.alignments
+      .filter((alignment) => alignment.proposalId === room.activeProposalId)
+      .map((alignment) => [alignment.participantId, alignment]),
   );
 
   const decisionHash = currentDecisionHash(room);
@@ -184,6 +193,9 @@ export function createRoomVisualizationState(
     room.approvals
       .filter((approval) => approval.decisionHash === decisionHash)
       .map((approval) => approval.participantId),
+  );
+  const requiredApproverIds = new Set(
+    room.finalDecisionPreview?.requiredApprovalParticipantIds ?? [],
   );
 
   const participantNames = new Map(
@@ -193,7 +205,7 @@ export function createRoomVisualizationState(
   // Every *active* participant has a seat at the one shared table, in join
   // order. A removed participant's chair disappears from the room the same
   // way it disappears from the roster; their historical contributions remain
-  // reachable through activity/positions/votes, never through a live seat.
+  // reachable through activity/positions/alignments, never through a live seat.
   const participants: VisualParticipant[] = room.participants
     .filter((participant) => participant.status === "active")
     .map((participant, index) => ({
@@ -206,7 +218,9 @@ export function createRoomVisualizationState(
       seatIndex: index,
       meetingRole: participant.meetingRole,
       decisionRole: participant.decisionRole,
-      vote: votesByParticipant.get(participant.id) ?? null,
+      alignment: alignmentByParticipant.get(participant.id)?.choice ?? null,
+      alignmentComment: alignmentByParticipant.get(participant.id)?.comment ?? null,
+      isRequiredApprover: requiredApproverIds.has(participant.id),
       hasApprovedCurrentDecision: approvedParticipantIds.has(participant.id),
     }));
 
@@ -217,10 +231,8 @@ export function createRoomVisualizationState(
     isActive: proposal.id === room.activeProposalId,
   }));
 
-  // TODO(Slice 3+): replace legacy approval progress with policy-aware
-  // alignment/finalization progress.
   const requiredApprovers = participants.filter(
-    (participant) => participant.decisionRole === "decision_maker",
+    (participant) => participant.isRequiredApprover,
   );
 
   return {
@@ -259,9 +271,11 @@ export function createRoomVisualizationState(
         createdAt: event.createdAt,
       })),
 
+    decisionPolicy: room.decisionPolicy,
+
     consensus: {
-      voteProgress: room.activeProposalId
-        ? ratio(votesByParticipant.size, participants.length)
+      alignmentProgress: room.activeProposalId
+        ? ratio(alignmentByParticipant.size, participants.length)
         : 0,
       approvalProgress: ratio(
         requiredApprovers.filter(

@@ -1,6 +1,6 @@
 # Repository status
 
-Last updated: 2026-08-30 (Slice 3 / Gate 3).
+Last updated: 2026-08-30 (Slice 4 / Gate 4).
 
 ## Core platform
 
@@ -40,12 +40,8 @@ simulation fixtures and does not change production creation or admission
 behavior; `claim_participant_seat` remains demo-only in practice because a
 normal production room never has an unclaimed seat for it to find.
 
-The full voting/alignment/finalization rewrite is not part of Slice 1, 2, or
-3. Legacy decision functions temporarily retain the private database
-`required_for_approval` compatibility field; it is no longer a canonical DTO
-authority primitive. Co-host promotion, passcode regeneration, and
-invite-revocation UI remain explicitly out of scope and are deferred to a
-later slice.
+Co-host promotion, passcode regeneration, and invite-revocation UI remain
+explicitly out of scope and are deferred to a later slice.
 
 Slice 3 (Gate 3) adds the complete owner lifecycle on top of Slice 2's join
 model:
@@ -144,14 +140,55 @@ owner waiting-room controls live, and where Gate 3's per-participant
 (`src/components/shell/drawers/settings-drawer.tsx`) carries Gate 3's meeting
 lock status and owner-only toggle.
 
+## Alignment and policy-aware finalization (Slice 4)
+
+Gate 4 replaces the universal-vote / strict-majority / `required_for_approval`
+finalization engine with the product's actual authority model -- "Agents
+deliberate. Humans intervene. Leaders decide." -- and is implemented and
+verified this pass:
+
+- `Vote` is removed from the canonical contract entirely (`VoteChoice`,
+  `CastVoteInput`, `RoomState.votes` no longer exist); `Alignment`
+  (`support | concern | strong_objection | needs_clarification`,
+  `RoomState.alignments`) replaces it as a purely informative,
+  never-mechanically-decisive signal, upserted per participant/proposal
+  through `expressMyAlignment`;
+- entering the Decision phase (internal enum value `approval`) is now
+  policy-neutral: only an active proposal and no unresolved blocking conflict
+  are required, for both `DecisionPolicy` values -- alignment completeness,
+  majority support, and a `request_changes`-equivalent response are no
+  longer gates;
+- required-approver authority (`FinalDecisionPreview.requiredApprovalParticipantIds`)
+  is computed fresh from the room's current `DecisionPolicy` every time a
+  candidate is built: exactly the current owner under `owner_decides`, or
+  every active human decision-maker under `equal_authority_consensus`; the
+  deprecated `required_for_approval` column is never read by this
+  computation or by approval/finalization;
+- two new owner-only mutations -- `setDecisionPolicy` and
+  `setParticipantDecisionRole` -- are deliberately UI-only (never exposed
+  through WebMCP), rejected once a candidate is frozen, and audited;
+- ownership transfer and participant removal both safely recompute an
+  already-frozen candidate's authority metadata and hash, so a stale
+  approval (bound to a hash from before the authority change) can never
+  finalize the recomputed candidate;
+- the deterministic solo-judge demo continues to work end to end, using
+  `demo_express_simulation_alignment` in place of the removed
+  `demo_cast_simulation_vote`, and still waits for the human judge's own
+  alignment before advancing into decision review;
+- the legacy `votes` table and `cast_participant_vote()` function remain in
+  the database for migration/history only; `cast_participant_vote`'s
+  `EXECUTE` grant was revoked from `authenticated`, so no browser or WebMCP
+  session can reach it any more.
+
+See `backend-integration.md`'s "Alignment and policy-aware finalization
+(Slice 4)" section for the full design, and the Slice 4 completion report for
+exact verification commands and results.
+
 ## Next implementation slice
 
-Gate 3 (meeting lock, participant removal, ownership transfer, live authority
-handoff, and the Join-camera UX fix) is implemented this pass; see
-`backend-integration.md` for the design and the Slice 3 completion report for
-verification detail. Slice 4 (decision-policy-aware alignment/finalization,
-replacing the legacy voting/approval engine; co-host promotion; the broader
-WebMCP owner-tool catalog) has not been started.
+Slice 5 (the broader goal-oriented WebMCP tool catalog, the Security Expert
+advisory actor, and the full `/room/demo` scenario redesign) has not been
+started.
 
 ## Verification note
 

@@ -20,8 +20,8 @@ export function HelpDrawer() {
           activity, agents, and settings.
         </li>
         <li>
-          <strong>Agents</strong> read, draft, and negotiate through WebMCP. Votes and approvals
-          need your own confirmation, every time.
+          <strong>Agents</strong> read, draft, and negotiate through WebMCP. Alignment and final
+          decisions need your own confirmation, every time.
         </li>
       </ol>
     </DrawerShell>

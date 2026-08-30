@@ -149,7 +149,7 @@ export function RoomStatusPanel() {
             />
             <PhaseAdvanceButton
               phase="voting"
-              label="Start voting"
+              label="Open Alignment"
               currentPhase={room.phase}
               pendingPhase={pendingPhase}
               reason={
@@ -157,13 +157,13 @@ export function RoomStatusPanel() {
                   ? null
                   : `${blockingConflicts.length} blocking objection${
                       blockingConflicts.length === 1 ? "" : "s"
-                    } must be resolved before voting.`
+                    } must be resolved before Alignment.`
               }
               onAdvance={handlePhaseAdvance}
             />
             <PhaseAdvanceButton
               phase="approval"
-              label="Start approval"
+              label="Review decision"
               currentPhase={room.phase}
               pendingPhase={pendingPhase}
               reason={approvalDisabledReason(room)}
@@ -298,29 +298,24 @@ function proposalsDisabledReason(
   return null;
 }
 
+/**
+ * Entering Decision review (internal phase: `approval`) is policy-neutral
+ * and does not require complete Alignment: only a structural, always-true
+ * precondition remains — an active proposal, and no unresolved blocking
+ * conflict. Alignment may be incomplete; the owner (or, under consensus,
+ * each decision-maker) is warned but not blocked by missing alignment.
+ */
 function approvalDisabledReason(room: {
   activeProposalId: string | null;
-  participants: readonly Participant[];
-  votes: readonly { participantId: string; proposalId: string }[];
+  conflicts: readonly { status: string; severity: string }[];
 }): string | null {
   if (!room.activeProposalId) return "An active proposal is required first.";
 
-  const missingVotes = room.participants.filter(
-    (participant) =>
-      participant.kind === "human" &&
-      // TODO(Slice 3+): make phase readiness policy-aware with Alignment.
-      participant.decisionRole === "decision_maker" &&
-      !room.votes.some(
-        (vote) =>
-          vote.participantId === participant.id &&
-          vote.proposalId === room.activeProposalId,
-      ),
-  );
-
-  if (missingVotes.length > 0) {
-    return `${missingVotes.length} required participant${
-      missingVotes.length === 1 ? "" : "s"
-    } still must vote.`;
+  const blocking = room.conflicts.filter(
+    (conflict) => conflict.status === "open" && conflict.severity === "blocking",
+  ).length;
+  if (blocking > 0) {
+    return `${blocking} blocking objection${blocking === 1 ? "" : "s"} must be resolved before decision review.`;
   }
 
   return null;

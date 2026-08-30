@@ -57,7 +57,7 @@ export default function Home() {
           </h1>
           <p className="welcome-lede">
             A room where every seat holds one person — and, if they want, their
-            own agent. Constraints, objections, votes and approvals all happen
+            own agent. Constraints, objections, alignment and decisions all happen
             in the same place, in the open.
           </p>
 
@@ -85,7 +85,7 @@ export default function Home() {
         <p className="flow-agent-note welcome-note">
           <span aria-hidden="true" className="flow-agent-note-dot" />
           Bring your own agent — it reads, drafts and negotiates from your seat.
-          It never votes for you.
+          It never decides for you.
         </p>
       </div>
     </main>

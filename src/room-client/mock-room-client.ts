@@ -19,6 +19,8 @@ import {
   type RoomClient,
   type RoomPhase,
   type RoomState,
+  type SetDecisionPolicyInput,
+  type SetParticipantDecisionRoleInput,
   type StartDemoScenarioInput,
   type TransferOwnershipInput,
 } from "@/contracts/room";
@@ -279,8 +281,8 @@ export class MockRoomClient implements RoomClient {
     );
   }
 
-  async castMyVote(roomId: string): Promise<ActionResult> {
-    return this.#notInThisMilestone(roomId, "voting", "Voting");
+  async expressMyAlignment(roomId: string): Promise<ActionResult> {
+    return this.#notInThisMilestone(roomId, "voting", "Sharing alignment");
   }
 
   async previewFinalDecision(
@@ -391,6 +393,19 @@ export class MockRoomClient implements RoomClient {
   transferOwnership(roomId: string, input: TransferOwnershipInput): Promise<ActionResult> {
     void input;
     return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Transferring ownership"));
+  }
+
+  setDecisionPolicy(roomId: string, input: SetDecisionPolicyInput): Promise<ActionResult> {
+    void input;
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Changing the decision policy"));
+  }
+
+  setParticipantDecisionRole(
+    roomId: string,
+    input: SetParticipantDecisionRoleInput,
+  ): Promise<ActionResult> {
+    void input;
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Changing decision authority"));
   }
 
   #snapshot(): RoomState {

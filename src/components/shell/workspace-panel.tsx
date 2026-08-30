@@ -1,11 +1,11 @@
 "use client";
 
+import { AlignmentWorkspace } from "@/components/room/alignment-workspace";
 import { DecisionWorkspace } from "@/components/room/decision-workspace";
 import { IssuesWorkspace } from "@/components/room/issues-workspace";
 import { MeetingBrief } from "@/components/room/meeting-brief";
 import { PositionsPanel } from "@/components/room/positions-panel";
 import { ProposalsWorkspace } from "@/components/room/proposals-workspace";
-import { VoteWorkspace } from "@/components/room/vote-workspace";
 import { WhiteboardWorkspace } from "@/components/room/whiteboard-workspace";
 import { useShell } from "./shell-provider";
 
@@ -33,8 +33,8 @@ export function WorkspacePanel() {
         return <IssuesWorkspace />;
       case "whiteboard":
         return <WhiteboardWorkspace />;
-      case "vote":
-        return <VoteWorkspace />;
+      case "alignment":
+        return <AlignmentWorkspace />;
       case "decision":
         return <DecisionWorkspace />;
     }

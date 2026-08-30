@@ -1,4 +1,4 @@
-import { castParticipantVote } from "@/domain/rooms/operations";
+import { expressMyAlignment } from "@/domain/rooms/operations";
 import {
   actionResponse,
   authenticateRoomRequest,
@@ -16,6 +16,6 @@ export async function POST(
   if (!context) return invalidVersionResponse();
   const { roomId } = await params;
   return actionResponse(
-    await castParticipantVote(auth.repository, roomId, await request.json(), context),
+    await expressMyAlignment(auth.repository, roomId, await request.json(), context),
   );
 }

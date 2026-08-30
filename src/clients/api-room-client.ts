@@ -9,7 +9,7 @@ import {
   roomStateSchema,
   type ActionResult,
   type AddPositionInput,
-  type CastVoteInput,
+  type ExpressAlignmentInput,
   type ClaimSeatInput,
   type DecisionRecord,
   type FinalDecisionPreview,
@@ -22,6 +22,8 @@ import {
   type RoomClient,
   type RoomPhase,
   type RoomState,
+  type SetDecisionPolicyInput,
+  type SetParticipantDecisionRoleInput,
   type StartDemoScenarioInput,
   type SubmitProposalInput,
   type TransferOwnershipInput,
@@ -96,8 +98,8 @@ export class ApiRoomClient implements RoomClient {
     return this.mutate(roomId, "tradeoffs", input);
   }
 
-  castMyVote(roomId: string, input: CastVoteInput): Promise<ActionResult> {
-    return this.mutate(roomId, "votes", input);
+  expressMyAlignment(roomId: string, input: ExpressAlignmentInput): Promise<ActionResult> {
+    return this.mutate(roomId, "alignments", input);
   }
 
   previewFinalDecision(roomId: string): Promise<ActionResult<FinalDecisionPreview>> {
@@ -183,6 +185,17 @@ export class ApiRoomClient implements RoomClient {
 
   transferOwnership(roomId: string, input: TransferOwnershipInput): Promise<ActionResult> {
     return this.mutate(roomId, "ownership", input);
+  }
+
+  setDecisionPolicy(roomId: string, input: SetDecisionPolicyInput): Promise<ActionResult> {
+    return this.mutate(roomId, "decision-policy", input);
+  }
+
+  setParticipantDecisionRole(
+    roomId: string,
+    input: SetParticipantDecisionRoleInput,
+  ): Promise<ActionResult> {
+    return this.mutate(roomId, "decision-role", input);
   }
 
   private async ensureAnonymousSession(): Promise<string> {

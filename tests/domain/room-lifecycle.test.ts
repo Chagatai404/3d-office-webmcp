@@ -4,7 +4,7 @@ import {
   addParticipantPosition,
   advanceDemoRoomPhase,
   advanceRoomPhase,
-  castParticipantVote,
+  expressMyAlignment,
   createRoom,
   getMeetingContext,
   markMyInputReady,
@@ -135,7 +135,7 @@ describe.sequential("owner-only lifecycle compatibility", () => {
       .toBe(true);
 
     room = await snapshot(owner, roomId);
-    expect((await castParticipantVote(
+    expect((await expressMyAlignment(
       owner.repository,
       roomId,
       { proposalId, choice: "support", comment: null },

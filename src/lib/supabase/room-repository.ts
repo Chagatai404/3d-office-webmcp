@@ -9,7 +9,7 @@ import {
   type ActionResult,
   type AddPositionInput,
   type ApproveFinalDecisionInput,
-  type CastVoteInput,
+  type ExpressAlignmentInput,
   type ClaimSeatInput,
   type CreateRoomInput,
   type ManageJoinRequestInput,
@@ -20,6 +20,8 @@ import {
   type ResolveObjectionInput,
   type ProposeTradeoffInput,
   type RoomPhase,
+  type SetDecisionPolicyInput,
+  type SetParticipantDecisionRoleInput,
   type StartDemoScenarioInput,
   type SubmitProposalInput,
   type TransferOwnershipInput,
@@ -191,8 +193,8 @@ export class SupabaseRoomRepository implements RoomRepository {
     });
   }
 
-  castVote(roomId: string, input: CastVoteInput, context: MutationContext) {
-    return this.call("cast_participant_vote", {
+  expressAlignment(roomId: string, input: ExpressAlignmentInput, context: MutationContext) {
+    return this.call("express_my_alignment", {
       p_room_id: roomId,
       p_expected_version: context.expectedRoomVersion,
       p_proposal_id: input.proposalId,
@@ -293,6 +295,25 @@ export class SupabaseRoomRepository implements RoomRepository {
   transferOwnership(roomId: string, input: TransferOwnershipInput, context: MutationContext) {
     return this.call("transfer_ownership", {
       p_room_id: roomId, p_participant_id: input.participantId,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  setDecisionPolicy(roomId: string, input: SetDecisionPolicyInput, context: MutationContext) {
+    return this.call("set_decision_policy", {
+      p_room_id: roomId, p_decision_policy: input.decisionPolicy,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  setParticipantDecisionRole(
+    roomId: string,
+    input: SetParticipantDecisionRoleInput,
+    context: MutationContext,
+  ) {
+    return this.call("set_participant_decision_role", {
+      p_room_id: roomId, p_participant_id: input.participantId,
+      p_decision_role: input.decisionRole,
       p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
     });
   }

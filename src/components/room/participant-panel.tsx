@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { ActionResult } from "@/contracts/room";
+import type { ActionResult, AssignableDecisionRole } from "@/contracts/room";
 import { ActionFeedback } from "./action-feedback";
 import { useRoom } from "./room-provider";
-import { VOTE_CHOICE_LABEL } from "./room-labels";
+import { ALIGNMENT_CHOICE_LABEL } from "./room-labels";
 import type { VisualParticipant } from "@/visualization/room-view-model";
 
 type PendingAction =
@@ -42,6 +42,8 @@ export function ParticipantPanel() {
     (participant) => participant.kind === "human" && participant.status === "active" && !participant.isClaimed,
   ).length;
 
+  const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
+
   async function confirmPending() {
     if (!pending || busy) return;
     setBusy(true);
@@ -52,6 +54,14 @@ export function ParticipantPanel() {
     setBusy(false);
     setResult(outcome);
     if (outcome.ok) setPending(null);
+  }
+
+  async function changeDecisionRole(participantId: string, decisionRole: AssignableDecisionRole) {
+    if (roleBusyId) return;
+    setRoleBusyId(participantId);
+    const outcome = await actions.setParticipantDecisionRole({ participantId, decisionRole });
+    setRoleBusyId(null);
+    setResult(outcome);
   }
 
   return (
@@ -94,7 +104,24 @@ export function ParticipantPanel() {
                 ) : (
                   <span className="tag">Human</span>
                 )}
-                {participant.decisionRole === "decision_maker" ? (
+                {canManage ? (
+                  <label className="decision-role-select">
+                    Decision authority
+                    <select
+                      value={participant.decisionRole === "decision_maker" ? "decision_maker" : "contributor"}
+                      disabled={roleBusyId === participant.id}
+                      onChange={(event) =>
+                        void changeDecisionRole(
+                          participant.id,
+                          event.target.value as AssignableDecisionRole,
+                        )
+                      }
+                    >
+                      <option value="decision_maker">Decision maker</option>
+                      <option value="contributor">Contributor</option>
+                    </select>
+                  </label>
+                ) : participant.decisionRole === "decision_maker" ? (
                   <span className="tag">Decision maker</span>
                 ) : (
                   <span className="tag tag-muted">{participant.decisionRole}</span>
@@ -107,19 +134,21 @@ export function ParticipantPanel() {
                   <dd>{constraintCounts.get(participant.id) ?? 0}</dd>
                 </div>
                 <div>
-                  <dt>Vote</dt>
+                  <dt>Alignment</dt>
                   <dd>
-                    {participant.vote
-                      ? VOTE_CHOICE_LABEL[participant.vote]
-                      : "Not cast"}
+                    {participant.alignment
+                      ? ALIGNMENT_CHOICE_LABEL[participant.alignment]
+                      : "Not shared yet"}
                   </dd>
                 </div>
                 <div>
                   <dt>Approval</dt>
                   <dd>
-                    {participant.hasApprovedCurrentDecision
-                      ? "Approved"
-                      : "Not approved"}
+                    {!participant.isRequiredApprover
+                      ? "Not required"
+                      : participant.hasApprovedCurrentDecision
+                        ? "Approved"
+                        : "Not approved"}
                   </dd>
                 </div>
               </dl>

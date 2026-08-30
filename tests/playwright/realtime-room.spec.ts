@@ -178,45 +178,46 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   await engineer.getByTestId("advance-phase").click();
   await expect(designer.getByTestId("room-phase")).toHaveText("voting");
   await expect.poll(() => toolNames(engineer)).toEqual([
-    "cast_my_vote",
+    "express_my_alignment",
+    "get_alignment",
     "get_meeting_context",
     "get_open_issues",
   ]);
 
   const votingContext = JSON.parse(String(await executeTool(engineer, "get_meeting_context", {})));
   const activeProposalId = votingContext.data.activeProposal.id;
-  const impersonatedVote = JSON.parse(String(await executeTool(engineer, "cast_my_vote", {
+  const impersonatedAlignment = JSON.parse(String(await executeTool(engineer, "express_my_alignment", {
     proposalId: activeProposalId,
-    choice: "oppose",
+    choice: "concern",
     comment: null,
     participantId: "demo-designer",
   })));
-  expect(impersonatedVote).toMatchObject({
+  expect(impersonatedAlignment).toMatchObject({
     ok: false,
     error: { code: "VALIDATION_ERROR" },
     roomVersion: 10,
   });
 
-  const engineerVote = JSON.parse(String(await executeTool(engineer, "cast_my_vote", {
+  const engineerAlignment = JSON.parse(String(await executeTool(engineer, "express_my_alignment", {
     proposalId: activeProposalId,
     choice: "support",
     comment: "Feasible within the two-week capacity.",
   })));
-  expect(engineerVote).toMatchObject({ ok: true, roomVersion: 11 });
-  await expect(designer.getByTestId("votes")).toContainText("demo-engineer: support");
-  await expect(designer.getByTestId("votes").locator("li")).toHaveCount(1);
+  expect(engineerAlignment).toMatchObject({ ok: true, roomVersion: 11 });
+  await expect(designer.getByTestId("alignments")).toContainText("demo-engineer: support");
+  await expect(designer.getByTestId("alignments").locator("li")).toHaveCount(1);
   await expect(designer.getByTestId("approvals")).toBeEmpty();
-  await expect(designer.getByTestId("activity")).toContainText("vote.cast · webmcp · v11");
+  await expect(designer.getByTestId("activity")).toContainText("alignment.expressed · webmcp · v11");
 
   // The same refusal without WebMCP: the manual HTTP path is no weaker.
-  const impersonatedHttpVote = await engineer.evaluate(async ({ proposalId }) => {
+  const impersonatedHttpAlignment = await engineer.evaluate(async ({ proposalId }) => {
     const storedSession = Object.values(localStorage)
       .map((value) => {
         try { return JSON.parse(value) as { access_token?: string }; } catch { return null; }
       })
       .find((value) => value?.access_token);
     if (!storedSession?.access_token) throw new Error("Supabase session not found.");
-    const response = await fetch("/api/rooms/demo/votes", {
+    const response = await fetch("/api/rooms/demo/alignments", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${storedSession.access_token}`,
@@ -225,27 +226,27 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
       },
       body: JSON.stringify({
         proposalId,
-        choice: "oppose",
+        choice: "concern",
         comment: null,
         participantId: "demo-designer",
       }),
     });
     return response.json();
   }, { proposalId: activeProposalId });
-  expect(impersonatedHttpVote).toMatchObject({
+  expect(impersonatedHttpAlignment).toMatchObject({
     ok: false,
     error: { code: "VALIDATION_ERROR" },
     roomVersion: 11,
   });
-  await expect(designer.getByTestId("votes").locator("li")).toHaveCount(1);
+  await expect(designer.getByTestId("alignments").locator("li")).toHaveCount(1);
 
-  const designerVote = JSON.parse(String(await executeTool(designer, "cast_my_vote", {
+  const designerAlignment = JSON.parse(String(await executeTool(designer, "express_my_alignment", {
     proposalId: activeProposalId,
     choice: "support",
     comment: "The revised focus order is acceptable.",
   })));
-  expect(designerVote).toMatchObject({ ok: true, roomVersion: 12 });
-  await expect(engineer.getByTestId("votes")).toContainText("demo-designer: support");
+  expect(designerAlignment).toMatchObject({ ok: true, roomVersion: 12 });
+  await expect(engineer.getByTestId("alignments")).toContainText("demo-designer: support");
 
   await engineer.getByTestId("advance-phase").click();
   await expect(designer.getByTestId("room-phase")).toHaveText("approval");
@@ -316,14 +317,14 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
       })
       .find((value) => value?.access_token);
     if (!storedSession?.access_token) throw new Error("Supabase session not found.");
-    const response = await fetch("/api/rooms/demo/votes", {
+    const response = await fetch("/api/rooms/demo/alignments", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${storedSession.access_token}`,
         "Content-Type": "application/json",
         "If-Match": "15",
       },
-      body: JSON.stringify({ proposalId, choice: "oppose", comment: "Too late" }),
+      body: JSON.stringify({ proposalId, choice: "concern", comment: "Too late" }),
     });
     return response.json();
   }, { proposalId: activeProposalId });
@@ -420,22 +421,23 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   })));
   expect(tradeoff).toMatchObject({ ok: true, roomVersion: 17 });
   await expect(page.getByTestId("room-phase")).toHaveText("voting");
-  await expect(page.getByTestId("votes").locator("li")).toHaveCount(3);
+  await expect(page.getByTestId("alignments").locator("li")).toHaveCount(3);
   await expect(page.getByTestId("activity")).toContainText("conflict.resolved · simulation");
   await expect.poll(() => toolNames(page)).toEqual([
-    "cast_my_vote",
+    "express_my_alignment",
+    "get_alignment",
     "get_meeting_context",
     "get_open_issues",
   ]);
 
   const votingContext = JSON.parse(String(await executeTool(page, "get_meeting_context", {})));
   const activeProposalId = votingContext.data.activeProposal.id;
-  const vote = JSON.parse(String(await executeTool(page, "cast_my_vote", {
+  const alignment = JSON.parse(String(await executeTool(page, "express_my_alignment", {
     proposalId: activeProposalId,
     choice: "support",
     comment: "Ready for exact human review.",
   })));
-  expect(vote).toMatchObject({ ok: true, roomVersion: 19 });
+  expect(alignment).toMatchObject({ ok: true, roomVersion: 19 });
   await expect(page.getByTestId("room-phase")).toHaveText("approval");
   await expect(page.getByTestId("approvals")).toBeEmpty();
   await expect.poll(() => toolNames(page)).toEqual([
@@ -476,14 +478,14 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   )).toBe(true);
   expect(record.data.provenance.filter(
     (event: { origin: string; action: string }) =>
-      event.origin === "simulation" && event.action === "vote.cast",
+      event.origin === "simulation" && event.action === "alignment.expressed",
   )).toHaveLength(3);
 
   await page.getByTestId("start-solo-demo").click();
   await expect(page.getByTestId("room-phase")).toHaveText("input");
   await expect(page.getByTestId("room-version")).toHaveText("3");
   await expect(page.getByTestId("conflicts")).toBeEmpty();
-  await expect(page.getByTestId("votes")).toBeEmpty();
+  await expect(page.getByTestId("alignments")).toBeEmpty();
 
   // The replay releases the seat, so the write tools leave with it until the
   // judge claims again.

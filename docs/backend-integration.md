@@ -9,7 +9,7 @@ is used to derive `selfParticipantId` and `isClaimed`, then discarded.
 The browser implementation is `ApiRoomClient` in
 `src/clients/api-room-client.ts`. It implements the canonical `RoomClient`
 interface. The implemented flow covers room loading, legacy demo seat claiming,
-position and constraint creation, proposal submission, deliberation, voting,
+position and constraint creation, proposal submission, deliberation, alignment,
 exact-decision preview, human approval, finalization, owner-side join-request
 admission, and snapshot subscriptions.
 
@@ -183,26 +183,18 @@ Readiness and production phase progression are regular room mutations. A
 claimed human can call `mark_my_input_ready` only during `input`, only for their
 own seat, and only after publishing a position. The owner-only
 `advance_room_phase` route moves through `input → proposals → deliberation →
-voting → approval`, enforcing joined/position/ready prerequisites, an active
-proposal, no unresolved blocking conflict, and the shared voting rules.
+voting → approval`, enforcing joined/position/ready prerequisites before
+`proposals`, and, since Slice 4, only an active proposal plus no unresolved
+blocking conflict before `approval` -- see "Alignment and policy-aware
+finalization" below for what changed and why. Demo and production phase
+functions share that entry logic through `apply_room_phase_entry`.
 
-Participant votes are upserted by participant and proposal. Only the required
-human participants count toward approval readiness. Entering approval requires
-one active proposal, no open blocking conflict, a vote from every required
-participant, no `request_changes` vote, and a strict majority of required
-participants supporting the proposal. Demo and production phase functions share
-that decision logic.
-
-This voting/approval engine is intentionally retained compatibility code. It
-still reads the private `participants.required_for_approval` column and does not
-yet implement either canonical `decisionPolicy`. `requiredForApproval` is no
-longer present in `RoomState`; policy-aware Alignment and finalization are
-deferred to a later slice rather than simulated here.
-
-The approval candidate is stored as canonical JSON and hashed with SHA-256.
-Approvals are participant-scoped and bound to that exact hash. A changed hash
-returns `DECISION_CHANGED`; the final required approval atomically stores the
-last approval, immutable decision record, final audit event, and finalized room
+Participant alignment is upserted by participant and proposal (see below);
+it is informative, and by itself never gates a phase transition. The approval
+candidate is stored as canonical JSON and hashed with SHA-256. Approvals are
+participant-scoped and bound to that exact hash. A changed hash returns
+`DECISION_CHANGED`; the final required approval atomically stores the last
+approval, immutable decision record, final audit event, and finalized room
 state.
 
 ## Owner lifecycle: meeting lock, participant removal, ownership transfer (Slice 3)
@@ -236,7 +228,7 @@ never discloses anything about a room a caller has no other route to.
 `removed`, default `active`) and `participants.removed_at` are new columns,
 backfilled to `active` for every pre-existing row by the column default
 itself. A participant row is *never deleted*: positions, constraints,
-proposals, conflicts, tradeoffs, votes, approvals, and audit events all keep
+proposals, conflicts, tradeoffs, alignments, approvals, and audit events all keep
 referencing a valid, stable participant id regardless of status, which is
 exactly how removal preserves history while still fully revoking authority.
 
@@ -250,7 +242,7 @@ request comes from a manual refetch or a realtime-triggered one. Every
 participant-authority-deriving mutation function (`add_participant_position`,
 `submit_participant_proposal`, `raise_participant_objection`,
 `resolve_participant_objection`, `propose_participant_tradeoff`,
-`cast_participant_vote`, `mark_my_input_ready`,
+`express_my_alignment`, `mark_my_input_ready`,
 `approve_participant_final_decision`) and `is_room_organizer` (and therefore
 `advance_room_phase`, `list_join_requests`, `resolve_join_request`) were
 redefined the same way: the `user_id = auth.uid()` lookup they already
@@ -357,8 +349,159 @@ lock state to everyone and a `Lock meeting` / `Unlock meeting` toggle to the
 owner only. The 3D visualization projection (`createRoomVisualizationState`)
 now filters to `status === "active"` participants, so a removed participant's
 chair disappears from both the drawer roster and the 3D room the same way;
-their historical positions, votes, and activity stay reachable through the
+their historical positions, alignments, and activity stay reachable through the
 canonical `RoomState` regardless of status.
+
+## Alignment and policy-aware finalization (Slice 4)
+
+**Alignment replaces Vote as the canonical decision-informing signal.**
+`Vote` (`support | oppose | abstain | request_changes`, universal strict
+majority, "every required participant must vote before approval") is gone
+from the canonical contract entirely: there is no `Vote`, `VoteChoice`,
+`CastVoteInput`, or `RoomState.votes` in `src/contracts/room.ts` any more.
+`Alignment` (`support | concern | strong_objection | needs_clarification`,
+`RoomState.alignments`) takes its place, upserted per
+`(proposalId, participantId)` in the new `public.alignments` table exactly
+the way `votes` was, through `expressMyAlignment` /
+`POST /api/rooms/:roomId/alignments`. The product distinction is not
+cosmetic: alignment is informative context for the room's decision authority,
+never a mechanically decisive input. Nothing in this slice computes a
+majority, a quorum, or a "winner" from alignment choices.
+
+**`DecisionPolicy` determines who decides, not the room.** `owner_decides`
+(the default) and `equal_authority_consensus` are the two supported values,
+stored on `rooms.decision_policy` since Gate 1 and now actually consulted by
+finalization. Required-approver authority is computed fresh, every time,
+inside `build_final_decision_candidate()` and embedded directly into the
+frozen candidate as `requiredApprovalParticipantIds`:
+
+- `owner_decides` -> exactly the current `rooms.owner_participant_id`, and
+  only if that participant is `status = 'active'` and has an authenticated
+  session (`user_id is not null`).
+- `equal_authority_consensus` -> every participant in the room where
+  `kind = 'human'`, `status = 'active'`, `decision_role = 'decision_maker'`,
+  and `user_id is not null`.
+
+The `user_id is not null` guard exists so an *unclaimed* predetermined seat
+(the legacy multi-user demo fixture's join model) can never become an
+unsatisfiable required approver; every normal production room's
+decision-makers are always claimed by construction, so the guard is inert
+there. The deprecated, private `participants.required_for_approval` column
+is never read by this computation, by `approve_participant_final_decision`,
+or by `build_final_decision_preview` -- normal finalization does not depend
+on it at all any more.
+
+**Entering Alignment and Decision review is policy-neutral.** The shared
+`apply_room_phase_entry()` function (used by both `advance_room_phase` and
+the demo's `demo_advance_solo_phase`) no longer requires every participant to
+have voted, a strict majority of support, or the absence of a
+`request_changes`-equivalent response before entering the Decision phase
+(internal enum value: `approval`). The only remaining precondition, for
+*either* `DecisionPolicy`, is structural: an active proposal must exist, and
+no unresolved blocking conflict may exist. The owner may open decision review
+with alignment completely unshared; the UI warns ("N participants have not
+shared alignment") but never blocks. A genuinely unresolved blocking domain
+conflict is the one thing that still prevents freezing a candidate --
+`AlignmentChoice.strong_objection` itself is explicitly *not* equivalent to a
+blocking conflict and never gates anything by itself.
+
+**Dissent is derived deterministically, never generated.**
+`build_final_decision_candidate()`'s `dissent` array is built entirely from
+SQL: every `concern` / `strong_objection` alignment on the active proposal
+(scoped to currently-active participants only) becomes one line, followed by
+one line per unresolved warning-severity conflict, each ordered
+deterministically so the candidate hash stays reproducible. No model-authored
+prose ever enters the hashed candidate.
+
+**Approval now means what the word says.** `approve_participant_final_decision`
+requires the caller's own participant id to appear in the frozen candidate's
+`requiredApprovalParticipantIds` -- nothing else. It is not "every
+participant must approve"; under `owner_decides` a single confirmation from
+the owner finalizes the room outright (there is exactly one required
+approver), and under `equal_authority_consensus` finalization waits for every
+currently-required decision-maker's own separate confirmation, exactly the
+same `HUMAN_CONFIRMATION_REQUIRED` -> re-call-with-`humanConfirmed`
+two-step every approval already used. A contributor's alignment, however
+enthusiastic, never counts.
+
+**Exact-hash invalidation is preserved and extended.** Freezing a candidate
+(entering `approval`) always clears any previously collected approvals, since
+a new candidate voids old approvals by construction. Two existing Slice 3
+operations now also recompute the frozen candidate when authority-relevant
+state changes while frozen:
+
+- `remove_participant` already recomputed the candidate when removing a
+  participant while a candidate was frozen (kept from Slice 3); it now
+  additionally and correctly drops the removed participant from
+  `requiredApprovalParticipantIds` and the embedded `alignments`, because both
+  are computed from `build_final_decision_candidate()`'s live, policy-aware
+  query rather than a static column.
+- `transfer_ownership` now performs the equivalent recompute whenever a
+  candidate is already frozen at transfer time, regardless of policy: the new
+  hash reflects the new owner (relevant under `owner_decides`) and clears
+  every previous approval, so the old owner's prior confirmation -- and any
+  confirmation bound to the pre-transfer hash -- can never finalize the
+  post-transfer candidate. The old owner's next approval attempt fails with
+  `DECISION_CHANGED` if it still carries the stale hash, or `NOT_AUTHORIZED`
+  if it carries the fresh one (since they are no longer the required
+  approver). This is exercised end-to-end in
+  `tests/domain/alignment-and-decision.test.ts`.
+
+Two new owner-only mutations, deliberately **not** exposed through WebMCP
+(no tool schema may carry authority, and these two are pure authority
+configuration, not participant content):
+
+- `setDecisionPolicy` / `POST /api/rooms/:roomId/decision-policy` changes
+  `rooms.decision_policy`. Rejected once a candidate is frozen
+  (`decision_hash is not null`) -- return to Alignment first, rather than
+  trying to safely recompute a changed policy and a changed candidate at
+  once. Idempotent (setting the current value is a no-op success); every real
+  change is audited as `decision_policy.changed`.
+- `setParticipantDecisionRole` / `POST /api/rooms/:roomId/decision-role`
+  promotes/demotes an active human participant between `decision_maker` and
+  `contributor` only -- `advisor` is never assignable through this action, so
+  a simulation or (future) expert can never be promoted into human decision
+  authority. The current owner can never cease being a decision-maker
+  (`owner_decides` relies on them being the sole required approver;
+  `equal_authority_consensus` relies on them remaining a decision-maker so
+  consensus always has at least one required approver). Also rejected once a
+  candidate is frozen, for the same reason `setDecisionPolicy` is. Audited as
+  `participant.decision_role_changed`.
+
+**Active-participant filtering is uniform.** Every alignment-and-decision
+computation -- the embedded `alignments` array, the derived `dissent`, and
+both `DecisionPolicy`'s `requiredApprovalParticipantIds` -- filters to
+`status = 'active'`, the same invariant Slice 3 established for reads and
+mutation authority generally. A removed participant's historical alignment
+row is never deleted (it remains reachable through
+`public.alignments` and the audit trail for provenance), but it is excluded
+from every *current* candidate the moment they are removed.
+
+**Simulation and expert authority.** There is no "expert" participant kind
+yet (Slice 5 scope), so "an expert cannot human-align" is enforced simply by
+there being no expert row a browser session could ever resolve to.
+Simulations can never call `express_my_alignment` at all -- the function
+resolves the acting participant from `auth.uid()` joined to `kind = 'human'`,
+and a simulation participant has no `user_id`, so no session can ever match
+it. Simulated alignment exists only through the internal, `authenticated`/`anon`-revoked
+`demo_express_simulation_alignment()`, called exclusively from
+`run_solo_demo_orchestration()`; there is no browser-reachable path to
+alignment "as" a simulation. The demo orchestrator's own voting-phase branch
+additionally waits for the human participant's own alignment before
+auto-advancing to decision review -- `apply_room_phase_entry` itself does
+not require this for a real, owner-driven room, but the deterministic demo
+should not decide for the judge either.
+
+**Legacy voting/approval artifacts retained for migration/history only.**
+The `votes` table, `vote_choice` enum, and `cast_participant_vote()` function
+still exist in the database; `cast_participant_vote`'s `EXECUTE` grant was
+revoked from `authenticated` in the Slice 4 migration, so no authenticated
+session can reach it any more (browser or WebMCP). Nothing in the canonical
+contract, domain layer, or UI reads or writes `votes` after this slice. The
+deprecated `participants.required_for_approval` column also still exists
+(dropping it is a materially riskier migration than this slice's scope calls
+for) but is not read by any normal-path finalization code; it is documented
+as deprecated in both the column comment and this file.
 
 ## HTTP adapter
 
@@ -371,6 +514,8 @@ canonical `RoomState` regardless of status.
 - `POST /api/rooms/:roomId/unlock` (owner-only)
 - `POST /api/rooms/:roomId/participants/remove` (owner-only)
 - `POST /api/rooms/:roomId/ownership` (owner-only)
+- `POST /api/rooms/:roomId/decision-policy` (owner-only)
+- `POST /api/rooms/:roomId/decision-role` (owner-only)
 - `GET /api/rooms/:roomId/join-requests` (owner-only)
 - `POST /api/rooms/:roomId/join-requests/admit` (owner-only)
 - `POST /api/rooms/:roomId/join-requests/reject` (owner-only)
@@ -378,7 +523,7 @@ canonical `RoomState` regardless of status.
 - `POST /api/rooms/:roomId/proposals`
 - `POST /api/rooms/:roomId/objections`
 - `POST /api/rooms/:roomId/resolve-objection`
-- `POST /api/rooms/:roomId/votes`
+- `POST /api/rooms/:roomId/alignments`
 - `GET /api/rooms/:roomId/final-decision`
 - `POST /api/rooms/:roomId/approval`
 - `GET /api/rooms/:roomId/decision-record`
@@ -416,8 +561,9 @@ participants are visibly marked as simulations. The reset is transactional and
 uses a narrowly scoped database trigger bypass so a finalized demo can be
 replayed without weakening the normal finalized-room guard.
 
-WebMCP exposes phase-scoped voting, preview, approval-request, and finalized
-record tools. `approve_final_decision` never records an approval directly: it
+WebMCP exposes phase-scoped alignment (`express_my_alignment`, `get_alignment`),
+preview, approval-request, and finalized record tools. `approve_final_decision`
+never records an approval directly: it
 returns `HUMAN_CONFIRMATION_REQUIRED`. The visible room UI displays the exact
 candidate and hash, requires an explicit confirmation checkbox, and then sends
 the approval through `ApiRoomClient`.
@@ -474,8 +620,8 @@ The demo rules are deterministic and intentionally scenario-specific:
 - ambitious proposals can produce engineering-capacity, accessibility, and
   campaign-deadline reactions;
 - a revision that explicitly reduces scope, preserves accessibility, and keeps
-  the launch date resolves applicable blockers and advances voting;
-- simulated participants cast deterministic votes, but never human approvals;
+  the launch date resolves applicable blockers and advances into Alignment;
+- simulated participants express deterministic alignment, but never human approvals;
 - only the selected human can approve the exact decision hash and finalize.
 
 An advisory transaction lock serializes orchestration for the room. A private

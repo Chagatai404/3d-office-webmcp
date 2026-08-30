@@ -156,7 +156,7 @@ describe("invitation preview contract", () => {
     "positions",
     "constraints",
     "proposals",
-    "votes",
+    "alignments",
     "approvals",
     "activity",
   ])("rejects %s leaking full room state into a preview", (field) => {

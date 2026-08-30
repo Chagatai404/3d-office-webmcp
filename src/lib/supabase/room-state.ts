@@ -35,7 +35,7 @@ export async function loadRoomState(
   if (!roomResult.data) return null;
   const room = roomRowSchema.parse(roomResult.data);
 
-  const [participants, positions, constraints, proposals, conflicts, tradeoffs, votes, approvals, activity] =
+  const [participants, positions, constraints, proposals, conflicts, tradeoffs, alignments, approvals, activity] =
     await Promise.all([
       client.from("participants").select("id,user_id,name,role,kind,meeting_role,decision_role,required_for_approval,ready_at,status,removed_at,created_at").eq("room_id", roomId).order("seat_order"),
       client.from("positions").select("id,participant_id,summary,category,priority,created_at").eq("room_id", roomId).order("created_at"),
@@ -43,7 +43,7 @@ export async function loadRoomState(
       client.from("proposals").select("id,participant_id,title,summary,rationale,expected_outcomes,referenced_constraint_ids,parent_proposal_id,status,created_at").eq("room_id", roomId).order("created_at"),
       client.from("conflicts").select("id,proposal_id,constraint_id,raised_by_actor_type,raised_by_actor_id,severity,reason,status,resolved_by_actor_type,resolved_by_actor_id,resolution_note,created_at,resolved_at").eq("room_id", roomId).order("created_at"),
       client.from("tradeoffs").select("id,conflict_ids,created_by_actor_type,created_by_actor_id,description,expected_effect,resulting_proposal_id,created_at").eq("room_id", roomId).order("created_at"),
-      client.from("votes").select("proposal_id,participant_id,choice,comment,updated_at").eq("room_id", roomId).order("updated_at"),
+      client.from("alignments").select("proposal_id,participant_id,choice,comment,updated_at").eq("room_id", roomId).order("updated_at"),
       client.from("approvals").select("participant_id,decision_hash,approved_at").eq("room_id", roomId).order("approved_at"),
       client.from("audit_events").select("id,actor_type,actor_id,origin,action,entity_type,entity_id,sanitized_input,result,previous_room_version,resulting_room_version,confirmation_required,created_at").eq("room_id", roomId).order("created_at"),
     ]);
@@ -57,10 +57,14 @@ export async function loadRoomState(
   const matchingApprovals = room.decision_hash
     ? approvalValues.filter((approval) => approval.decisionHash === room.decision_hash)
     : [];
-  const requiredApprovalParticipantIds = participantRows
-    .filter((participant) => participant.kind === "human" && participant.required_for_approval === true)
-    .map((participant) => participant.id as string)
-    .sort();
+  // Required approver authority is policy-aware (owner_decides vs.
+  // equal_authority_consensus) and is computed server-side into the frozen
+  // candidate itself; it is never re-derived here from the deprecated,
+  // private `required_for_approval` column.
+  const frozenCandidate = room.decision_candidate as Record<string, unknown> | null;
+  const requiredApprovalParticipantIds = (
+    (frozenCandidate?.requiredApprovalParticipantIds as string[] | undefined) ?? []
+  ).slice().sort();
   const finalDecisionPreview = room.decision_candidate && room.decision_hash
     ? finalDecisionPreviewSchema.parse({
         ...(room.decision_candidate as Record<string, unknown>),
@@ -140,7 +144,7 @@ export async function loadRoomState(
       description: row.description, expectedEffect: row.expected_effect,
       resultingProposalId: row.resulting_proposal_id, createdAt: row.created_at,
     })),
-    votes: (requireRows(votes) as Array<Record<string, unknown>>).map((row) => ({
+    alignments: (requireRows(alignments) as Array<Record<string, unknown>>).map((row) => ({
       proposalId: row.proposal_id, participantId: row.participant_id,
       choice: row.choice, comment: row.comment, updatedAt: row.updated_at,
     })),

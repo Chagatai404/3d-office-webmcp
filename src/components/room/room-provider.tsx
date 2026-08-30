@@ -13,9 +13,9 @@ import {
 import type {
   ActionResult,
   AddPositionInput,
-  CastVoteInput,
   ClaimSeatInput,
   DecisionRecord,
+  ExpressAlignmentInput,
   FinalDecisionPreview,
   JoinRequest,
   ManageJoinRequestInput,
@@ -26,6 +26,8 @@ import type {
   ResolveObjectionInput,
   RoomPhase,
   RoomState,
+  SetDecisionPolicyInput,
+  SetParticipantDecisionRoleInput,
   StartDemoScenarioInput,
   SubmitProposalInput,
   TransferOwnershipInput,
@@ -70,8 +72,8 @@ export interface RoomActions {
     input: ProposeTradeoffInput,
   ): Promise<ActionResult>;
 
-  castMyVote(
-    input: CastVoteInput,
+  expressMyAlignment(
+    input: ExpressAlignmentInput,
   ): Promise<ActionResult>;
 
   previewFinalDecision(): Promise<
@@ -113,6 +115,12 @@ export interface RoomActions {
 
   /** Owner-only. Atomically moves meeting authority to another active human participant. */
   transferOwnership(input: TransferOwnershipInput): Promise<ActionResult>;
+
+  /** Owner-only. Rejected once an exact decision candidate is frozen. */
+  setDecisionPolicy(input: SetDecisionPolicyInput): Promise<ActionResult>;
+
+  /** Owner-only. Rejected once an exact decision candidate is frozen. */
+  setParticipantDecisionRole(input: SetParticipantDecisionRoleInput): Promise<ActionResult>;
 }
 
 export interface RoomContextValue {
@@ -240,8 +248,8 @@ export function RoomProvider({
       proposeTradeoff: (input) =>
         client.proposeTradeoff(roomId, input),
 
-      castMyVote: (input) =>
-        client.castMyVote(roomId, input),
+      expressMyAlignment: (input) =>
+        client.expressMyAlignment(roomId, input),
 
       previewFinalDecision: () =>
         client.previewFinalDecision(roomId),
@@ -275,6 +283,8 @@ export function RoomProvider({
       unlockMeeting: () => client.unlockMeeting(roomId),
       removeParticipant: (input) => client.removeParticipant(roomId, input),
       transferOwnership: (input) => client.transferOwnership(roomId, input),
+      setDecisionPolicy: (input) => client.setDecisionPolicy(roomId, input),
+      setParticipantDecisionRole: (input) => client.setParticipantDecisionRole(roomId, input),
     }),
     [client, roomId],
   );

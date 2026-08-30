@@ -1,7 +1,7 @@
 import {
   addPositionInputSchema,
   approveFinalDecisionInputSchema,
-  castVoteInputSchema,
+  expressAlignmentInputSchema,
   claimSeatInputSchema,
   createRoomInputSchema,
   createdRoomSchema,
@@ -13,6 +13,8 @@ import {
   proposeTradeoffInputSchema,
   resolveObjectionInputSchema,
   roomPhaseSchema,
+  setDecisionPolicyInputSchema,
+  setParticipantDecisionRoleInputSchema,
   startDemoScenarioInputSchema,
   submitProposalInputSchema,
   transferOwnershipInputSchema,
@@ -20,7 +22,7 @@ import {
   type ActionResult,
   type AddPositionInput,
   type ApproveFinalDecisionInput,
-  type CastVoteInput,
+  type ExpressAlignmentInput,
   type ClaimSeatInput,
   type CreatedRoom,
   type CreateRoomInput,
@@ -38,6 +40,8 @@ import {
   type RoomInvitePreview,
   type RoomPhase,
   type RoomState,
+  type SetDecisionPolicyInput,
+  type SetParticipantDecisionRoleInput,
   type StartDemoScenarioInput,
   type SubmitProposalInput,
   type TransferOwnershipInput,
@@ -325,6 +329,78 @@ export async function transferOwnership(
   return repository.transferOwnership(roomId, parsed.data, context);
 }
 
+/**
+ * Owner-only. Changes the room's decision authority model.
+ *
+ * Rejected once an exact decision candidate is frozen (`approval` phase with
+ * a stored hash): a policy change would silently redefine who is required to
+ * approve an already-reviewed candidate. Returning to Alignment first keeps
+ * the invariant simple and testable, rather than trying to safely recompute
+ * both a changed policy and a changed candidate at once.
+ */
+export async function setDecisionPolicy(
+  repository: RoomRepository,
+  roomId: string,
+  input: SetDecisionPolicyInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = setDecisionPolicyInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure(
+      "VALIDATION_ERROR",
+      "Decision policy input is invalid.",
+      context.expectedRoomVersion,
+    );
+  }
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  return repository.setDecisionPolicy(roomId, parsed.data, context);
+}
+
+/**
+ * Owner-only. Promotes/demotes an active human participant between
+ * `decision_maker` and `contributor`. `advisor` is never assignable through
+ * this operation, so simulations and experts can never be promoted.
+ *
+ * The current owner can never cease being a decision-maker: `owner_decides`
+ * relies on the owner always qualifying as the sole required approver, and
+ * `equal_authority_consensus` requires the owner to remain a decision-maker
+ * so consensus always has at least one required approver.
+ *
+ * Rejected once an exact decision candidate is frozen, for the same reason
+ * `setDecisionPolicy` is: changing who counts as a decision-maker after the
+ * candidate's authority metadata was already reviewed would silently change
+ * the meaning of a hash someone may already be looking at.
+ */
+export async function setParticipantDecisionRole(
+  repository: RoomRepository,
+  roomId: string,
+  input: SetParticipantDecisionRoleInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = setParticipantDecisionRoleInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure(
+      "VALIDATION_ERROR",
+      "Decision-role input is invalid.",
+      context.expectedRoomVersion,
+    );
+  }
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  if (
+    parsed.data.participantId === room.ownerParticipantId &&
+    parsed.data.decisionRole !== "decision_maker"
+  ) {
+    return failure(
+      "NOT_AUTHORIZED",
+      "The current owner cannot cease being a decision maker.",
+      room.version,
+    );
+  }
+  return repository.setParticipantDecisionRole(roomId, parsed.data, context);
+}
+
 export function getMeetingContext(
   repository: RoomRepository,
   actorUserId: string,
@@ -433,26 +509,36 @@ export async function resolveParticipantObjection(
   return repository.resolveObjection(roomId, parsed.data, context);
 }
 
-export async function castParticipantVote(
+/**
+ * A claimed human expresses or updates their own alignment on the active
+ * proposal during the Alignment phase (internal phase enum: `voting`).
+ *
+ * This is deliberately not a vote: it is upserted per participant/proposal,
+ * carries no weight, and does not by itself gate any phase transition or
+ * finalization. It exists so the responsible decision authority can see
+ * support, concerns, strong objections, and missing perspectives before
+ * acting — see `owner_decides` / `equal_authority_consensus` finalization.
+ */
+export async function expressMyAlignment(
   repository: RoomRepository,
   roomId: string,
-  input: CastVoteInput,
+  input: ExpressAlignmentInput,
   context: MutationContext,
 ): Promise<ActionResult> {
-  const parsed = castVoteInputSchema.safeParse(input);
+  const parsed = expressAlignmentInputSchema.safeParse(input);
   if (!parsed.success) {
-    return failure("VALIDATION_ERROR", "Vote input is invalid.", context.expectedRoomVersion);
+    return failure("VALIDATION_ERROR", "Alignment input is invalid.", context.expectedRoomVersion);
   }
   if (!["manual_ui", "webmcp"].includes(context.actor.origin)) {
     return failure(
       "NOT_AUTHORIZED",
-      "Only an authenticated human participant may use this voting operation.",
+      "Only an authenticated human participant may express alignment.",
       context.expectedRoomVersion,
     );
   }
   const room = await prepareMutation(repository, roomId, context, ["voting"]);
   if ("ok" in room) return room;
-  return repository.castVote(roomId, parsed.data, context);
+  return repository.expressAlignment(roomId, parsed.data, context);
 }
 
 export async function previewFinalDecision(

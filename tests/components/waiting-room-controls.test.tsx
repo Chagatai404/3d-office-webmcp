@@ -62,7 +62,7 @@ class B3RoomClient implements RoomClient {
     this.unavailable();
   proposeTradeoff: RoomClient["proposeTradeoff"] = async () =>
     this.unavailable();
-  castMyVote: RoomClient["castMyVote"] = async () => this.unavailable();
+  expressMyAlignment: RoomClient["expressMyAlignment"] = async () => this.unavailable();
   previewFinalDecision: RoomClient["previewFinalDecision"] = async () =>
     this.unavailable();
   approveFinalDecision: RoomClient["approveFinalDecision"] = async () =>
@@ -83,6 +83,8 @@ class B3RoomClient implements RoomClient {
     this.unavailable();
   transferOwnership: RoomClient["transferOwnership"] = async () =>
     this.unavailable();
+  setDecisionPolicy: RoomClient["setDecisionPolicy"] = async () => this.unavailable();
+  setParticipantDecisionRole: RoomClient["setParticipantDecisionRole"] = async () => this.unavailable();
 
   advanceDemoPhase: RoomClient["advanceDemoPhase"] = async (_roomId, phase) => {
     this.advanceDemoPhaseCalls.push(phase);
@@ -267,7 +269,7 @@ describe("waiting room readiness and organizer controls", () => {
     expect(client.advanceDemoPhaseCalls).toEqual([]);
   });
 
-  it("lets the organizer move a fully voted room into approval", async () => {
+  it("lets the organizer move a room into decision review regardless of alignment completeness", async () => {
     const seed = organizerReadyRoom();
     seed.phase = "voting";
     seed.activeProposalId = "proposal-1";
@@ -283,7 +285,7 @@ describe("waiting room readiness and organizer controls", () => {
       status: "candidate",
       createdAt: demoTimestamp(10),
     });
-    seed.votes.push(
+    seed.alignments.push(
       {
         proposalId: "proposal-1",
         participantId: "participant-product",
@@ -298,18 +300,14 @@ describe("waiting room readiness and organizer controls", () => {
         comment: null,
         updatedAt: demoTimestamp(11),
       },
-      {
-        proposalId: "proposal-1",
-        participantId: "participant-marketing",
-        choice: "abstain",
-        comment: null,
-        updatedAt: demoTimestamp(11),
-      },
+      // The marketing participant deliberately has not shared alignment:
+      // entering decision review no longer requires every participant to
+      // have responded.
     );
     const client = new B3RoomClient(seed);
 
     await mount(<RoomStatusPanel />, client);
-    await click(buttonNamed("Start approval"));
+    await click(buttonNamed("Review decision"));
 
     expect(client.advanceRoomPhaseCalls).toEqual(["approval"]);
   });

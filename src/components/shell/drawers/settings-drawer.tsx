@@ -1,19 +1,38 @@
 "use client";
 
 import { useState } from "react";
-import type { ActionResult } from "@/contracts/room";
+import type { ActionResult, DecisionPolicy } from "@/contracts/room";
 import { ActionFeedback } from "@/components/room/action-feedback";
 import { useRoom } from "@/components/room/room-provider";
 import { useShell } from "../shell-provider";
 import { DrawerShell } from "./drawer-shell";
 
-/** Settings. Meeting access (lock) lives here alongside camera preferences. */
+const DECISION_POLICY_OPTIONS: Array<{
+  value: DecisionPolicy;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "owner_decides",
+    label: "Responsible owner decides",
+    hint: "Best for normal team decisions",
+  },
+  {
+    value: "equal_authority_consensus",
+    label: "Equal decision-makers must agree",
+    hint: "Use when participants genuinely share authority",
+  },
+];
+
+/** Settings. Meeting access (lock) and decision authority live here alongside camera preferences. */
 export function SettingsDrawer() {
   const { forceReducedMotion, setForceReducedMotion } = useShell();
   const { room, self, actions } = useRoom();
   const isOwner = self?.meetingRole === "owner";
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ActionResult<unknown> | null>(null);
+  const [policyBusy, setPolicyBusy] = useState(false);
+  const [policyResult, setPolicyResult] = useState<ActionResult<unknown> | null>(null);
 
   async function toggleLock() {
     if (busy) return;
@@ -21,6 +40,14 @@ export function SettingsDrawer() {
     const outcome = room.isLocked ? await actions.unlockMeeting() : await actions.lockMeeting();
     setBusy(false);
     setResult(outcome);
+  }
+
+  async function changePolicy(decisionPolicy: DecisionPolicy) {
+    if (policyBusy || decisionPolicy === room.decisionPolicy) return;
+    setPolicyBusy(true);
+    const outcome = await actions.setDecisionPolicy({ decisionPolicy });
+    setPolicyBusy(false);
+    setPolicyResult(outcome);
   }
 
   return (
@@ -43,6 +70,29 @@ export function SettingsDrawer() {
         )}
       </div>
       {isOwner ? <ActionFeedback result={result} /> : null}
+
+      <div className="drawer-row drawer-toggle-row" data-testid="decision-policy-row">
+        <span>
+          Decision authority
+          <span className="drawer-toggle-hint">How this room reaches its final decision.</span>
+        </span>
+      </div>
+      {DECISION_POLICY_OPTIONS.map((option) => (
+        <label key={option.value} className="drawer-row drawer-toggle-row">
+          <input
+            type="radio"
+            name="decision-policy"
+            checked={room.decisionPolicy === option.value}
+            disabled={!isOwner || policyBusy}
+            onChange={() => void changePolicy(option.value)}
+          />
+          <span>
+            {option.label}
+            <span className="drawer-toggle-hint">{option.hint}</span>
+          </span>
+        </label>
+      ))}
+      {isOwner ? <ActionFeedback result={policyResult} /> : null}
 
       <label className="drawer-row drawer-toggle-row">
         <input

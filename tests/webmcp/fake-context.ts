@@ -56,7 +56,7 @@ export const VALID_MUTATION_TOOL_INPUTS: Record<string, unknown> = {
       referencedConstraintIds: ["constraint-1"],
     },
   },
-  cast_my_vote: {
+  express_my_alignment: {
     proposalId: "proposal-1",
     choice: "support",
     comment: "Feasible within the current capacity.",

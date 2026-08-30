@@ -22,7 +22,7 @@ import { SelectableZone } from "./scene-interaction";
  * The collective decision space — one bright, glass-walled room.
  *
  * Transcribed from the imported design (`meeting-stage.js`): a floor inlay
- * and table at the centre, a wall board per decision workspace, a vote
+ * and table at the centre, a wall board per decision workspace, an alignment
  * plinth and a decision pedestal further back. Nothing in this subtree
  * decides anything — it renders the projection it is handed, and the boards
  * it counts cards from are real room state, not the mockup's fixed numbers.
@@ -159,10 +159,10 @@ export function CentralMeetingRoom({
       </SelectableZone>
 
       <SelectableZone
-        zone="vote"
+        zone="alignment"
         highlight={{ size: [2.7, 1.5], position: [VOTE_PLINTH_POSITION[0], 0.05, VOTE_PLINTH_POSITION[2]] }}
       >
-        <VotePlinth view={view} />
+        <AlignmentPlinth view={view} />
       </SelectableZone>
 
       <SelectableZone
@@ -386,12 +386,16 @@ function ActivityHalo({
   );
 }
 
-/** One bar per vote choice, height and colour reading the real tally. */
-function VotePlinth({ view }: { view: RoomVisualizationState }) {
+/**
+ * Compact, informative alignment tallies — never a vote count. Bar heights
+ * are read-only awareness cues (who leans which way), not a decision
+ * mechanism: nothing in the product treats "more support bars" as an outcome.
+ */
+function AlignmentPlinth({ view }: { view: RoomVisualizationState }) {
   const tallies = useMemo(() => {
-    const counts = { support: 0, oppose: 0, abstain: 0, request_changes: 0 };
+    const counts = { support: 0, concern: 0, strong_objection: 0, needs_clarification: 0 };
     for (const participant of view.participants) {
-      if (participant.vote) counts[participant.vote] += 1;
+      if (participant.alignment) counts[participant.alignment] += 1;
     }
     return counts;
   }, [view.participants]);
@@ -399,9 +403,9 @@ function VotePlinth({ view }: { view: RoomVisualizationState }) {
   const max = Math.max(1, ...Object.values(tallies));
   const bars: Array<{ key: keyof typeof tallies; color: string }> = [
     { key: "support", color: SURFACE.accent },
-    { key: "oppose", color: SURFACE.attention },
-    { key: "abstain", color: SURFACE.quiet },
-    { key: "request_changes", color: SURFACE.seatDark },
+    { key: "concern", color: SURFACE.attention },
+    { key: "strong_objection", color: SURFACE.seatDark },
+    { key: "needs_clarification", color: SURFACE.quiet },
   ];
 
   return (

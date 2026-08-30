@@ -12,7 +12,7 @@ import {
 vi.mock("@/domain/rooms/operations", () => ({
   addParticipantPosition: vi.fn(),
   approveParticipantFinalDecision: vi.fn(),
-  castParticipantVote: vi.fn(),
+  expressMyAlignment: vi.fn(),
   getFinalDecisionRecord: vi.fn(),
   getMeetingContext: vi.fn(),
   previewFinalDecision: vi.fn(),
@@ -28,7 +28,7 @@ const DOMAIN_OPERATION_BY_TOOL = {
   submit_proposal: operations.submitParticipantProposal,
   raise_objection: operations.raiseParticipantObjection,
   propose_tradeoff: operations.proposeParticipantTradeoff,
-  cast_my_vote: operations.castParticipantVote,
+  express_my_alignment: operations.expressMyAlignment,
   approve_final_decision: operations.approveParticipantFinalDecision,
 } as const;
 
@@ -89,10 +89,10 @@ describe("WebMCP participant authority", () => {
     expect(operations.raiseParticipantObjection).not.toHaveBeenCalled();
   });
 
-  it("keeps voting and approval participant-scoped", async () => {
+  it("keeps alignment and approval participant-scoped", async () => {
     const tools = createRoomWebMcpTools(fakeRoomWebMcpContext({ roomVersion: 20 }));
 
-    const vote = await executeTool(tools.cast_my_vote!, {
+    const alignment = await executeTool(tools.express_my_alignment!, {
       proposalId: "proposal-1",
       choice: "support",
       comment: null,
@@ -103,9 +103,9 @@ describe("WebMCP participant authority", () => {
       actorId: "demo-designer",
     }) as { error: { code: string } };
 
-    expect(vote.error.code).toBe("VALIDATION_ERROR");
+    expect(alignment.error.code).toBe("VALIDATION_ERROR");
     expect(approval.error.code).toBe("VALIDATION_ERROR");
-    expect(operations.castParticipantVote).not.toHaveBeenCalled();
+    expect(operations.expressMyAlignment).not.toHaveBeenCalled();
     expect(operations.approveParticipantFinalDecision).not.toHaveBeenCalled();
   });
 
@@ -135,7 +135,7 @@ describe("WebMCP participant authority", () => {
   it("checks the claim before the arguments, so an unclaimed session learns nothing", async () => {
     const tool = createRoomWebMcpTools(
       fakeRoomWebMcpContext({ roomVersion: 7, selfParticipantId: null }),
-    ).cast_my_vote!;
+    ).express_my_alignment!;
 
     const refusal = await executeTool(tool, { nonsense: true }) as { error: { code: string } };
 

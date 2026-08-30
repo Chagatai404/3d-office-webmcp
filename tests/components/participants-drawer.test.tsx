@@ -74,7 +74,7 @@ class WaitingRoomFakeClient implements RoomClient {
   raiseObjection: RoomClient["raiseObjection"] = async () => this.unavailable();
   resolveObjection: RoomClient["resolveObjection"] = async () => this.unavailable();
   proposeTradeoff: RoomClient["proposeTradeoff"] = async () => this.unavailable();
-  castMyVote: RoomClient["castMyVote"] = async () => this.unavailable();
+  expressMyAlignment: RoomClient["expressMyAlignment"] = async () => this.unavailable();
   previewFinalDecision: RoomClient["previewFinalDecision"] = async () => this.unavailable();
   approveFinalDecision: RoomClient["approveFinalDecision"] = async () => this.unavailable();
   getDecisionRecord: RoomClient["getDecisionRecord"] = async () => this.unavailable();
@@ -97,6 +97,9 @@ class WaitingRoomFakeClient implements RoomClient {
     this.publish();
     return { ok: true, data: null, roomVersion: this.state.version, message: "Participant removed." };
   };
+
+  setDecisionPolicy: RoomClient["setDecisionPolicy"] = async () => this.unavailable();
+  setParticipantDecisionRole: RoomClient["setParticipantDecisionRole"] = async () => this.unavailable();
 
   transferOwnership: RoomClient["transferOwnership"] = async (_roomId, input) => {
     this.transferredToParticipantIds.push(input.participantId);

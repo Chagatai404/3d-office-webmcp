@@ -27,7 +27,7 @@ export function RoleDrawer() {
       <ul className="drawer-checklist">
         <li>✓ Publish and delete your own constraints</li>
         <li>✓ Raise objections and propose trade-offs</li>
-        <li>✓ Cast one vote, changeable until the phase closes</li>
+        <li>✓ Share one alignment, changeable until the phase closes</li>
         <li>
           {self?.decisionRole === "decision_maker"
             ? "✓ Holds explicit decision authority"

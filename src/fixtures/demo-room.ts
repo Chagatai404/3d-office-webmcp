@@ -176,7 +176,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
   proposals: [],
   conflicts: [],
   tradeoffs: [],
-  votes: [],
+  alignments: [],
   approvals: [],
   activity: [
     {

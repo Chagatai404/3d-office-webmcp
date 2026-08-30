@@ -182,24 +182,33 @@ export const tradeoffSchema = z
   .strict();
 export type Tradeoff = z.infer<typeof tradeoffSchema>;
 
-export const voteChoiceSchema = z.enum([
+/**
+ * Alignment replaces Vote as the canonical product/domain concept.
+ *
+ * Alignment is informative, not decisive: it exposes support, concerns,
+ * strong objections, and missing perspectives to the responsible decision
+ * authority. It never mechanically determines a room's outcome — see
+ * `DecisionPolicy` and the policy-aware finalization functions in
+ * `src/domain/rooms/operations.ts`.
+ */
+export const alignmentChoiceSchema = z.enum([
   "support",
-  "oppose",
-  "abstain",
-  "request_changes",
+  "concern",
+  "strong_objection",
+  "needs_clarification",
 ]);
-export type VoteChoice = z.infer<typeof voteChoiceSchema>;
+export type AlignmentChoice = z.infer<typeof alignmentChoiceSchema>;
 
-export const voteSchema = z
+export const alignmentSchema = z
   .object({
     proposalId: idSchema,
     participantId: idSchema,
-    choice: voteChoiceSchema,
+    choice: alignmentChoiceSchema,
     comment: nullableTextSchema,
     updatedAt: timestampSchema,
   })
   .strict();
-export type Vote = z.infer<typeof voteSchema>;
+export type Alignment = z.infer<typeof alignmentSchema>;
 
 export const approvalSchema = z
   .object({
@@ -319,14 +328,42 @@ export type ProposeTradeoffInput = z.infer<
   typeof proposeTradeoffInputSchema
 >;
 
-export const castVoteInputSchema = z
+export const expressAlignmentInputSchema = z
   .object({
     proposalId: idSchema,
-    choice: voteChoiceSchema,
+    choice: alignmentChoiceSchema,
     comment: nullableTextSchema,
   })
   .strict();
-export type CastVoteInput = z.infer<typeof castVoteInputSchema>;
+export type ExpressAlignmentInput = z.infer<typeof expressAlignmentInputSchema>;
+
+/**
+ * The only decision roles an owner may assign through
+ * `setParticipantDecisionRole`. `advisor` is reserved for expert/simulation
+ * actors and is never assignable to an ordinary human through this input.
+ */
+export const assignableDecisionRoleSchema = z.enum([
+  "decision_maker",
+  "contributor",
+]);
+export type AssignableDecisionRole = z.infer<typeof assignableDecisionRoleSchema>;
+
+export const setParticipantDecisionRoleInputSchema = z
+  .object({
+    participantId: idSchema,
+    decisionRole: assignableDecisionRoleSchema,
+  })
+  .strict();
+export type SetParticipantDecisionRoleInput = z.infer<
+  typeof setParticipantDecisionRoleInputSchema
+>;
+
+export const setDecisionPolicyInputSchema = z
+  .object({
+    decisionPolicy: decisionPolicySchema,
+  })
+  .strict();
+export type SetDecisionPolicyInput = z.infer<typeof setDecisionPolicyInputSchema>;
 
 export const approveFinalDecisionInputSchema = z
   .object({ decisionHash: z.string().min(1) })
@@ -379,10 +416,21 @@ export const finalDecisionCandidateSchema = z
     rationale: z.string().min(1),
     acceptedTradeoffs: z.array(tradeoffSchema),
     unresolvedWarnings: z.array(conflictSchema),
-    votes: z.array(voteSchema),
+    alignments: z.array(alignmentSchema),
+    /**
+     * The policy this candidate was frozen under. Required-approver
+     * authority (below) is computed from this policy, never from the
+     * legacy, private `required_for_approval` compatibility column.
+     */
+    decisionPolicy: decisionPolicySchema,
     owners: z.array(decisionOwnerSchema),
     deadlines: z.array(decisionDeadlineSchema),
     actionItems: z.array(decisionActionItemSchema),
+    /**
+     * Deterministically derived from concern / strong_objection alignments
+     * and unresolved warnings — never generated prose — so the candidate
+     * hash stays reproducible.
+     */
     dissent: z.array(z.string().min(1)),
     requiredApprovalParticipantIds: z.array(idSchema),
   })
@@ -408,7 +456,7 @@ export const decisionRecordSchema = z
     finalizedAt: timestampSchema,
     decision: finalDecisionPreviewSchema,
     acceptedTradeoffs: z.array(tradeoffSchema),
-    votes: z.array(voteSchema),
+    alignments: z.array(alignmentSchema),
     approvals: z.array(approvalSchema),
     provenance: z.array(activityEventSchema),
   })
@@ -436,7 +484,7 @@ export const roomStateSchema = z
     proposals: z.array(proposalSchema),
     conflicts: z.array(conflictSchema),
     tradeoffs: z.array(tradeoffSchema),
-    votes: z.array(voteSchema),
+    alignments: z.array(alignmentSchema),
     approvals: z.array(approvalSchema),
     activity: z.array(activityEventSchema),
   })
@@ -614,7 +662,15 @@ export interface RoomClient {
     input: ProposeTradeoffInput,
   ): Promise<ActionResult>;
 
-  castMyVote(roomId: string, input: CastVoteInput): Promise<ActionResult>;
+  /**
+   * Express or update only the authenticated participant's own alignment on
+   * the active proposal. Alignment informs the responsible decision
+   * authority; it never mechanically decides the outcome by itself.
+   */
+  expressMyAlignment(
+    roomId: string,
+    input: ExpressAlignmentInput,
+  ): Promise<ActionResult>;
 
   previewFinalDecision(
     roomId: string,
@@ -674,5 +730,24 @@ export interface RoomClient {
   transferOwnership(
     roomId: string,
     input: TransferOwnershipInput,
+  ): Promise<ActionResult>;
+
+  /**
+   * Owner-only. Changes the room's decision authority model. Rejected once
+   * an exact decision candidate is frozen; return to Alignment first.
+   */
+  setDecisionPolicy(
+    roomId: string,
+    input: SetDecisionPolicyInput,
+  ): Promise<ActionResult>;
+
+  /**
+   * Owner-only. Promotes/demotes an active human participant between
+   * `decision_maker` and `contributor`. The current owner can never cease
+   * being a decision-maker, and simulations/experts can never be assigned.
+   */
+  setParticipantDecisionRole(
+    roomId: string,
+    input: SetParticipantDecisionRoleInput,
   ): Promise<ActionResult>;
 }

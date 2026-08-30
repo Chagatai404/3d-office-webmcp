@@ -3,10 +3,10 @@ import type {
   ActionResult,
   AddPositionInput,
   ApproveFinalDecisionInput,
-  CastVoteInput,
   ClaimSeatInput,
   CreateRoomInput,
   DecisionRecord,
+  ExpressAlignmentInput,
   FinalDecisionPreview,
   JoinRequest,
   JoinRequestResult,
@@ -20,6 +20,8 @@ import type {
   RoomInvitePreview,
   RoomPhase,
   RoomState,
+  SetDecisionPolicyInput,
+  SetParticipantDecisionRoleInput,
   StartDemoScenarioInput,
   SubmitProposalInput,
   TransferOwnershipInput,
@@ -93,9 +95,9 @@ export interface RoomRepository {
     input: ProposeTradeoffInput,
     context: MutationContext,
   ): Promise<ActionResult>;
-  castVote(
+  expressAlignment(
     roomId: string,
-    input: CastVoteInput,
+    input: ExpressAlignmentInput,
     context: MutationContext,
   ): Promise<ActionResult>;
   previewFinalDecision(
@@ -140,6 +142,16 @@ export interface RoomRepository {
   transferOwnership(
     roomId: string,
     input: TransferOwnershipInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  setDecisionPolicy(
+    roomId: string,
+    input: SetDecisionPolicyInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  setParticipantDecisionRole(
+    roomId: string,
+    input: SetParticipantDecisionRoleInput,
     context: MutationContext,
   ): Promise<ActionResult>;
 }

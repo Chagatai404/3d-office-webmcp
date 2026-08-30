@@ -33,7 +33,7 @@ describe("phase-aware WebMCP registration", () => {
         "propose_tradeoff",
         "raise_objection",
       ],
-      voting: ["cast_my_vote", "get_meeting_context", "get_open_issues"],
+      voting: ["express_my_alignment", "get_alignment", "get_meeting_context", "get_open_issues"],
       approval: [
         "approve_final_decision",
         "get_meeting_context",
@@ -65,7 +65,7 @@ describe("phase-aware WebMCP registration", () => {
         "propose_tradeoff",
         "raise_objection",
       ],
-      ["cast_my_vote", "get_meeting_context", "get_open_issues"],
+      ["express_my_alignment", "get_alignment", "get_meeting_context", "get_open_issues"],
       ["approve_final_decision", "get_meeting_context", "preview_final_decision"],
       ["get_decision_record"],
     ]);
@@ -80,7 +80,7 @@ describe("phase-aware WebMCP registration", () => {
       ["get_meeting_context"],
       ["get_meeting_context", "list_positions"],
       ["get_meeting_context", "get_open_issues", "list_positions"],
-      ["get_meeting_context", "get_open_issues"],
+      ["get_alignment", "get_meeting_context", "get_open_issues"],
       ["get_meeting_context", "preview_final_decision"],
       ["get_decision_record"],
     ]);
@@ -136,6 +136,7 @@ describe("phase-aware WebMCP registration", () => {
       "get_meeting_context",
       "list_positions",
       "get_open_issues",
+      "get_alignment",
       "preview_final_decision",
       "get_decision_record",
     ]) {

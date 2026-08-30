@@ -15,7 +15,7 @@ export type WorkspaceId =
   | "proposals"
   | "issues"
   | "whiteboard"
-  | "vote"
+  | "alignment"
   | "decision";
 
 export const WORKSPACE_IDS: readonly WorkspaceId[] = [
@@ -25,7 +25,7 @@ export const WORKSPACE_IDS: readonly WorkspaceId[] = [
   "proposals",
   "issues",
   "whiteboard",
-  "vote",
+  "alignment",
   "decision",
 ];
 
@@ -41,7 +41,7 @@ export const CAMERA_POSES: Record<WorkspaceId, CameraPose> = {
   proposals: { position: [1.4, 2.8, 0.6], target: [8, 2.3, 0] },
   issues: { position: [2.6, 2.7, -0.8], target: [6.4, 2.2, -5.4] },
   whiteboard: { position: [-2.6, 2.7, -0.8], target: [-6.4, 2.2, -5.4] },
-  vote: { position: [-3.4, 2.5, 8.4], target: [-3.4, 1.05, 4.8] },
+  alignment: { position: [-3.4, 2.5, 8.4], target: [-3.4, 1.05, 4.8] },
   decision: { position: [3.4, 2.3, 8.2], target: [3.4, 1.15, 4.8] },
 };
 
@@ -275,7 +275,7 @@ export const WORKSPACE_LABEL: Record<WorkspaceId, string> = {
   proposals: "Proposals",
   issues: "Issues",
   whiteboard: "Whiteboard",
-  vote: "Vote",
+  alignment: "Alignment",
   decision: "Decision",
 };
 
@@ -286,6 +286,6 @@ export const MOVING_LABEL: Record<WorkspaceId, string> = {
   proposals: "Moving to the candidate board",
   issues: "Moving to the issues board",
   whiteboard: "Moving to the whiteboard",
-  vote: "Moving to the voting plinth",
+  alignment: "Moving to the alignment plinth",
   decision: "Moving to the decision pedestal",
 };

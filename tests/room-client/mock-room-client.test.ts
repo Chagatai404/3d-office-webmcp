@@ -172,7 +172,7 @@ describe("MockRoomClient", () => {
   });
 
   it("reports actions the room's phase does not allow", async () => {
-    const result = await client.castMyVote("demo");
+    const result = await client.expressMyAlignment("demo");
 
     expect(result.ok).toBe(false);
     if (result.ok) return;

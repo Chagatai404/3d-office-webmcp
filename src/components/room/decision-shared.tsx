@@ -7,7 +7,12 @@ import type {
   Proposal,
   RoomState,
 } from "@/contracts/room";
-import { formatActionName, formatTime, VOTE_CHOICE_LABEL } from "./room-labels";
+import { ALIGNMENT_CHOICE_LABEL, formatActionName, formatTime } from "./room-labels";
+
+const DECISION_POLICY_LABEL: Record<RoomState["decisionPolicy"], string> = {
+  owner_decides: "Responsible owner decides",
+  equal_authority_consensus: "Equal decision-makers must agree",
+};
 
 /**
  * Shared drafts, formatting, and read-only views for the four workspaces
@@ -149,6 +154,11 @@ export function DecisionPreviewView({
         <strong>{preview.proposal.title}</strong>
         <code data-testid="decision-hash">{preview.decisionHash}</code>
       </div>
+      <p>
+        <span className="tag" data-testid="decision-policy">
+          {DECISION_POLICY_LABEL[preview.decisionPolicy]}
+        </span>
+      </p>
       <p>{preview.proposal.summary}</p>
       <p>{preview.rationale}</p>
       <DecisionList title="Expected outcomes" entries={preview.proposal.expectedOutcomes} />
@@ -165,20 +175,27 @@ export function DecisionPreviewView({
         empty="No unresolved warnings."
       />
       <DecisionList title="Dissent" entries={preview.dissent} empty="No dissent recorded." />
+      <DecisionList
+        title="Required approvers"
+        entries={preview.requiredApprovalParticipantIds.map((id) => participantLabel(room, id))}
+        empty="No approver is required under the current policy."
+      />
       <dl className="decision-facts">
         <div>
-          <dt>Votes</dt>
-          <dd>{preview.votes.length}</dd>
+          <dt>Team alignment</dt>
+          <dd>{preview.alignments.length} shared</dd>
         </div>
         <div>
-          <dt>Approvals</dt>
-          <dd>{preview.approvals.length}</dd>
+          <dt>Approved</dt>
+          <dd>
+            {preview.approvals.length} of {preview.requiredApprovalParticipantIds.length}
+          </dd>
         </div>
         <div>
-          <dt>Missing</dt>
+          <dt>Waiting on</dt>
           <dd>
             {preview.missingApprovalParticipantIds.map((id) => participantLabel(room, id)).join(", ") ||
-              "none"}
+              "no one"}
           </dd>
         </div>
       </dl>
@@ -199,6 +216,9 @@ export function DecisionRecordView({
         <strong>{record.decision.proposal.title}</strong>
         <code>{record.decision.decisionHash}</code>
       </div>
+      <p>
+        <span className="tag">{DECISION_POLICY_LABEL[record.decision.decisionPolicy]}</span>
+      </p>
       <p>Finalized {formatTime(record.finalizedAt)}</p>
       <p>{record.decision.rationale}</p>
       <DecisionList
@@ -207,12 +227,13 @@ export function DecisionRecordView({
           (tradeoff) => `${tradeoff.description} - ${tradeoff.expectedEffect}`,
         )}
       />
+      <DecisionList title="Dissent" entries={record.decision.dissent} empty="No dissent recorded." />
       <DecisionList
-        title="Votes"
-        entries={record.votes.map(
-          (vote) =>
-            `${participantLabel(room, vote.participantId)}: ${VOTE_CHOICE_LABEL[vote.choice]}${
-              vote.comment ? ` - ${vote.comment}` : ""
+        title="Alignment"
+        entries={record.alignments.map(
+          (alignment) =>
+            `${participantLabel(room, alignment.participantId)}: ${ALIGNMENT_CHOICE_LABEL[alignment.choice]}${
+              alignment.comment ? ` - ${alignment.comment}` : ""
             }`,
         )}
       />

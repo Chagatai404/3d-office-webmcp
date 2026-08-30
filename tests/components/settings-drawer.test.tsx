@@ -71,7 +71,7 @@ class LockFakeClient implements RoomClient {
   raiseObjection: RoomClient["raiseObjection"] = async () => this.unavailable();
   resolveObjection: RoomClient["resolveObjection"] = async () => this.unavailable();
   proposeTradeoff: RoomClient["proposeTradeoff"] = async () => this.unavailable();
-  castMyVote: RoomClient["castMyVote"] = async () => this.unavailable();
+  expressMyAlignment: RoomClient["expressMyAlignment"] = async () => this.unavailable();
   previewFinalDecision: RoomClient["previewFinalDecision"] = async () => this.unavailable();
   approveFinalDecision: RoomClient["approveFinalDecision"] = async () => this.unavailable();
   getDecisionRecord: RoomClient["getDecisionRecord"] = async () => this.unavailable();
@@ -84,6 +84,8 @@ class LockFakeClient implements RoomClient {
   rejectJoinRequest: RoomClient["rejectJoinRequest"] = async () => this.unavailable();
   removeParticipant: RoomClient["removeParticipant"] = async () => this.unavailable();
   transferOwnership: RoomClient["transferOwnership"] = async () => this.unavailable();
+  setDecisionPolicy: RoomClient["setDecisionPolicy"] = async () => this.unavailable();
+  setParticipantDecisionRole: RoomClient["setParticipantDecisionRole"] = async () => this.unavailable();
 }
 
 function seedRoom(selfParticipantId: string): RoomState {

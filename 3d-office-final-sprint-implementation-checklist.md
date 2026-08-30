@@ -29,16 +29,16 @@ Before coding, all agents must treat the following as canonical.
 
 ## Decision model
 
-- [ ] Replace the current default "everyone votes, strict majority wins, everyone approves" behavior.
-- [ ] Add `DecisionPolicy`.
-- [ ] Support at minimum:
-  - [ ] `owner_decides`
-  - [ ] `equal_authority_consensus`
-- [ ] Default normal rooms to `owner_decides`.
-- [ ] `owner_decides` means participant alignment informs the owner, but does not mechanically override the owner.
-- [ ] `equal_authority_consensus` requires approval from all participants marked as decision-makers.
-- [ ] Voting terminology should be replaced in the user-facing product with **Alignment** wherever possible.
-- [ ] Experts may advise but never align as human decision-makers, vote, approve, or finalize.
+- [x] Replace the current default "everyone votes, strict majority wins, everyone approves" behavior.
+- [x] Add `DecisionPolicy`.
+- [x] Support at minimum:
+  - [x] `owner_decides`
+  - [x] `equal_authority_consensus`
+- [x] Default normal rooms to `owner_decides`.
+- [x] `owner_decides` means participant alignment informs the owner, but does not mechanically override the owner.
+- [x] `equal_authority_consensus` requires approval from all participants marked as decision-makers.
+- [x] Voting terminology should be replaced in the user-facing product with **Alignment** wherever possible.
+- [x] Experts may advise but never align as human decision-makers, vote, approve, or finalize. (No expert participant kind exists yet -- Slice 5 -- so this is enforced today by there being no expert row a browser session could ever resolve to.)
 
 ## Join model
 
@@ -145,9 +145,9 @@ Before coding, all agents must treat the following as canonical.
 - [x] Store decision policy on the room.
 - [x] Include decision policy in `RoomState`.
 - [x] Default creation to `owner_decides`.
-- [ ] Validate policy transitions. (Slice 4: no policy-change operation exists yet, so there is nothing to validate a transition of.)
-- [ ] Decide whether policy may change after deliberation begins. (Slice 4.)
-- [ ] If policy changes after decision-making state exists, invalidate incompatible alignment/approval state. (Slice 4.)
+- [x] Validate policy transitions. (`setDecisionPolicy`: owner-only, active room only, rejects an invalid enum value.)
+- [x] Decide whether policy may change after deliberation begins. (Yes, through Alignment; rejected once an exact candidate is frozen -- see next item.)
+- [x] If policy changes after decision-making state exists, invalidate incompatible alignment/approval state. (Chosen invariant: reject the change outright once `decision_hash is not null`, rather than trying to safely recompute a changed policy and a changed candidate at once. Return to Alignment first.)
 
 ## Room creation contract
 
@@ -173,8 +173,8 @@ Before coding, all agents must treat the following as canonical.
 ## Remove old assumptions
 
 - [x] Remove "first listed seat belongs to organizer" logic from new room creation.
-- [ ] Remove required approval flags as the default authority model. (Slice 4: still a private legacy compatibility field, not canonical DTO authority.)
-- [ ] Remove strict-majority finalization as the default. (Slice 4.)
+- [x] Remove required approval flags as the default authority model. (`required_for_approval` is a deprecated private column, `EXECUTE`-revoked read paths removed from normal finalization; policy-aware `requiredApprovalParticipantIds` is computed fresh from `DecisionPolicy` + `decision_role` instead.)
+- [x] Remove strict-majority finalization as the default. (Entering Decision review is now policy-neutral: active proposal + no blocking conflict only.)
 - [x] Preserve old vote/approval data only if needed for migration or demo compatibility.
 - [x] Do not expose obsolete participant setup fields in the new meeting creation UI.
 
@@ -310,10 +310,10 @@ and `tests/domain/join-requests.test.ts`.
   - [ ] revoke invite links; (out of scope for Gate 3, unchanged from Gate 2)
   - [ ] regenerate invite links; (out of scope for Gate 3, unchanged from Gate 2)
   - [x] transfer ownership;
-  - [ ] change allowed meeting settings; (no additional settings exist beyond lock this slice)
-  - [ ] control phase progression; (unchanged from Slice 2's `advanceRoomPhase`, not part of Gate 3)
-  - [ ] request alignment; (Alignment is Slice 4)
-  - [ ] make/finalize decision under `owner_decides`; (legacy engine unchanged this slice; Slice 4)
+  - [x] change allowed meeting settings; (decision policy is now an owner-only setting)
+  - [x] control phase progression; (`advanceRoomPhase`, policy-neutral Decision-review entry as of Gate 4)
+  - [x] request alignment; (opening the Alignment phase via phase advance; there is no separate "request" action)
+  - [x] make/finalize decision under `owner_decides`; (owner is the sole required approver; a single confirmation finalizes)
   - [ ] end meeting. (not implemented; out of scope per brief Part O)
 
 ## Meeting lock
@@ -387,60 +387,73 @@ self-certify the gate; a human reviewer should confirm before Slice 4 begins.
 
 # 5. P0 — Replace Voting With Alignment
 
+**Status (2026-08-30, Slice 4 / Gate 4): implemented and verified.** See the
+Slice 4 completion report and `docs/backend-integration.md`'s "Alignment and
+policy-aware finalization (Slice 4)" section for the full design.
+
 ## Domain model
 
-- [ ] Introduce `AlignmentChoice`, for example:
-  - [ ] `support`
-  - [ ] `concern`
-  - [ ] `strong_objection`
-  - [ ] `needs_clarification`
-- [ ] Decide whether `abstain` is still useful.
-- [ ] Keep alignment participant-scoped.
-- [ ] Make alignment upsert/idempotent.
-- [ ] Support comments/reasoning.
-- [ ] Link alignment to the active proposal/candidate.
-- [ ] Invalidate alignment if the candidate materially changes.
+- [x] Introduce `AlignmentChoice`:
+  - [x] `support`
+  - [x] `concern`
+  - [x] `strong_objection`
+  - [x] `needs_clarification`
+- [x] Decide whether `abstain` is still useful. (Dropped; `needs_clarification` covers the "not ready to take a side" case without reading as a neutral vote.)
+- [x] Keep alignment participant-scoped.
+- [x] Make alignment upsert/idempotent. (Primary key `(proposal_id, participant_id)` in `public.alignments`.)
+- [x] Support comments/reasoning.
+- [x] Link alignment to the active proposal/candidate.
+- [x] Invalidate alignment if the candidate materially changes. (Entering a fresh Alignment phase clears prior alignments; a removed participant's alignment is excluded from the current candidate while preserved in history.)
 
 ## Owner-decides finalization
 
-- [ ] All required contributors may express alignment.
-- [ ] Owner sees unresolved concerns.
-- [ ] Strong objections do not automatically outvote owner.
-- [ ] Blocking domain invariants may still prevent finalization where appropriate.
-- [ ] Owner must explicitly review the final candidate.
-- [ ] Owner is the final human authority.
-- [ ] Record dissent in final decision record.
+- [x] All required contributors may express alignment.
+- [x] Owner sees unresolved concerns. (Alignment workspace's owner summary + Decision workspace's dissent list.)
+- [x] Strong objections do not automatically outvote owner.
+- [x] Blocking domain invariants may still prevent finalization where appropriate. (Unresolved blocking conflict still refuses entering Decision review.)
+- [x] Owner must explicitly review the final candidate.
+- [x] Owner is the final human authority.
+- [x] Record dissent in final decision record.
 
 ## Equal-authority consensus
 
-- [ ] Define exactly who counts as `decision_maker`.
-- [ ] Require explicit approval from every active decision-maker.
-- [ ] Contributors may align but cannot satisfy consensus requirement.
-- [ ] Expert advice cannot satisfy consensus.
-- [ ] If candidate changes, previous approvals are invalidated.
-- [ ] Preserve exact candidate hashing.
+- [x] Define exactly who counts as `decision_maker`. (Active, human, `decision_role = 'decision_maker'`, claimed.)
+- [x] Require explicit approval from every active decision-maker.
+- [x] Contributors may align but cannot satisfy consensus requirement.
+- [x] Expert advice cannot satisfy consensus. (No expert participant kind exists yet -- Slice 5.)
+- [x] If candidate changes, previous approvals are invalidated.
+- [x] Preserve exact candidate hashing.
 
 ## UI changes
 
-- [ ] Rename user-facing "Voting" tab/workspace to "Alignment".
-- [ ] Show per-participant state compactly.
-- [ ] Show owner summary:
-  - [ ] support count;
-  - [ ] concerns;
-  - [ ] unresolved objections;
-  - [ ] expert advisory warnings.
-- [ ] Show:
-  - [ ] `Continue deliberation`
-  - [ ] `Make decision`
-- [ ] In consensus mode, show decision-maker approval progress.
+- [x] Rename user-facing "Voting" tab/workspace to "Alignment".
+- [x] Show per-participant state compactly.
+- [x] Show owner summary:
+  - [x] support count;
+  - [x] concerns;
+  - [x] unresolved objections;
+  - [ ] expert advisory warnings. (No expert actor exists yet -- Slice 5.)
+- [x] Show:
+  - [x] `Continue deliberation`
+  - [x] `Review decision` / `Make final decision` (brief's suggested "Make decision" label, applied per-policy)
+- [x] In consensus mode, show decision-maker approval progress.
 
 ### Acceptance criteria
 
-- [ ] `owner_decides` room can finalize with recorded dissent.
-- [ ] Non-owner contributor cannot finalize.
-- [ ] Consensus room cannot finalize until all decision-makers approve.
-- [ ] Expert can never count toward approval.
-- [ ] Final record clearly shows policy and authority path.
+- [x] `owner_decides` room can finalize with recorded dissent.
+- [x] Non-owner contributor cannot finalize.
+- [x] Consensus room cannot finalize until all decision-makers approve.
+- [x] Expert can never count toward approval. (No expert actor exists yet -- Slice 5; the invariant is enforced by construction today.)
+- [x] Final record clearly shows policy and authority path.
+
+Verified by `tests/domain/alignment-and-decision.test.ts` (owner-decides Cases
+A-E, consensus finalization/promotion/removal/staleness, policy-change
+authority, decision-role management, ownership-transfer interaction),
+`tests/domain/supabase-operations.test.ts` and `tests/domain/room-lifecycle.test.ts`
+(migrated from the legacy voting engine), `tests/playwright/alignment-and-decision.spec.ts`
+(owner-decides-with-dissent and consensus two-browser journeys), and the
+existing `tests/playwright/realtime-room.spec.ts` (migrated to Alignment
+terminology end to end).
 
 ---
 
@@ -847,10 +860,10 @@ self-certify the gate; a human reviewer should confirm before Slice 4 begins.
 
 - [x] Ownership transfer requires explicit authority.
 - [x] Participant removal requires explicit authority.
-- [ ] Final decision requires correct decision authority.
-- [ ] Consensus approval bound to exact decision hash.
-- [ ] Changed candidate invalidates previous approval.
-- [ ] Finalized room is immutable.
+- [x] Final decision requires correct decision authority. (Policy-aware `requiredApprovalParticipantIds`, never the deprecated `required_for_approval` column.)
+- [x] Consensus approval bound to exact decision hash.
+- [x] Changed candidate invalidates previous approval.
+- [x] Finalized room is immutable.
 
 ## Data exposure
 
@@ -912,14 +925,14 @@ Treat the following as untrusted content:
 - [x] participant removal;
 - [x] ownership transfer;
 - [x] double-transfer race;
-- [ ] decision policy validation;
-- [ ] owner-decides finalization;
-- [ ] consensus finalization;
-- [ ] candidate hash invalidation;
-- [ ] expert no-authority rules;
-- [ ] finalized immutability;
-- [ ] stale state rejection;
-- [ ] cross-room isolation.
+- [x] decision policy validation;
+- [x] owner-decides finalization;
+- [x] consensus finalization;
+- [x] candidate hash invalidation;
+- [x] expert no-authority rules; (no expert actor exists yet -- Slice 5; enforced by construction today)
+- [x] finalized immutability;
+- [x] stale state rejection;
+- [x] cross-room isolation.
 
 ## API tests
 
@@ -963,22 +976,27 @@ produces).
 - [x] A admits B.
 - [x] B sees room.
 - [x] Chair count updates.
-- [ ] B shares context.
-- [ ] A sees it.
-- [ ] Proposal is created.
-- [ ] Concern is raised.
-- [ ] Trade-off is created.
-- [ ] Alignment requested.
-- [ ] Both clients update.
+- [x] B shares context.
+- [x] A sees it.
+- [x] Proposal is created.
+- [x] Concern is raised.
+- [x] Trade-off is created.
+- [x] Alignment shared (both a strong objection and support).
+- [x] Both clients update.
 - [x] A transfers ownership to B.
 - [x] Tool/controls swap.
-- [ ] New owner finalizes according to policy. (Slice 4: policy-aware finalization)
-- [ ] Both receive same final record.
+- [x] New owner (or the original owner, per policy) finalizes according to policy.
+- [x] Both receive same final record.
 
 Verified this pass by `tests/playwright/owner-lifecycle.spec.ts` (ownership
 transfer with live control handoff, participant removal with preserved
-history, and meeting lock refusing/re-allowing join requests) and
-`tests/playwright/join-camera-transition.spec.ts` (the Join camera fix).
+history, and meeting lock refusing/re-allowing join requests),
+`tests/playwright/join-camera-transition.spec.ts` (the Join camera fix),
+`tests/playwright/realtime-room.spec.ts` (two real browsers through
+input -> proposals -> deliberation -> Alignment -> Decision -> finalized,
+migrated to Alignment terminology this slice), and
+`tests/playwright/alignment-and-decision.spec.ts` (owner-decides-with-dissent
+and equal-authority-consensus two-browser journeys, new this slice).
 
 ## Multiple meetings
 
@@ -1085,10 +1103,10 @@ Only after P0 path is stable.
 - [x] admitted participant list
 - [x] current user's participant identity
 - [x] waiting-room count / join requests for owner
-- [ ] alignment state (Slice 4)
-- [ ] attention items (Slice 4/6)
-- [ ] current candidate decision
-- [ ] final decision state
+- [x] alignment state (`RoomState.alignments`, Gate 4)
+- [ ] attention items (out of scope this slice -- Slice 5/6)
+- [x] current candidate decision (`RoomState.finalDecisionPreview`, now policy-aware)
+- [x] final decision state
 - [x] activity ledger
 
 ## 3D behavior
@@ -1229,10 +1247,19 @@ begins.
 
 ## Gate 4 — Alignment / decision policy green
 
-- [ ] owner-decides flow;
-- [ ] consensus flow;
-- [ ] exact final candidate hashing;
-- [ ] final record.
+- [x] owner-decides flow;
+- [x] consensus flow;
+- [x] exact final candidate hashing;
+- [x] final record.
+
+**Status:** ✅ COMPLETE
+
+Implemented and verified this pass (`npm run check`, `npm run test:domain`,
+`npm run test:e2e`, `npm run build` -- see the Slice 4 completion report for
+exact results). Per this repository's own convention, this agent does not
+self-certify the gate; a human reviewer should confirm before Slice 5 (the
+broader goal-oriented WebMCP catalog, the Security Expert, and the
+`/room/demo` scenario redesign) begins.
 
 ## Gate 5 — WebMCP green
 
@@ -1295,21 +1322,21 @@ The implementation is successful when this exact journey works.
 - [x] User becomes participant.
 - [x] New participant chair appears.
 - [ ] Both participants can connect their browser agents. (Unchanged from Gate 1 for an admitted participant; not re-verified specifically chained after a Gate 2 admission this pass.)
-- [ ] User gives a natural-language constraint.
-- [ ] Agent publishes structured context via WebMCP.
-- [ ] Shared state updates in realtime.
-- [ ] Agent/team creates proposal.
-- [ ] Concern is raised.
-- [ ] Trade-off/revision resolves concern.
-- [ ] Owner requests alignment.
-- [ ] Participants express alignment.
-- [ ] Owner sees concise alignment summary.
-- [ ] Owner receives final authority attention item.
-- [ ] Owner previews exact final plan.
-- [ ] Owner confirms final decision.
-- [ ] Immutable decision record is created.
-- [ ] Both browsers see the same final record.
-- [ ] Audit trail shows manual UI vs WebMCP vs simulation vs expert origin correctly.
+- [ ] User gives a natural-language constraint. (Prompt-first NL-to-structured-constraint parsing is Slice 5/8 scope; the structured path is exercised instead.)
+- [x] Agent publishes structured context via WebMCP.
+- [x] Shared state updates in realtime.
+- [x] Agent/team creates proposal.
+- [x] Concern is raised.
+- [x] Trade-off/revision resolves concern.
+- [x] Owner requests alignment. (Opens the Alignment phase; there is no separate "request" action.)
+- [x] Participants express alignment.
+- [x] Owner sees concise alignment summary.
+- [ ] Owner receives final authority attention item. (No cross-workspace `AttentionItem` surface exists yet -- out of scope this slice, Slice 5/6.)
+- [x] Owner previews exact final plan.
+- [x] Owner confirms final decision.
+- [x] Immutable decision record is created.
+- [x] Both browsers see the same final record.
+- [x] Audit trail shows manual UI vs WebMCP vs simulation origin correctly. (No expert actor exists yet -- Slice 5.)
 
 ---
 

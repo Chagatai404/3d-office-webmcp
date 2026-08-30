@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  castVoteInputSchema,
+  alignmentChoiceSchema,
+  alignmentSchema,
   decisionPolicySchema,
+  expressAlignmentInputSchema,
   participantSchema,
   removeParticipantInputSchema,
   roomStateSchema,
+  setDecisionPolicyInputSchema,
+  setParticipantDecisionRoleInputSchema,
   startDemoScenarioInputSchema,
   transferOwnershipInputSchema,
 } from "@/contracts/room";
@@ -50,11 +54,86 @@ describe("canonical room contract", () => {
 
   it("rejects browser-supplied participant authority", () => {
     expect(
-      castVoteInputSchema.safeParse({
+      expressAlignmentInputSchema.safeParse({
         participantId: "participant-engineering",
         proposalId: "proposal-1",
         choice: "support",
         comment: null,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("models AlignmentChoice, Alignment, and ExpressAlignmentInput strictly, replacing Vote", () => {
+    expect(alignmentChoiceSchema.options).toEqual([
+      "support",
+      "concern",
+      "strong_objection",
+      "needs_clarification",
+    ]);
+    expect(alignmentChoiceSchema.safeParse("oppose").success).toBe(false);
+
+    const alignment = {
+      proposalId: "proposal-1",
+      participantId: "participant-engineering",
+      choice: "concern" as const,
+      comment: "Capacity is tight.",
+      updatedAt: "2026-08-30T00:00:00.000Z",
+    };
+    expect(alignmentSchema.parse(alignment)).toEqual(alignment);
+    expect(alignmentSchema.safeParse({ ...alignment, choice: "oppose" }).success).toBe(false);
+
+    expect(
+      expressAlignmentInputSchema.parse({
+        proposalId: "proposal-1",
+        choice: "strong_objection",
+        comment: null,
+      }),
+    ).toEqual({ proposalId: "proposal-1", choice: "strong_objection", comment: null });
+    expect(
+      expressAlignmentInputSchema.safeParse({
+        proposalId: "proposal-1",
+        choice: "strong_objection",
+        comment: null,
+        actorId: "someone-else",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("carries alignments (not votes) on canonical RoomState", () => {
+    expect("alignments" in demoRoom).toBe(true);
+    expect("votes" in (demoRoom as unknown as Record<string, unknown>)).toBe(false);
+    expect(roomStateSchema.safeParse({ ...demoRoom, votes: [] }).success).toBe(false);
+  });
+
+  it("keeps decision-policy and decision-role mutation input strict, rejecting spoofed authority fields", () => {
+    expect(setDecisionPolicyInputSchema.parse({ decisionPolicy: "owner_decides" })).toEqual({
+      decisionPolicy: "owner_decides",
+    });
+    expect(
+      setDecisionPolicyInputSchema.safeParse({
+        decisionPolicy: "owner_decides",
+        actorId: "participant-product",
+      }).success,
+    ).toBe(false);
+    expect(setDecisionPolicyInputSchema.safeParse({ decisionPolicy: "majority" }).success).toBe(false);
+
+    expect(
+      setParticipantDecisionRoleInputSchema.parse({
+        participantId: "participant-engineering",
+        decisionRole: "decision_maker",
+      }),
+    ).toEqual({ participantId: "participant-engineering", decisionRole: "decision_maker" });
+    expect(
+      setParticipantDecisionRoleInputSchema.safeParse({
+        participantId: "participant-engineering",
+        decisionRole: "advisor",
+      }).success,
+    ).toBe(false);
+    expect(
+      setParticipantDecisionRoleInputSchema.safeParse({
+        participantId: "participant-engineering",
+        decisionRole: "decision_maker",
+        ownerParticipantId: "participant-product",
       }).success,
     ).toBe(false);
   });
