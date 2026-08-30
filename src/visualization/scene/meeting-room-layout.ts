@@ -7,16 +7,26 @@
  * count. Positions are pure data so the scene components stay declarative.
  */
 
+/**
+ * The shell, sized so nothing mounted on it pokes through it.
+ *
+ * The two angled corner boards reach 8.295 from the centre across and 6.719
+ * back, and the Brief board's top edge is at 4.05 — all three of which the
+ * original 16.4 x 12.6 x 3.4 shell was smaller than, so those boards cut
+ * through the side walls, the back wall and the wall head respectively. These
+ * are the smallest dimensions that clear every board with a hand's width to
+ * spare, and the boards fixed to the walls follow the walls out.
+ */
 export const ROOM = {
-  width: 16.4,
-  depth: 12.6,
-  wallHeight: 3.4,
+  width: 16.9,
+  depth: 13.7,
+  wallHeight: 4.1,
 } as const;
 
 /** One stable colour system for the whole room, matching the design. */
 export const SURFACE = {
   ground: "#e9e5dd",
-  floor: "#f4f1ea",
+  floor: "#d5cfc5",
   inlay: "#e3dfd5",
   frame: "#2e2b27",
   glass: "#d8e5e7",
@@ -32,7 +42,33 @@ export const SURFACE = {
   quiet: "#c7c2b8",
   avatarLimb: "#4a453e",
   avatarHead: "#2e2b27",
+  /* Carried by the plant asset rather than any material here, but the room
+     has one colour system and this is the only green in it. */
+  foliage: "#8f9e6a",
+  /* The three enclosed sides. Solid, and a shade lighter than the floor so a
+     board reads as hung on a wall rather than floating in front of daylight. */
+  wall: "#e0dbd2",
+  /* Table top and the credenzas under the boards: the room's only warmth.
+     Pale oak, not walnut — the room's light is warm (#fff7ea key over a
+     #dfd8c9 bounce), so a saturated tan reads orange once it is lit. */
+  wood: "#dcc5a4",
+  /* Upholstery, carried by the chair asset. The one saturated tone in here. */
+  chairFabric: "#8d88a6",
 } as const;
+
+/** The top of the floor slab: the height everything in the room stands on. */
+export const FLOOR_TOP = 0.16;
+
+/**
+ * The rug, and what stands on it.
+ *
+ * `RUG_BASE` clears the floor slab by a hair on purpose. The slab's top face
+ * and the rug's underside are the same plane at the same height, and the room
+ * has already been bitten twice by coplanar faces flashing as the camera
+ * moves — see the notes on the floor inlay and the base rim.
+ */
+export const RUG_BASE = 0.162;
+export const RUG_TOP = RUG_BASE + 0.03;
 
 export interface MeetingSeat {
   index: number;
@@ -113,6 +149,37 @@ export const BOARDS: Record<
     rotationY: 0.62,
   },
 };
+
+/**
+ * The credenza run under each board.
+ *
+ * `height` is not a taste decision: the lowest board in the room (Constraints
+ * and Proposals, at 2.3 with a height of 3) has its bottom edge at 0.80, and
+ * the run has to stop under it or it would cover a row of cards. Standing on
+ * the floor slab, 0.64 lands the top exactly there.
+ *
+ * Laid as repeated modules rather than one long box, because a 6.5m cabinet
+ * drawn as a single mesh reads as a plinth; the seams are what make it
+ * furniture.
+ */
+export const CREDENZA = {
+  height: 0.64,
+  depth: 0.45,
+  module: 1.6,
+  gap: 0.025,
+  /** The recessed dark base the body sits on. */
+  toe: 0.09,
+} as const;
+
+/** Where a board's credenza run stands, in the board's own rotated frame. */
+export function credenzaModules(width: number): number[] {
+  const count = Math.max(1, Math.floor(width / CREDENZA.module));
+  const span = count * CREDENZA.module + (count - 1) * CREDENZA.gap;
+  return Array.from(
+    { length: count },
+    (_unused, index) => -span / 2 + CREDENZA.module / 2 + index * (CREDENZA.module + CREDENZA.gap),
+  );
+}
 
 export const VOTE_PLINTH_POSITION: [number, number, number] = [-3.4, 0.16, 4.8];
 export const DECISION_PEDESTAL_POSITION: [number, number, number] = [3.4, 0.16, 4.8];

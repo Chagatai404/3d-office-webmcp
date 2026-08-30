@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { PerspectiveCamera } from "@react-three/drei";
 import type { RoomVisualizationState } from "@/visualization/room-view-model";
 import { CameraController, type CameraRequest } from "./camera-controller";
@@ -58,7 +59,17 @@ export function MeetingScene({
         <meshBasicMaterial visible={false} />
       </mesh>
 
-      <CentralMeetingRoom view={view} activeWorkspace={request.workspace} reducedMotion={reducedMotion} />
+      {/* The room's own boundary, inside the canvas. The props suspend while
+          their `.glb` files load, and without this the nearest boundary is the
+          DOM one outside `<Canvas>` — which would tear down the canvas and
+          rebuild the whole scene rather than waiting for five small files. */}
+      <Suspense fallback={null}>
+        <CentralMeetingRoom
+          view={view}
+          activeWorkspace={request.workspace}
+          reducedMotion={reducedMotion}
+        />
+      </Suspense>
     </>
   );
 }

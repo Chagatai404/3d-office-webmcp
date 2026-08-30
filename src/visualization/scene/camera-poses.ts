@@ -71,8 +71,8 @@ export const PRE_MEETING_POSES: Record<PreMeetingPoseId, CameraPose> = {
  * shot holds the whole model at any window shape.
  */
 export const ROOM_BOUNDS = {
-  center: [0, 1.83, 0],
-  half: [8.4, 1.9, 6.5],
+  center: [0, 2.22, 0],
+  half: [8.6, 2.28, 7.0],
 } as const;
 
 type Vec3 = [number, number, number];
@@ -226,6 +226,105 @@ export const WELCOME_FRAME_LIFT = 0;
  * inside rather than zooming.
  */
 export const WELCOME_FOV = 26;
+
+/**
+ * How far the welcome shot may be swung around the room, in radians from +Z.
+ *
+ * The limit is not a taste call. At the fitted welcome distance the camera
+ * stands about 30m from the middle of the room, so it clears a side wall —
+ * and starts looking at the outside of it — once |x| passes the room's own
+ * half-width, at roughly 16 degrees. The shot is authored at +32, outside the
+ * right-hand wall, which is why Proposals has never been visible from it.
+ * Swinging to -32 puts the camera outside the left-hand wall instead and shows
+ * the right-hand one; everything between shows both. 35 degrees is a little
+ * past either end of that useful arc and nowhere near the 90 it would take to
+ * begin seeing the room from behind.
+ */
+export const WELCOME_SWING = { min: -0.62, max: 0.62 } as const;
+
+/** Where a pose stands around what it looks at, in radians from the +Z axis. */
+export function poseAzimuth(pose: CameraPose): number {
+  return Math.atan2(pose.position[0] - pose.target[0], pose.position[2] - pose.target[2]);
+}
+
+/**
+ * The same pose swung around the vertical axis through what it looks at.
+ *
+ * Height and distance are untouched, so a swung pose is still the authored
+ * shot — the camera has walked around the room on its own circle, and
+ * `fitPoseToFrame` can still solve the framing for it at any angle.
+ */
+export function swingPose(pose: CameraPose, azimuth: number): CameraPose {
+  const radius = Math.hypot(
+    pose.position[0] - pose.target[0],
+    pose.position[2] - pose.target[2],
+  );
+  return {
+    position: [
+      pose.target[0] + Math.sin(azimuth) * radius,
+      pose.position[1],
+      pose.target[2] + Math.cos(azimuth) * radius,
+    ],
+    target: [...pose.target],
+  };
+}
+
+export function clampSwing(azimuth: number): number {
+  return Math.min(WELCOME_SWING.max, Math.max(WELCOME_SWING.min, azimuth));
+}
+
+/** How far a pose stands from what it looks at. */
+function poseReach(pose: CameraPose): number {
+  return Math.hypot(
+    pose.position[0] - pose.target[0],
+    pose.position[1] - pose.target[1],
+    pose.position[2] - pose.target[2],
+  );
+}
+
+/**
+ * The welcome shot, fitted once for the whole arc and then swung along it.
+ *
+ * Fitting each angle separately is what a single shot wants and what an orbit
+ * must not do: the room is a box, so its silhouette is 16.9m across head-on
+ * and about 21.7m across at the ends of the arc, and a per-angle fit answers
+ * that by pushing the camera out and pulling it back in as you drag. The room
+ * appeared to breathe in and out around the table.
+ *
+ * So the fit is solved once, at whichever angle in the arc needs the most
+ * room, and every other angle reuses that distance. Because `fitPoseToFrame`
+ * only ever nudges its target vertically here — the room is symmetric about
+ * both floor axes, so a swung view of it is still symmetric about the frame's
+ * centre line — the fitted target sits on the room's own vertical axis, and
+ * swinging around it is a true circle: constant height, constant distance.
+ *
+ * The cost is that the resting shot is about two per cent smaller than a fit
+ * made for its angle alone, which is well inside the 7% margin `fill` already
+ * leaves.
+ */
+export function fitSwungPose(
+  base: CameraPose,
+  aspect: number,
+  fovDegrees: number,
+  fill: number,
+  lift: number,
+  swing: number,
+): CameraPose {
+  // The ends of the arc are the widest views of a box this shallow, but the
+  // middle is sampled too rather than assumed: it costs three dot-product
+  // passes and it cannot be wrong.
+  let widest: CameraPose | null = null;
+  let reach = -Infinity;
+  for (const angle of [WELCOME_SWING.min, 0, WELCOME_SWING.max]) {
+    const candidate = fitPoseToFrame(swingPose(base, angle), aspect, fovDegrees, fill, lift);
+    const distance = poseReach(candidate);
+    if (distance > reach) {
+      widest = candidate;
+      reach = distance;
+    }
+  }
+  return swingPose(widest ?? base, swing);
+}
 
 /**
  * One duration for every pre-meeting camera move, in seconds.

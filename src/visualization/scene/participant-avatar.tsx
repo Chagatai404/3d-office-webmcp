@@ -1,197 +1,90 @@
 "use client";
 
-import { useRef } from "react";
-import { useFrame } from "@react-three/fiber";
-import type { Group } from "three";
+import { Clone, useGLTF } from "@react-three/drei";
 import type { VisualParticipant } from "@/visualization/room-view-model";
-import { SURFACE } from "./meeting-room-layout";
+import { RUG_TOP, SURFACE } from "./meeting-room-layout";
 
 /**
- * A participant, in the room.
+ * A participant, in their chair.
  *
- * The figure is procedural rather than a character asset: no rigged people
- * are available yet, and a handful of primitives keeps the room one visual
- * language and costs nothing to load. A Blender-authored figure can replace
- * this later without touching the seat math or the room state it reads.
+ * This was a stack of primitives for as long as no character asset was
+ * available. It now loads one of a small cast of low-poly figures — picked
+ * from the Ultimate Modular Men / Women packs and folded into a seated pose by
+ * `scripts/assets/convert-people.py` — so a seat reads as a person from across
+ * the room. The figure keeps its own clothing colours: unlike the furniture
+ * props it is not re-shaded from `SURFACE`, because a room of palette-grey
+ * mannequins reads worse than one with people in it.
  *
- * It carries identity and nothing else. The seat colour says who this is, the
- * halo says the participant is simulated, the floor ring says it is you. None
- * of that is a claim about authority — the panels hold that, and the canvas
- * stays `aria-hidden` behind them.
+ * It still carries identity and nothing else. The floor ring says the seat is
+ * you; the halo says the participant is simulated. Neither is a claim about
+ * authority — the panels hold that, and the canvas stays `aria-hidden` behind
+ * them.
  *
- * Unrotated, an avatar faces +Z, the same way the chair model does, so seats
- * and avatars share one set of rotations.
+ * Every figure is exported facing +Z, the way the chair model and the seat
+ * math already do, so one rotation turns the seat, the chair and the person
+ * together.
  */
 
-export type AvatarPose = "sitting" | "standing" | "walking";
+/** The cast, indexed by seat. Mixed men and women, office-plausible. */
+const CHARACTERS = [
+  "woman-suit",
+  "man-suit",
+  "woman-casual",
+  "man-casual",
+  "woman-formal",
+  "man-hoodie",
+  "woman-worker",
+  "man-worker",
+] as const;
 
-const HIP_HEIGHT = { standing: 0.86, sitting: 0.46 } as const;
+const characterUrl = (id: string) => `/models/people/${id}.glb`;
 
-/** Every part is measured from the hips, so a pose only moves the hips. */
-const BODY = {
-  torsoHeight: 0.54,
-  shoulderY: 0.5,
-  shoulderX: 0.28,
-  headY: 0.72,
-  headRadius: 0.17,
-  thighLength: 0.44,
-  shinLength: 0.42,
-  hipX: 0.13,
-} as const;
+/** Feet rest on the rug — the same height the chair stands on. */
+const FEET_Y = RUG_TOP;
 
-/** Radians per second, and how far each limb swings. */
-const STRIDE_RATE = 5.2;
-const LEG_SWING = 0.52;
-const ARM_SWING = 0.38;
-const BOB = 0.05;
-
-/** Arms rest slightly out when upright and reach forward when seated. */
-const ARM_REST = { upright: 0.12, sitting: -0.62 } as const;
-
-function setPitch(limb: Group | null, radians: number) {
-  if (limb) limb.rotation.x = radians;
-}
+/**
+ * The figure sits facing +Z, so −Z is back into the chair. The baked pose
+ * puts the pelvis near the model origin; without this the seat of the trousers
+ * lands on the front lip of the cushion with the thighs cantilevered over the
+ * edge. This slides the whole figure back until the weight is over the pad.
+ */
+const SIT_BACK = -0.24;
 
 export function ParticipantAvatar({
   participant,
   color,
-  pose,
 }: {
   participant: VisualParticipant;
+  /** Tints the "you" ring only — never the figure. */
   color: string;
-  pose: AvatarPose;
 }) {
-  const hips = useRef<Group>(null);
-  const leftLeg = useRef<Group>(null);
-  const rightLeg = useRef<Group>(null);
-  const leftArm = useRef<Group>(null);
-  const rightArm = useRef<Group>(null);
-
-  const sitting = pose === "sitting";
-  const walking = pose === "walking";
-  const hipHeight = sitting ? HIP_HEIGHT.sitting : HIP_HEIGHT.standing;
-
-  // Seated, the thighs go forward and the shins drop back down under them.
-  const thighRest = sitting ? -Math.PI / 2 : 0;
-  const shinRest = sitting ? Math.PI / 2 : 0;
-  const armRest = sitting ? ARM_REST.sitting : ARM_REST.upright;
-
-  /* Limbs are driven here for every pose, not only while walking: a figure
-     that sat down after a walk would otherwise keep the last frame's stride,
-     since the resting rotation prop has not changed. */
-  useFrame((state) => {
-    const swing = walking
-      ? Math.sin(state.clock.elapsedTime * STRIDE_RATE + participant.seatIndex)
-      : 0;
-
-    setPitch(leftLeg.current, thighRest + swing * LEG_SWING);
-    setPitch(rightLeg.current, thighRest - swing * LEG_SWING);
-    setPitch(leftArm.current, armRest - swing * ARM_SWING);
-    setPitch(rightArm.current, armRest + swing * ARM_SWING);
-
-    if (hips.current) {
-      // Two bobs per stride, centred so the feet stay on the floor.
-      hips.current.position.y =
-        hipHeight + (walking ? (Math.abs(swing) - 0.5) * BOB : 0);
-    }
-  });
+  const id = CHARACTERS[participant.seatIndex % CHARACTERS.length] ?? CHARACTERS[0];
+  const { scene } = useGLTF(characterUrl(id));
 
   return (
     <group>
-      <group ref={hips} position={[0, hipHeight, 0]}>
-        {/* Torso: the office colour, so identity reads from across the room. */}
-        <mesh position={[0, BODY.torsoHeight / 2, 0]}>
-          <cylinderGeometry args={[0.26, 0.21, BODY.torsoHeight, 8]} />
+      {/* Deep-cloned per seat: a THREE.Object3D can only sit at one point in
+          one graph, and past eight seats the cast repeats. Geometry and
+          materials stay shared with the cached original. */}
+      <Clone object={scene} position={[0, FEET_Y, SIT_BACK]} castShadow />
+
+      {/* A simulated participant is marked by a shape, not only by a label:
+          they are visibly not a person, wherever they are sitting. */}
+      {participant.kind === "simulation" ? (
+        <mesh position={[0, 1.62, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.16, 0.035, 6, 20]} />
           <meshStandardMaterial
-            color={color}
-            roughness={0.55}
-            emissive={color}
-            emissiveIntensity={0.12}
+            color={SURFACE.quiet}
+            emissive={SURFACE.quiet}
+            emissiveIntensity={0.4}
+            roughness={0.4}
           />
         </mesh>
-
-        <mesh position={[0, BODY.torsoHeight + 0.04, 0]}>
-          <cylinderGeometry args={[0.07, 0.08, 0.09, 6]} />
-          <meshStandardMaterial color={SURFACE.avatarLimb} roughness={0.7} />
-        </mesh>
-
-        <mesh position={[0, BODY.headY, 0]}>
-          <icosahedronGeometry args={[BODY.headRadius, 0]} />
-          <meshStandardMaterial color={SURFACE.avatarHead} roughness={0.65} />
-        </mesh>
-
-        {/* The visor faces forward, so which way somebody is turned is legible
-            even in silhouette at god-view height. */}
-        <mesh position={[0, BODY.headY + 0.01, BODY.headRadius * 0.82]}>
-          <boxGeometry args={[0.23, 0.075, 0.07]} />
-          <meshStandardMaterial
-            color={color}
-            emissive={color}
-            emissiveIntensity={0.75}
-            roughness={0.3}
-          />
-        </mesh>
-
-        {([-1, 1] as const).map((side) => (
-          <group
-            key={`arm-${side}`}
-            ref={side === -1 ? leftArm : rightArm}
-            position={[side * BODY.shoulderX, BODY.shoulderY, 0]}
-            rotation={[armRest, 0, 0]}
-          >
-            <mesh position={[0, -0.26, 0]}>
-              <boxGeometry args={[0.13, 0.52, 0.14]} />
-              <meshStandardMaterial color={SURFACE.avatarLimb} roughness={0.7} />
-            </mesh>
-          </group>
-        ))}
-
-        {([-1, 1] as const).map((side) => (
-          <group
-            key={`leg-${side}`}
-            ref={side === -1 ? leftLeg : rightLeg}
-            position={[side * BODY.hipX, 0, 0]}
-            rotation={[thighRest, 0, 0]}
-          >
-            <mesh position={[0, -BODY.thighLength / 2, 0]}>
-              <boxGeometry args={[0.17, BODY.thighLength, 0.19]} />
-              <meshStandardMaterial color={SURFACE.avatarLimb} roughness={0.7} />
-            </mesh>
-
-            <group position={[0, -BODY.thighLength, 0]} rotation={[shinRest, 0, 0]}>
-              <mesh position={[0, -BODY.shinLength / 2, 0]}>
-                <boxGeometry args={[0.15, BODY.shinLength, 0.17]} />
-                <meshStandardMaterial
-                  color={SURFACE.avatarLimb}
-                  roughness={0.7}
-                />
-              </mesh>
-              <mesh position={[0, -BODY.shinLength + 0.045, 0.045]}>
-                <boxGeometry args={[0.17, 0.09, 0.26]} />
-                <meshStandardMaterial color={SURFACE.avatarHead} roughness={0.8} />
-              </mesh>
-            </group>
-          </group>
-        ))}
-
-        {/* A simulated participant is marked by a shape, not only by a label:
-            they are visibly not a person, wherever they are standing. */}
-        {participant.kind === "simulation" ? (
-          <mesh position={[0, BODY.headY + 0.33, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.14, 0.035, 6, 18]} />
-            <meshStandardMaterial
-              color={color}
-              emissive={color}
-              emissiveIntensity={0.7}
-              roughness={0.35}
-            />
-          </mesh>
-        ) : null}
-      </group>
+      ) : null}
 
       {participant.isSelf ? (
-        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[0.42, 0.045, 6, 24]} />
+        <mesh position={[0, FEET_Y + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.46, 0.045, 6, 24]} />
           <meshStandardMaterial
             color={color}
             emissive={color}
@@ -203,3 +96,7 @@ export function ParticipantAvatar({
     </group>
   );
 }
+
+// Fetched as the scene module loads, so a seat is never a bare chair for a
+// frame while its figure arrives.
+for (const id of CHARACTERS) useGLTF.preload(characterUrl(id));

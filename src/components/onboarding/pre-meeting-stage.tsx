@@ -3,9 +3,11 @@
 import {
   Component,
   Suspense,
+  useCallback,
   useRef,
   useState,
   type ErrorInfo,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
@@ -14,9 +16,11 @@ import { Color, Vector3, type PerspectiveCamera as PerspectiveCameraImpl } from 
 import { createPlaceholderVisualizationState } from "@/visualization/room-view-model";
 import { CentralMeetingRoom } from "@/visualization/scene/central-meeting-room";
 import {
+  clampSwing,
   ease,
-  fitPoseToFrame,
+  fitSwungPose,
   flowFlightSeconds,
+  poseAzimuth,
   PRE_MEETING_POSES,
   WELCOME_FRAME_FILL,
   WELCOME_FRAME_LIFT,
@@ -81,17 +85,21 @@ class BackdropErrorBoundary extends Component<
  * so it has to hold the model whatever the window does. The later poses are
  * inside the composition and are used exactly as authored.
  */
-function resolvePose(pose: PreMeetingPoseId, aspect: number): CameraPose {
+function resolvePose(
+  pose: PreMeetingPoseId,
+  aspect: number,
+  swing: number,
+): CameraPose {
   const base = PRE_MEETING_POSES[pose];
-  return pose === "welcome"
-    ? fitPoseToFrame(
-        base,
-        aspect,
-        WELCOME_FOV,
-        WELCOME_FRAME_FILL,
-        WELCOME_FRAME_LIFT,
-      )
-    : base;
+  if (pose !== "welcome") return base;
+  return fitSwungPose(
+    base,
+    aspect,
+    WELCOME_FOV,
+    WELCOME_FRAME_FILL,
+    WELCOME_FRAME_LIFT,
+    swing,
+  );
 }
 
 /** The welcome shot has its own lens; every other pose uses the room's. */
@@ -143,9 +151,15 @@ function StageSurface() {
 function StageCamera({
   pose,
   reducedMotion,
+  swing,
+  grabbed,
 }: {
   pose: PreMeetingPoseId;
   reducedMotion: boolean;
+  /** Live azimuth from the drag, in radians. Read every frame, never eased. */
+  swing: { current: number };
+  /** True once the viewer has taken hold of the shot. */
+  grabbed: { current: boolean };
 }) {
   const rig = useRef({
     pos: new Vector3(),
@@ -167,7 +181,7 @@ function StageCamera({
     const r = rig.current;
     const camera = state.camera as PerspectiveCameraImpl;
     const aspect = state.size.height > 0 ? state.size.width / state.size.height : 1;
-    const destination = resolvePose(pose, aspect);
+    const destination = resolvePose(pose, aspect, swing.current);
     r.to.pos.set(...destination.position);
     r.to.target.set(...destination.target);
     r.to.tone.set(SURFACE_TONE[pose]);
@@ -211,9 +225,15 @@ function StageCamera({
       camera.updateProjectionMatrix();
     }
 
+    // The idle sway exists so an untouched shot is not dead-still. Once the
+    // viewer is steering it, they supply the life, and a sway underneath the
+    // drag only reads as the camera not doing what the hand says.
     const t = state.clock.elapsedTime;
-    const drift = reducedMotion ? 0 : Math.sin(t * 0.16);
-    const lift = reducedMotion ? 0 : Math.sin(t * 0.12);
+    // Only the screen the viewer can actually steer gives up its sway; the
+    // later poses are not theirs to hold, so the room breathes again there.
+    const still = reducedMotion || (pose === "welcome" && grabbed.current);
+    const drift = still ? 0 : Math.sin(t * 0.16);
+    const lift = still ? 0 : Math.sin(t * 0.12);
     camera.position.set(
       r.pos.x + drift * 0.22,
       r.pos.y + lift * 0.1,
@@ -223,6 +243,75 @@ function StageCamera({
   });
 
   return null;
+}
+
+function stageClass(framed: boolean, orbitable: boolean): string {
+  const names = ["flow-stage"];
+  if (framed) names.push("flow-stage-framed");
+  if (orbitable) names.push("flow-stage-orbit");
+  return names.join(" ");
+}
+
+/**
+ * Lets the viewer turn the welcome shot by dragging it.
+ *
+ * The angle is held in a ref and read by the camera every frame rather than
+ * kept in state: a drag would otherwise re-render the whole stage on every
+ * pointer move, and the value is only ever consumed inside the render loop.
+ *
+ * The swing feeds `resolvePose`, so it becomes part of where the camera is
+ * rather than something added on top of it. That is what makes leaving the
+ * screen work: `StageCamera` starts every flight from wherever the camera
+ * actually stands, so pressing "Create a meeting" from a swung shot eases
+ * from that angle to the create pose. Nothing snaps back to the authored
+ * angle first, and no extra code runs on the way out.
+ *
+ * Dragging right turns the room right, which means swinging the camera left —
+ * the direction a hand on the model would take it.
+ */
+const SWING_PER_PIXEL = 0.0038;
+
+function useStageOrbit(enabled: boolean) {
+  const swing = useRef(poseAzimuth(PRE_MEETING_POSES.welcome));
+  const grabbed = useRef(false);
+  const drag = useRef<{ id: number; x: number; from: number } | null>(null);
+
+  const onPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!enabled || event.button !== 0) return;
+      drag.current = { id: event.pointerId, x: event.clientX, from: swing.current };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [enabled],
+  );
+
+  const onPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const active = drag.current;
+    if (!active || active.id !== event.pointerId) return;
+    const travelled = event.clientX - active.x;
+    // A press that never moves is a click on the room, not a grab of it, and
+    // should not cost the shot its idle sway for the rest of the visit.
+    if (!grabbed.current && Math.abs(travelled) < 3) return;
+    grabbed.current = true;
+    swing.current = clampSwing(active.from - travelled * SWING_PER_PIXEL);
+  }, []);
+
+  const onPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (drag.current?.id !== event.pointerId) return;
+    drag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
+
+  return {
+    enabled,
+    swing,
+    grabbed,
+    handlers: enabled
+      ? { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp }
+      : {},
+  };
 }
 
 export function PreMeetingStage({
@@ -240,14 +329,16 @@ export function PreMeetingStage({
   const [view] = useState(() =>
     createPlaceholderVisualizationState({ seatCount }),
   );
+  const orbit = useStageOrbit(pose === "welcome");
   // The camera's starting point is fixed at mount; `StageCamera` owns every
   // move after that, so drei never re-applies a `position` prop mid-flight.
   const [initialPose] = useState(pose);
 
   return (
     <div
-      className={framed ? "flow-stage flow-stage-framed" : "flow-stage"}
+      className={stageClass(framed, orbit.enabled)}
       aria-hidden="true"
+      {...orbit.handlers}
     >
       <BackdropErrorBoundary>
         <Suspense fallback={null}>
@@ -263,7 +354,12 @@ export function PreMeetingStage({
               fov={fovFor(initialPose)}
             />
             <StageSurface />
-            <StageCamera pose={pose} reducedMotion={reducedMotion} />
+            <StageCamera
+              pose={pose}
+              reducedMotion={reducedMotion}
+              swing={orbit.swing}
+              grabbed={orbit.grabbed}
+            />
 
             <hemisphereLight args={["#ffffff", "#dfd8c9", 1.15]} />
             {/* The default shadow frustum is narrower than the room, which
@@ -283,12 +379,17 @@ export function PreMeetingStage({
             />
             <directionalLight position={[-10, 7, -6]} intensity={0.32} color="#eaf1ff" />
 
-            <CentralMeetingRoom
-              view={view}
-              activeWorkspace="room"
-              reducedMotion={reducedMotion}
-              footing="surface"
-            />
+            {/* Inside the canvas, like the meeting scene's: the outer
+                boundary is in the DOM, and letting the props suspend up to it
+                would unmount the canvas mid-flight instead of waiting. */}
+            <Suspense fallback={null}>
+              <CentralMeetingRoom
+                view={view}
+                activeWorkspace="room"
+                reducedMotion={reducedMotion}
+                footing="surface"
+              />
+            </Suspense>
           </Canvas>
         </Suspense>
       </BackdropErrorBoundary>

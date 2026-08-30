@@ -10,7 +10,11 @@ import {
   WELCOME_FRAME_FILL,
   WELCOME_FRAME_LIFT,
   WELCOME_FOV,
+  WELCOME_SWING,
   WORKSPACE_IDS,
+  clampSwing,
+  fitSwungPose,
+  poseAzimuth,
   type CameraPose,
 } from "@/visualization/scene/camera-poses";
 
@@ -240,3 +244,106 @@ describe("flightDuration", () => {
     expect(flightDuration(1000, false)).toBe(1.5);
   });
 });
+
+/**
+ * The welcome shot can be turned by hand, and turning it must not also move it.
+ *
+ * A per-angle fit made the room appear to breathe in and out as it was
+ * dragged, because a box's silhouette is wider across the corners than it is
+ * head-on. These pin the shape of the fix rather than the numbers behind it.
+ */
+describe("fitSwungPose", () => {
+  const base = PRE_MEETING_POSES.welcome;
+  const swings = [-0.62, -0.4, -0.2, 0, 0.2, 0.4, 0.557, 0.62];
+
+  const fit = (swing: number, aspect = 16 / 9) =>
+    fitSwungPose(base, aspect, WELCOME_FOV, WELCOME_FRAME_FILL, WELCOME_FRAME_LIFT, swing);
+
+  const reach = (pose: CameraPose) =>
+    Math.hypot(
+      pose.position[0] - pose.target[0],
+      pose.position[1] - pose.target[1],
+      pose.position[2] - pose.target[2],
+    );
+
+  it("holds one distance across the whole arc", () => {
+    const reaches = swings.map((swing) => reach(fit(swing)));
+    for (const distance of reaches) {
+      expect(distance).toBeCloseTo(reaches[0] as number, 6);
+    }
+  });
+
+  it("holds one height and one look-at point across the whole arc", () => {
+    const poses = swings.map((swing) => fit(swing));
+    const [first] = poses;
+    for (const pose of poses) {
+      expect(pose.position[1]).toBeCloseTo(first?.position[1] as number, 6);
+      expect(pose.target[0]).toBeCloseTo(first?.target[0] as number, 6);
+      expect(pose.target[1]).toBeCloseTo(first?.target[1] as number, 6);
+      expect(pose.target[2]).toBeCloseTo(first?.target[2] as number, 6);
+    }
+  });
+
+  it("stands where it was asked to stand", () => {
+    for (const swing of swings) {
+      expect(poseAzimuth(fit(swing))).toBeCloseTo(swing, 6);
+    }
+  });
+
+  it("holds the whole room in frame at every angle, at any window shape", () => {
+    for (const aspect of [0.6, 1, 16 / 9, 3]) {
+      for (const swing of swings) {
+        const pose = fit(swing, aspect);
+        expect(framesRoom(pose, WELCOME_FOV, aspect)).toBe(true);
+      }
+    }
+  });
+
+  it("never lets the viewer round the back of the room", () => {
+    // Past a quarter turn the camera starts to see the room from behind.
+    expect(Math.abs(WELCOME_SWING.min)).toBeLessThan(Math.PI / 2);
+    expect(WELCOME_SWING.max).toBeLessThan(Math.PI / 2);
+    expect(clampSwing(4)).toBe(WELCOME_SWING.max);
+    expect(clampSwing(-4)).toBe(WELCOME_SWING.min);
+  });
+});
+
+/** Every corner of the room falls inside this pose's frustum. */
+function framesRoom(pose: CameraPose, fovDegrees: number, aspect: number): boolean {
+  const [px, py, pz] = pose.position;
+  const [tx, ty, tz] = pose.target;
+  const length = Math.hypot(tx - px, ty - py, tz - pz) || 1;
+  const forward = [(tx - px) / length, (ty - py) / length, (tz - pz) / length] as const;
+  const rightRaw = [forward[2], 0, -forward[0]] as const;
+  const rightLength = Math.hypot(rightRaw[0], rightRaw[2]) || 1;
+  const right = [rightRaw[0] / rightLength, 0, rightRaw[2] / rightLength] as const;
+  const up = [
+    right[1] * forward[2] - right[2] * forward[1],
+    right[2] * forward[0] - right[0] * forward[2],
+    right[0] * forward[1] - right[1] * forward[0],
+  ] as const;
+
+  const tanUp = Math.tan((fovDegrees * Math.PI) / 360);
+  const tanRight = tanUp * aspect;
+
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const corner: readonly [number, number, number] = [
+          ROOM_BOUNDS.center[0] + sx * ROOM_BOUNDS.half[0],
+          ROOM_BOUNDS.center[1] + sy * ROOM_BOUNDS.half[1],
+          ROOM_BOUNDS.center[2] + sz * ROOM_BOUNDS.half[2],
+        ];
+        const offset = [corner[0] - px, corner[1] - py, corner[2] - pz] as const;
+        const depth =
+          offset[0] * forward[0] + offset[1] * forward[1] + offset[2] * forward[2];
+        if (depth <= 0) return false;
+        const x = offset[0] * right[0] + offset[1] * right[1] + offset[2] * right[2];
+        const y = offset[0] * up[0] + offset[1] * up[1] + offset[2] * up[2];
+        if (Math.abs(x) > depth * tanRight) return false;
+        if (Math.abs(y) > depth * tanUp) return false;
+      }
+    }
+  }
+  return true;
+}

@@ -2034,6 +2034,18 @@ select {
     0 22px 60px rgba(46, 43, 39, 0.09);
 }
 
+/* The welcome shot can be turned by hand. `pan-y` and not `none`: the drag is
+   horizontal, and the stage covers the viewport, so taking every touch gesture
+   would also take the page's own vertical scroll. */
+.flow-stage-orbit {
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.flow-stage-orbit:active {
+  cursor: grabbing;
+}
+
 .flow-stage-canvas {
   display: block;
 }
@@ -2335,6 +2347,16 @@ select {
   display: grid;
   grid-template-columns: var(--flow-frame-lead) minmax(0, 1fr);
   height: 100dvh;
+  /* The stage is a fixed sibling painted behind this page, and the grid's
+     second column is empty — it exists so the framed room shows through it.
+     Without this the page swallows every pointer over that column and the
+     room cannot be taken hold of. Everything the page itself owns sits in
+     `.welcome-lead`, which takes its pointers back below. */
+  pointer-events: none;
+}
+
+.welcome-lead {
+  pointer-events: auto;
 }
 
 /* Brand at the top, the intro on the optical centre line, the agent note
