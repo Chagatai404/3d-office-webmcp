@@ -37,6 +37,10 @@ export interface WebMcpCapabilityContext {
   isRequiredApprover: boolean;
   /** Onboarding "join" route only: a join request is currently pending. */
   hasPendingJoinRequest: boolean;
+  /** An active `kind = "expert"` participant already exists in this room. */
+  hasSecurityExpert: boolean;
+  /** At least one `expert_findings` row with `status = "open"` exists. */
+  hasOpenExpertFinding: boolean;
 }
 
 export function deriveRoomCapabilityContext(room: RoomState): WebMcpCapabilityContext {
@@ -64,6 +68,10 @@ export function deriveRoomCapabilityContext(room: RoomState): WebMcpCapabilityCo
       ? (room.finalDecisionPreview?.missingApprovalParticipantIds.includes(self.id) ?? false)
       : false,
     hasPendingJoinRequest: false,
+    hasSecurityExpert: room.participants.some(
+      (participant) => participant.kind === "expert" && participant.status === "active",
+    ),
+    hasOpenExpertFinding: room.expertFindings.some((finding) => finding.status === "open"),
   };
 }
 
@@ -86,6 +94,8 @@ export function deriveOnboardingCapabilityContext(params: {
     hasOpenBlockingConcern: false,
     isRequiredApprover: false,
     hasPendingJoinRequest: params.hasPendingJoinRequest,
+    hasSecurityExpert: false,
+    hasOpenExpertFinding: false,
   };
 }
 
@@ -139,6 +149,16 @@ export const TOOL_AVAILABILITY: Record<string, Predicate> = {
   remove_participant: asOwnerNotFinalized,
   transfer_ownership: asOwnerNotFinalized,
 
+  // Security Expert. Advisory only -- see src/domain/rooms/expert.ts. The
+  // expert itself never registers a browser-tool session; these tools act
+  // only for the authenticated human participant who calls them.
+  enable_security_expert: (c) => asOwnerNotFinalized(c) && !c.hasSecurityExpert,
+  request_security_review: (c) =>
+    inRoom(c) && c.hasClaimedSeat && !c.isFinalized && c.hasSecurityExpert && c.hasActiveProposal,
+  get_expert_advice: (c) => inRoom(c) && c.hasSecurityExpert,
+  record_expert_advice_outcome: (c) =>
+    asOwnerNotFinalized(c) && !c.candidateFrozen && c.hasOpenExpertFinding,
+
   // Pre-room.
   create_meeting: (c) => c.route === "landing" || c.route === "create",
   join_meeting: (c) => c.route === "landing" || c.route === "join",
@@ -176,6 +196,9 @@ export const MUTATION_TOOL_NAMES: ReadonlySet<string> = new Set([
   "set_participant_decision_role",
   "remove_participant",
   "transfer_ownership",
+  "enable_security_expert",
+  "request_security_review",
+  "record_expert_advice_outcome",
   "create_meeting",
   "join_meeting",
 ]);

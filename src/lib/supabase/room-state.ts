@@ -35,7 +35,7 @@ export async function loadRoomState(
   if (!roomResult.data) return null;
   const room = roomRowSchema.parse(roomResult.data);
 
-  const [participants, positions, constraints, proposals, conflicts, tradeoffs, alignments, approvals, activity] =
+  const [participants, positions, constraints, proposals, conflicts, tradeoffs, alignments, approvals, activity, expertFindings] =
     await Promise.all([
       client.from("participants").select("id,user_id,name,role,kind,meeting_role,decision_role,required_for_approval,ready_at,status,removed_at,created_at").eq("room_id", roomId).order("seat_order"),
       client.from("positions").select("id,participant_id,summary,category,priority,created_at").eq("room_id", roomId).order("created_at"),
@@ -46,6 +46,7 @@ export async function loadRoomState(
       client.from("alignments").select("proposal_id,participant_id,choice,comment,updated_at").eq("room_id", roomId).order("updated_at"),
       client.from("approvals").select("participant_id,decision_hash,approved_at").eq("room_id", roomId).order("approved_at"),
       client.from("audit_events").select("id,actor_type,actor_id,origin,action,entity_type,entity_id,sanitized_input,result,previous_room_version,resulting_room_version,confirmation_required,created_at").eq("room_id", roomId).order("created_at"),
+      client.from("expert_findings").select("id,expert_participant_id,expert_key,proposal_id,category,title,summary,recommendation,status,resolution_rationale,created_at,resolved_at").eq("room_id", roomId).order("created_at"),
     ]);
 
   const participantRows = requireRows(participants) as Array<Record<string, unknown>>;
@@ -106,7 +107,10 @@ export async function loadRoomState(
       kind: participant.kind,
       meetingRole: participant.meeting_role,
       decisionRole: participant.decision_role,
-      isClaimed: participant.kind === "simulation" || participant.user_id !== null,
+      // A simulation or expert seat is never an "open" human seat waiting to
+      // be claimed -- both are always considered claimed regardless of the
+      // (always-null) `user_id` behind them.
+      isClaimed: participant.kind !== "human" || participant.user_id !== null,
       // `ready_at` is a server-set timestamp; the canonical DTO exposes only
       // whether the seat has declared its input complete.
       isReady: participant.ready_at !== null,
@@ -156,6 +160,13 @@ export async function loadRoomState(
       previousRoomVersion: row.previous_room_version,
       resultingRoomVersion: row.resulting_room_version,
       confirmationRequired: row.confirmation_required, createdAt: row.created_at,
+    })),
+    expertFindings: (requireRows(expertFindings) as Array<Record<string, unknown>>).map((row) => ({
+      id: row.id, roomId: room.id, expertParticipantId: row.expert_participant_id,
+      expertKey: row.expert_key, proposalId: row.proposal_id, category: row.category,
+      title: row.title, summary: row.summary, recommendation: row.recommendation,
+      status: row.status, resolutionRationale: row.resolution_rationale,
+      createdAt: row.created_at, resolvedAt: row.resolved_at,
     })),
   });
 }

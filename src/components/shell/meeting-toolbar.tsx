@@ -37,6 +37,17 @@ export function MeetingToolbar() {
         <span>{room.title}</span>
         <span className="toolbar-chip-divider" aria-hidden="true" />
         <span className="toolbar-chip-phase">{PHASE_LABEL[room.phase]}</span>
+        {room.demoMode !== null ? (
+          <>
+            <span className="toolbar-chip-divider" aria-hidden="true" />
+            <span
+              className="tag tag-expert"
+              title="Your teammates here are deterministic simulations for the product walkthrough. Your actions and browser-agent tools are real."
+            >
+              Demo room
+            </span>
+          </>
+        ) : null}
       </span>
 
       <span className="toolbar-side">

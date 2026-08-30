@@ -173,7 +173,11 @@ export function RoomE2EHarness() {
             <strong>{participant.role}</strong>
             <span>{participant.name}</span>
             <span data-testid={`participant-kind-${participant.id}`}>
-              {participant.kind === "simulation" ? "Simulated Participant" : "Human Participant"}
+              {participant.kind === "expert"
+                ? "Security Expert · Advisory"
+                : participant.kind === "simulation"
+                  ? "Simulated Participant"
+                  : "Human Participant"}
               {` · ${participant.meetingRole} · ${participant.decisionRole}`}
             </span>
             <span data-testid={`participant-status-${participant.id}`}>

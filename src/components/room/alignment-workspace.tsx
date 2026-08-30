@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ActionResult, Alignment, AlignmentChoice, RoomState } from "@/contracts/room";
+import type { ActionResult, Alignment, AlignmentChoice, ExpertFinding, RoomState } from "@/contracts/room";
 import { ActionFeedback } from "./action-feedback";
 import { DecisionList } from "./decision-shared";
 import { useRoom } from "./room-provider";
@@ -139,6 +139,12 @@ export function AlignmentWorkspace() {
         </ul>
       </div>
 
+      {activeProposal ? (
+        <SecurityReviewSection
+          findings={room.expertFindings.filter((finding) => finding.proposalId === activeProposal.id)}
+        />
+      ) : null}
+
       {isOwner ? (
         <OwnerAlignmentSummary
           room={room}
@@ -148,6 +154,48 @@ export function AlignmentWorkspace() {
         />
       ) : null}
     </section>
+  );
+}
+
+const EXPERT_FINDING_STATUS_LABEL: Record<ExpertFinding["status"], string> = {
+  open: "Open",
+  resolved: "Resolved",
+  accepted_risk: "Accepted risk",
+  rejected: "Rejected",
+};
+
+/**
+ * Read-only advisory findings from the Security Expert on the active
+ * candidate. Deliberately never rendered inside "Team alignment": the
+ * expert is `kind: "expert"`, never a human decision-maker, and this
+ * section never implies otherwise -- it does not gate anything below it,
+ * and a high-severity finding is visually prominent, not blocking.
+ */
+function SecurityReviewSection({ findings }: { findings: readonly ExpertFinding[] }) {
+  if (findings.length === 0) return null;
+  return (
+    <div className="decision-section" aria-labelledby="security-review-heading" data-testid="security-review">
+      <h3 className="panel-subheading" id="security-review-heading">
+        Security Expert <span className="tag tag-expert">Advisory</span>
+      </h3>
+      <ul className="participant-list">
+        {findings.map((finding) => (
+          <li key={finding.id} className="participant-row">
+            <div className="participant-identity">
+              <span className="participant-name">{finding.title}</span>
+              <span className="participant-role">{finding.summary}</span>
+            </div>
+            <span className={finding.status === "open" ? "tag tag-owner" : "tag tag-muted"}>
+              {EXPERT_FINDING_STATUS_LABEL[finding.status]}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="panel-note">
+        Advisory only — this never blocks the owner&apos;s decision by itself. See the Decision workspace for how
+        each finding was addressed.
+      </p>
+    </div>
   );
 }
 

@@ -24,7 +24,7 @@ export interface VisualParticipant {
   id: string;
   name: string;
   role: string;
-  kind: "human" | "simulation";
+  kind: "human" | "simulation" | "expert";
   isClaimed: boolean;
   isSelf: boolean;
   /** Deterministic seat around the table, stable for a given participant order. */

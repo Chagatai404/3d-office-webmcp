@@ -240,4 +240,5 @@ export const demoRoom: RoomState = roomStateSchema.parse({
       createdAt: demoTimestamp(3),
     },
   ],
+  expertFindings: [],
 });

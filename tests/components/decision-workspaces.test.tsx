@@ -296,6 +296,7 @@ function finalPreview(hash = "hash-v1"): FinalDecisionPreview {
       },
     ],
     dissent: ["Marketing raised a concern until launch copy is reviewed."],
+    expertAdvice: [],
     requiredApprovalParticipantIds: [
       "participant-product",
       "participant-engineering",

@@ -20,6 +20,7 @@ export function decisionCandidateFromPreview(
     actionItems: preview.actionItems,
     dissent: preview.dissent,
     requiredApprovalParticipantIds: preview.requiredApprovalParticipantIds,
+    expertAdvice: preview.expertAdvice,
   };
 }
 
@@ -64,6 +65,9 @@ export function normalizeDecisionCandidate(
     requiredApprovalParticipantIds: [
       ...candidate.requiredApprovalParticipantIds,
     ].sort(),
+    expertAdvice: [...candidate.expertAdvice].sort((left, right) =>
+      left.findingId.localeCompare(right.findingId),
+    ),
   };
 }
 

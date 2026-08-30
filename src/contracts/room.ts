@@ -84,12 +84,19 @@ export const joinRequestSchema = z
   .strict();
 export type JoinRequest = z.infer<typeof joinRequestSchema>;
 
+/**
+ * `expert` is a distinct, non-human actor kind: an advisory service actor
+ * (see `ExpertFinding` below), never an admitted human and never a
+ * simulated teammate. Every place in this codebase that branches on
+ * `kind === "human"` already excludes it by construction; every place that
+ * branches on `kind === "simulation"` must not be assumed to include it.
+ */
 export const participantSchema = z
   .object({
     id: idSchema,
     name: z.string().min(1),
     role: z.string().min(1),
-    kind: z.enum(["human", "simulation"]),
+    kind: z.enum(["human", "simulation", "expert"]),
     meetingRole: meetingRoleSchema,
     decisionRole: decisionRoleSchema,
     isClaimed: z.boolean(),
@@ -220,6 +227,77 @@ export const approvalSchema = z
 export type Approval = z.infer<typeof approvalSchema>;
 
 /**
+ * ExpertFinding is advisory data, never a human Conflict and never a vote.
+ * It carries no mechanical authority over any phase transition or
+ * finalization -- see `record_expert_advice_outcome` / the owner-only
+ * disposition operation in `src/domain/rooms/expert.ts` for the only way its
+ * `status` changes, and `docs/webmcp-demo.md` / `docs/judge-demo.md` for how
+ * it surfaces in the final decision record.
+ */
+export const expertKeySchema = z.enum(["security"]);
+export type ExpertKey = z.infer<typeof expertKeySchema>;
+
+export const expertFindingStatusSchema = z.enum([
+  "open",
+  "resolved",
+  "accepted_risk",
+  "rejected",
+]);
+export type ExpertFindingStatus = z.infer<typeof expertFindingStatusSchema>;
+
+export const expertFindingSchema = z
+  .object({
+    id: idSchema,
+    roomId: idSchema,
+    expertParticipantId: idSchema,
+    expertKey: expertKeySchema,
+    proposalId: idSchema,
+    category: z.string().min(1),
+    title: z.string().min(1),
+    summary: z.string().min(1),
+    recommendation: z.string().min(1),
+    status: expertFindingStatusSchema,
+    resolutionRationale: nullableTextSchema,
+    createdAt: timestampSchema,
+    resolvedAt: timestampSchema.nullable(),
+  })
+  .strict();
+export type ExpertFinding = z.infer<typeof expertFindingSchema>;
+
+export const recordExpertAdviceOutcomeInputSchema = z
+  .object({
+    findingId: idSchema,
+    status: z.enum(["resolved", "accepted_risk", "rejected"]),
+    rationale: z.string().min(1),
+  })
+  .strict();
+export type RecordExpertAdviceOutcomeInput = z.infer<
+  typeof recordExpertAdviceOutcomeInputSchema
+>;
+
+/**
+ * The deterministic, hash-stable projection of expert advice embedded in a
+ * frozen `FinalDecisionCandidate`. Deliberately narrower than `ExpertFinding`
+ * -- no free-form `summary`/`recommendation` prose duplication beyond
+ * `title`, so a candidate already frozen can never have its hash silently
+ * redefined by later prose edits (there are none: findings are immutable
+ * except for `status`/`resolutionRationale`, which *are* included here on
+ * purpose so a disposition change before freeze is reflected in the hash).
+ */
+export const decisionExpertAdviceSchema = z
+  .object({
+    expertKey: expertKeySchema,
+    findingId: idSchema,
+    proposalId: idSchema,
+    category: z.string().min(1),
+    title: z.string().min(1),
+    status: expertFindingStatusSchema,
+    resolutionRationale: nullableTextSchema,
+  })
+  .strict();
+export type DecisionExpertAdvice = z.infer<typeof decisionExpertAdviceSchema>;
+
+/**
  * AttentionItem is a derived projection of canonical room state, never a
  * second source of authority. It is computed fresh on every read
  * (`src/domain/rooms/attention.ts`) and never persisted: nothing here
@@ -234,6 +312,7 @@ export const attentionItemTypeSchema = z.enum([
   "owner_decision_required",
   "consensus_approval_required",
   "owner_progress_required",
+  "expert_advice_needs_disposition",
 ]);
 export type AttentionItemType = z.infer<typeof attentionItemTypeSchema>;
 
@@ -468,6 +547,12 @@ export const finalDecisionCandidateSchema = z
      */
     dissent: z.array(z.string().min(1)),
     requiredApprovalParticipantIds: z.array(idSchema),
+    /**
+     * Deterministic expert advice relevant to this candidate's proposal
+     * lineage. Never counted toward `requiredApprovalParticipantIds` and
+     * never a source of dissent by itself -- see `decisionExpertAdviceSchema`.
+     */
+    expertAdvice: z.array(decisionExpertAdviceSchema),
   })
   .strict();
 export type FinalDecisionCandidate = z.infer<
@@ -522,6 +607,7 @@ export const roomStateSchema = z
     alignments: z.array(alignmentSchema),
     approvals: z.array(approvalSchema),
     activity: z.array(activityEventSchema),
+    expertFindings: z.array(expertFindingSchema),
   })
   .strict();
 export type RoomState = z.infer<typeof roomStateSchema>;

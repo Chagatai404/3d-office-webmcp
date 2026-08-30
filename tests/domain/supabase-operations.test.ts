@@ -72,6 +72,16 @@ describe.sequential("Supabase-backed room domain operations", () => {
     engineer = await anonymousActor();
     designer = await anonymousActor();
     product = await anonymousActor();
+    // This file's early tests exercise the general (non-solo-specific)
+    // multi_user demo-room shape -- four unclaimed human seats, version 0 --
+    // independent of whatever `supabase/seed.sql` currently leaves the
+    // shared "demo" room in (the Gate 6 default is now solo_judge, so this
+    // reset makes the file self-sufficient rather than depending on seed
+    // order).
+    const baseline = await startDemoScenario(
+      demoAdminRepository, "demo", { mode: "multi_user", humanRole: null }, product.userId,
+    );
+    if (!baseline.ok) throw new Error(baseline.error.message);
   });
 
   it("rejects unauthenticated mutations before repository writes", async () => {
@@ -266,7 +276,7 @@ describe.sequential("Supabase-backed room domain operations", () => {
       conflictId,
       proposal: { id: proposalId, title: "Progressive onboarding hints" },
       constraint: { id: engineerConstraintId, text: "No authentication rewrite." },
-      raisedBy: { actorType: "participant", actorId: "demo-designer", displayName: "Lina" },
+      raisedBy: { actorType: "participant", actorId: "demo-designer", displayName: "Product Designer" },
       severity: "blocking",
       status: "open",
       latestRelatedProposalId: null,
@@ -788,9 +798,15 @@ describe.sequential("Supabase-backed room domain operations", () => {
       },
       context(product.userId, 6, "webmcp"),
     );
-    expect(ambitious).toMatchObject({ ok: true, roomVersion: 10 });
+    // +1 versus the pre-Slice-6 count: this proposal's "new event tracking"
+    // language also deterministically triggers one Security Expert
+    // behavioral-tracking finding during Deliberation (see
+    // tests/domain/security-expert.test.ts for dedicated coverage of that
+    // mechanism; this file only needs to account for the extra version bump).
+    expect(ambitious).toMatchObject({ ok: true, roomVersion: 11 });
     room = await getMeetingContext(product.repository, product.userId, "demo");
-    expect(room).toMatchObject({ phase: "deliberation", version: 10 });
+    expect(room).toMatchObject({ phase: "deliberation", version: 11 });
+    expect(room?.expertFindings.filter((finding) => finding.status === "open")).toHaveLength(1);
     const blockers = room!.conflicts.filter((item) => item.status === "open" && item.severity === "blocking");
     expect(blockers).toHaveLength(2);
     expect(blockers.map((item) => item.raisedByActorId).sort()).toEqual(["demo-designer", "demo-engineer"]);
@@ -808,7 +824,7 @@ describe.sequential("Supabase-backed room domain operations", () => {
       getMeetingContext(product.repository, product.userId, "demo"),
       getMeetingContext(product.repository, product.userId, "demo"),
     ]);
-    expect(concurrentReads.every((snapshot) => snapshot?.version === 10)).toBe(true);
+    expect(concurrentReads.every((snapshot) => snapshot?.version === 11)).toBe(true);
     expect(concurrentReads[0]?.conflicts.filter((item) => item.status === "open")).toHaveLength(2);
 
     const compromise = await proposeParticipantTradeoff(
@@ -831,13 +847,21 @@ describe.sequential("Supabase-backed room domain operations", () => {
           ],
         },
       },
-      context(product.userId, 10, "webmcp"),
+      context(product.userId, 11, "webmcp"),
     );
-    expect(compromise).toMatchObject({ ok: true, roomVersion: 17 });
+    // +2 versus the pre-Slice-6 count: the revised proposal's text no longer
+    // matches the behavioral-tracking category, so the Security Expert
+    // review pass also deterministically auto-resolves the original finding
+    // (one more audited version bump) once the two blocking conflicts are
+    // resolved, before the room advances into Alignment.
+    expect(compromise).toMatchObject({ ok: true, roomVersion: 19 });
     room = await getMeetingContext(product.repository, product.userId, "demo");
-    expect(room).toMatchObject({ phase: "voting", version: 17 });
+    expect(room).toMatchObject({ phase: "voting", version: 19 });
     expect(room?.conflicts.filter((item) => item.status === "open" && item.severity === "blocking")).toHaveLength(0);
     expect(room?.conflicts.every((item) => item.status !== "resolved" || item.resolvedByActorId === item.raisedByActorId)).toBe(true);
+    expect(room?.expertFindings.filter((finding) => finding.status === "open")).toHaveLength(0);
+    expect(room?.expertFindings.find((finding) => finding.status === "resolved")?.resolutionRationale)
+      .toBe("The revised proposal no longer matches this risk pattern.");
     expect(room?.alignments).toHaveLength(3);
     expect(room?.alignments.every((alignment) => alignment.participantId !== "demo-product" && alignment.choice === "support")).toBe(true);
     expect(room?.activity.filter((event) => event.action === "alignment.expressed" && event.origin === "simulation")).toHaveLength(3);
@@ -846,34 +870,36 @@ describe.sequential("Supabase-backed room domain operations", () => {
       product.repository,
       "demo",
       { decisionHash: "not-yet-available" },
-      context(product.userId, 17, "simulation"),
+      context(product.userId, 19, "simulation"),
     );
-    expect(simulatedApproval).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" }, roomVersion: 17 });
+    expect(simulatedApproval).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" }, roomVersion: 19 });
 
     const humanAlignment = await expressMyAlignment(
       product.repository,
       "demo",
       { proposalId: room!.activeProposalId!, choice: "support", comment: "Ready for exact human review." },
-      context(product.userId, 17, "webmcp"),
+      context(product.userId, 19, "webmcp"),
     );
-    expect(humanAlignment).toMatchObject({ ok: true, roomVersion: 19 });
+    expect(humanAlignment).toMatchObject({ ok: true, roomVersion: 21 });
     room = await getMeetingContext(product.repository, product.userId, "demo");
-    expect(room).toMatchObject({ phase: "approval", version: 19 });
+    expect(room).toMatchObject({ phase: "approval", version: 21 });
     expect(room?.approvals).toHaveLength(0);
     expect(room?.finalDecisionPreview?.requiredApprovalParticipantIds).toEqual(["demo-product"]);
+    expect(room?.finalDecisionPreview?.expertAdvice.find((entry) => entry.status === "resolved")).toBeTruthy();
 
     const decisionHash = room!.finalDecisionPreview!.decisionHash;
     const humanApproval = await approveParticipantFinalDecision(
       product.repository,
       "demo",
       { decisionHash },
-      { ...context(product.userId, 19), humanConfirmed: true },
+      { ...context(product.userId, 21), humanConfirmed: true },
     );
-    expect(humanApproval).toMatchObject({ ok: true, roomVersion: 20 });
+    expect(humanApproval).toMatchObject({ ok: true, roomVersion: 22 });
     const record = await getFinalDecisionRecord(product.repository, product.userId, "demo");
     expect(record.ok).toBe(true);
     if (!record.ok) throw new Error("Solo decision record unavailable.");
     expect(record.data.approvals.map((approval) => approval.participantId)).toEqual(["demo-product"]);
+    expect(record.data.decision.expertAdvice.find((entry) => entry.status === "resolved")).toBeTruthy();
     expect(record.data.provenance.some((event) => event.origin === "simulation" && event.action === "objection.raised")).toBe(true);
     expect(record.data.provenance.some((event) => event.origin === "simulation" && event.action === "conflict.resolved")).toBe(true);
     expect(record.data.provenance.filter((event) => event.origin === "simulation" && event.action === "alignment.expressed")).toHaveLength(3);
@@ -957,7 +983,9 @@ describe.sequential("Supabase-backed room domain operations", () => {
         context(product.userId, 6),
       );
       const snapshot = await getMeetingContext(product.repository, product.userId, "demo");
-      expect(snapshot).toMatchObject({ phase: "deliberation", version: 10 });
+      // +1 versus the pre-Slice-6 count: see the identical note in "runs an
+      // idempotent solo-judge scenario...".
+      expect(snapshot).toMatchObject({ phase: "deliberation", version: 11 });
       return snapshot!;
     }
 
@@ -983,10 +1011,12 @@ describe.sequential("Supabase-backed room domain operations", () => {
             ],
           },
         },
-        context(product.userId, 10),
+        context(product.userId, 11),
       );
       const snapshot = await getMeetingContext(product.repository, product.userId, "demo");
-      expect(snapshot).toMatchObject({ phase: "voting", version: 17 });
+      // +2 versus the pre-Slice-6 count: see the identical note in "runs an
+      // idempotent solo-judge scenario...".
+      expect(snapshot).toMatchObject({ phase: "voting", version: 19 });
       return snapshot!;
     }
 
@@ -1004,10 +1034,10 @@ describe.sequential("Supabase-backed room domain operations", () => {
       product.repository,
       "demo",
       { proposalId: voting.activeProposalId!, choice: "support", comment: null },
-      context(product.userId, 17),
+      context(product.userId, 19),
     );
     const approval = await getMeetingContext(product.repository, product.userId, "demo");
-    expect(approval).toMatchObject({ phase: "approval", version: 19 });
+    expect(approval).toMatchObject({ phase: "approval", version: 21 });
     await resetSolo();
 
     const multiReset = await startDemoScenario(
@@ -1019,7 +1049,9 @@ describe.sequential("Supabase-backed room domain operations", () => {
     expect(multiReset).toMatchObject({ ok: true, roomVersion: 0 });
     const multiRoom = await getMeetingContext(product.repository, product.userId, "demo");
     expect(multiRoom).toMatchObject({ demoMode: "multi_user", phase: "input", version: 0 });
-    expect(multiRoom?.participants.every((participant) => participant.kind === "human")).toBe(true);
+    // The Security Expert is present regardless of mode; every other seat is human in multi_user.
+    expect(multiRoom?.participants.filter((participant) => participant.kind === "expert")).toHaveLength(1);
+    expect(multiRoom?.participants.filter((participant) => participant.kind === "human")).toHaveLength(4);
     expect(multiRoom?.participants.filter((participant) => participant.decisionRole === "decision_maker").map((participant) => participant.id).sort()).toEqual(["demo-designer", "demo-engineer", "demo-product"]);
     expect(multiRoom?.positions).toHaveLength(4);
   });

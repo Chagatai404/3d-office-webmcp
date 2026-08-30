@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -288,6 +289,34 @@ export function RoomProvider({
     }),
     [client, roomId],
   );
+
+  /**
+   * `/room/demo` bootstrap: a first-time judge should not have to know a
+   * room ID/passcode or click anything to become the Founder/Product Lead.
+   * The demo seed (`supabase/seed.sql`, and every `start_demo_scenario`
+   * reset) leaves the fixed `demo-product` seat unclaimed
+   * (`kind: "human"`, `user_id: null`); this reuses the existing, ordinary
+   * `claimSeat` action -- the same one a normal room's owner-seat claim
+   * would use -- rather than adding a new privileged endpoint. If the seat
+   * is already claimed by a different session, `claim_participant_seat`
+   * refuses with `NOT_AUTHORIZED` and this session simply stays a read-only
+   * spectator of the live demo (see docs/judge-demo.md's noted
+   * single-instance limitation).
+   *
+   * Scoped to `demoMode === "solo_judge"` specifically, not any `"demo"`
+   * room id: the legacy `multi_user` demo shape has four independently
+   * claimable human seats (each browser choosing its own), so silently
+   * auto-claiming the Founder seat for every session that merely opens the
+   * room would fight that flow instead of the one seat solo_judge actually
+   * has to auto-claim.
+   */
+  const demoBootstrapAttempted = useRef(false);
+  useEffect(() => {
+    if (roomId !== "demo" || !room || room.demoMode !== "solo_judge" || room.selfParticipantId !== null) return;
+    if (demoBootstrapAttempted.current) return;
+    demoBootstrapAttempted.current = true;
+    void actions.claimSeat({ seatId: "demo-product" });
+  }, [roomId, room, actions]);
 
   const value =
     useMemo<RoomContextValue | null>(() => {

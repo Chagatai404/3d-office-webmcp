@@ -139,6 +139,33 @@ export function computeAttentionItems({
     }
   }
 
+  // expert_advice_needs_disposition: an unresolved (status = "open") expert
+  // finding tied to the active proposal, during Alignment only -- the last
+  // phase before `review_final_decision` freezes the exact candidate and
+  // `recordExpertAdviceOutcome` stops accepting new dispositions. Deliberately
+  // narrow -- one item for "there is open expert advice", not one per
+  // finding -- so this stays a single concise nudge rather than spamming the
+  // owner with every advisory category individually. It never blocks
+  // anything by itself; see `recordExpertAdviceOutcome` for the only way it
+  // is dispositioned.
+  if (isOwner && room.phase === "voting" && room.activeProposalId) {
+    const hasOpenExpertFinding = room.expertFindings.some(
+      (finding) => finding.proposalId === room.activeProposalId && finding.status === "open",
+    );
+    if (hasOpenExpertFinding) {
+      items.push({
+        id: `attn:expert_advice_needs_disposition:${room.activeProposalId}`,
+        type: "expert_advice_needs_disposition",
+        priority: "normal",
+        title: "Security Expert advice needs your disposition",
+        summary: "Mark open expert advice resolved, accepted as risk, or rejected before finalizing.",
+        phase: room.phase,
+        relatedEntityId: room.activeProposalId,
+        requiresHumanConfirmation: false,
+      });
+    }
+  }
+
   // owner_progress_required: fires only when the corresponding
   // advance_discussion / request_team_alignment / review_final_decision
   // call would actually succeed, mirroring apply_room_phase_entry's

@@ -45,6 +45,7 @@ describe("centralized WebMCP capability registration", () => {
       [
         "advance_discussion",
         "admit_participant",
+        "enable_security_expert",
         "get_meeting_context",
         "get_my_attention_items",
         "get_waiting_participants",
@@ -145,6 +146,7 @@ describe("centralized WebMCP capability registration", () => {
         deadlines: [],
         actionItems: [],
         dissent: [],
+        expertAdvice: [],
         requiredApprovalParticipantIds: ["participant-owner"],
         decisionHash: "hash-1",
         approvals: [],
@@ -170,6 +172,7 @@ describe("centralized WebMCP capability registration", () => {
       deadlines: [],
       actionItems: [],
       dissent: [],
+      expertAdvice: [],
       requiredApprovalParticipantIds: ["participant-owner"],
       decisionHash: "hash-1",
       approvals: [],
@@ -233,6 +236,14 @@ describe("centralized WebMCP capability registration", () => {
     }
   });
 
+  const EXPERT_GATED_TOOL_NAMES = ["request_security_review", "get_expert_advice", "record_expert_advice_outcome"];
+  const expertParticipant = {
+    id: "participant-security", name: "Security Expert", role: "Security Expert · Advisory",
+    kind: "expert" as const, meetingRole: "participant" as const, decisionRole: "advisor" as const,
+    isClaimed: true, isReady: false, status: "active" as const, removedAt: null,
+    createdAt: "2026-08-30T00:00:00.000Z",
+  };
+
   it("marks every tool name in the catalog as covered by exactly one availability rule", () => {
     for (const name of Object.keys(fullCatalog)) {
       const anyAvailable = LIFECYCLE.some((phase) =>
@@ -240,9 +251,24 @@ describe("centralized WebMCP capability registration", () => {
           phase,
           selfParticipantId: "participant-owner",
           isLocked: name === "unlock_meeting",
-          activeProposalId: ["advance_discussion", "request_team_alignment", "review_final_decision"].includes(name)
+          activeProposalId: [
+            "advance_discussion", "request_team_alignment", "review_final_decision", "request_security_review",
+          ].includes(name)
             ? "proposal-1"
             : null,
+          ...(EXPERT_GATED_TOOL_NAMES.includes(name)
+            ? {
+                participants: [...buildRoomStateFixture().participants, expertParticipant],
+                expertFindings: name === "record_expert_advice_outcome"
+                  ? [{
+                      id: "finding-1", roomId: "room-under-test", expertParticipantId: "participant-security",
+                      expertKey: "security" as const, proposalId: "proposal-1", category: "behavioral_tracking",
+                      title: "t", summary: "s", recommendation: "r", status: "open" as const,
+                      resolutionRationale: null, createdAt: "2026-08-30T00:00:00.000Z", resolvedAt: null,
+                    }]
+                  : [],
+              }
+            : {}),
           ...(phase === "approval"
             ? {
                 activeProposalId: "proposal-1",
@@ -250,6 +276,7 @@ describe("centralized WebMCP capability registration", () => {
                   proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], parentProposalId: null, status: "candidate" as const, createdAt: "2026-08-30T00:00:00.000Z" },
                   rationale: "r", acceptedTradeoffs: [], unresolvedWarnings: [], alignments: [],
                   decisionPolicy: "owner_decides" as const, owners: [], deadlines: [], actionItems: [], dissent: [],
+                  expertAdvice: [],
                   requiredApprovalParticipantIds: ["participant-owner"], decisionHash: "hash-1", approvals: [],
                   missingApprovalParticipantIds: ["participant-owner"],
                 },
@@ -270,6 +297,7 @@ describe("centralized WebMCP capability registration", () => {
       "get_decision_record",
       "get_my_attention_items",
       "get_waiting_participants",
+      "get_expert_advice",
     ]) {
       expect(fullCatalog[name]?.annotations?.readOnlyHint).toBe(true);
       expect(fullCatalog[name]?.annotations?.untrustedContentHint).toBe(true);

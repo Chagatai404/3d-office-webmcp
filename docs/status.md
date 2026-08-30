@@ -1,6 +1,6 @@
 # Repository status
 
-Last updated: 2026-08-30 (Slice 5 / Gate 5 implementation).
+Last updated: 2026-08-30 (Slice 6 / Gate 6 implementation).
 
 ## Core platform
 
@@ -219,8 +219,68 @@ agent service:
 See [`webmcp-demo.md`](webmcp-demo.md) for the current Chrome flags, inspector
 workflow, required natural-language prompts, and two-person demonstration.
 
-The Security Expert and the full startup-feature `/room/demo` redesign remain
-separate later slices and were not started here.
+## Security Expert and the `/room/demo` rebuild (Slice 6)
+
+Slice 6 adds one real, deterministic, server-side advisory actor and rebuilds
+`/room/demo` into the canonical solo-judge demonstration:
+
+- `Participant.kind` gains a third value, `expert`, alongside `human` and
+  `simulation`. It is never assignable through any human-authority path
+  (join, admission, ownership transfer, decision-role promotion, alignment,
+  approval) -- every one of those already required `kind = 'human'`, so
+  `expert` is excluded by construction. The one place that needed an explicit
+  fix was `derive_owner_participant_authority()`'s trigger, which previously
+  had no branch for `kind = 'expert'` and would have fallen through to the
+  legacy `required_for_approval`-based decision-maker default;
+- a single Security Expert (`expertKey: "security"`) runs a small,
+  deterministic, local regex rule set (`security_expert_classify` in the
+  Slice 6 migration) against a proposal's title/summary/rationale/expected
+  outcomes -- never external model calls, never a background agent. It
+  currently flags behavioral tracking/profiling, authentication/profile
+  boundary expansion, and unretained data-storage scope;
+- findings persist in a new `expert_findings` table, scoped to a room and
+  proposal, with a database-enforced `unique (room_id, fingerprint)`
+  constraint so reviewing the same proposal twice can never duplicate a
+  finding, even under concurrent calls;
+- `ExpertFinding` is advisory data, never a human `Conflict`, never a vote,
+  and never mechanically decisive: `owner_decides`/`equal_authority_consensus`
+  finalization is completely unaffected by it. `record_expert_advice_outcome`
+  is the only owner-only, pre-freeze path that classifies an open finding as
+  `resolved`/`accepted_risk`/`rejected` with a rationale; a revision whose
+  text no longer matches a category is also auto-resolved deterministically
+  (`origin: expert_service`, always audited, never silent);
+- `build_final_decision_candidate` now embeds deterministic `expertAdvice`
+  (expert key, finding id, proposal id, category, title, status, resolution
+  rationale) in the frozen candidate, so a material change to expert-advice
+  disposition before freeze changes the decision hash;
+- four new WebMCP tools -- `enable_security_expert` (owner-only),
+  `request_security_review` (any claimed participant), `get_expert_advice`
+  (read, untrusted-content-separated), `record_expert_advice_outcome`
+  (owner-only) -- extend the goal-oriented catalog from Slice 5, gated the
+  same centralized way every other tool is;
+- `/room/demo` is rebuilt to the canonical scenario from the final-sprint
+  checklist: **Founder / Product Lead** (the real judge, `owner` +
+  `decision_maker`), **Engineer** / **Product Designer** / **Growth Lead**
+  (deterministic `simulation`), and the **Security Expert** (`expert`,
+  advisory), deciding a deliberately over-scoped "Highly personalized AI
+  onboarding" proposal. The deterministic reaction engine
+  (`run_solo_demo_orchestration`) now also raises Security Expert findings
+  during Deliberation and auto-resolves them once an acceptable revision
+  exists, alongside the existing Engineer/Designer blocking-conflict and
+  alignment settlement it already performed;
+- a first-time judge becomes the Founder automatically (an ordinary
+  `claim_participant_seat` call on the always-unclaimed seeded `demo-product`
+  seat, triggered client-side on `/room/demo` load -- no new privileged
+  endpoint), and a visible **Reset demo** control (Help drawer) calls a new,
+  always-available `POST /api/demo/reset` route that is hard-scoped to the
+  literal `"demo"` room id and cannot reach any other room;
+- `supabase/seed.sql` now seeds the demo room directly in this solo-judge
+  shape, so a fresh `supabase db reset` already has `/room/demo` ready
+  without any additional server call.
+
+See [`judge-demo.md`](judge-demo.md) for the exact judge-facing scenario,
+prompt script, and reset/limitation notes, and `backend-integration.md`'s
+Slice 6 section for the full architecture writeup.
 
 ## Verification note
 

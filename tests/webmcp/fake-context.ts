@@ -54,6 +54,7 @@ export function buildRoomStateFixture(overrides: Partial<RoomState> = {}): RoomS
     alignments: [],
     approvals: [],
     activity: [],
+    expertFindings: [],
     ...overrides,
   };
 }

@@ -69,6 +69,7 @@ function candidate(): FinalDecisionCandidate {
     actionItems: [],
     dissent: [],
     requiredApprovalParticipantIds: ["engineer", "designer"],
+    expertAdvice: [],
   };
 }
 
@@ -78,6 +79,7 @@ describe("canonical final decision hashing", () => {
     const second = {
       requiredApprovalParticipantIds: ["designer", "engineer"],
       dissent: [],
+      expertAdvice: [],
       actionItems: [],
       deadlines: [],
       owners: [],

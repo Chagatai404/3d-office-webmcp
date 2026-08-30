@@ -11,6 +11,7 @@ import type {
   JoinRequest,
   JoinRequestResult,
   ManageJoinRequestInput,
+  RecordExpertAdviceOutcomeInput,
   RemoveParticipantInput,
   RequestJoinByInviteInput,
   RequestJoinByPasscodeInput,
@@ -152,6 +153,29 @@ export interface RoomRepository {
   setParticipantDecisionRole(
     roomId: string,
     input: SetParticipantDecisionRoleInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+
+  /** Owner-only. Idempotent: enabling an already-enabled expert is a no-op success. */
+  enableSecurityExpert(
+    roomId: string,
+    context: MutationContext,
+  ): Promise<ActionResult<{ expertParticipantId: string }>>;
+
+  /**
+   * Any active human participant. Idempotent per active proposal (a
+   * fingerprint-unique constraint on `expert_findings` guards duplicate
+   * findings even under concurrent calls).
+   */
+  runSecurityExpertReview(
+    roomId: string,
+    context: MutationContext,
+  ): Promise<ActionResult<{ findingIds: string[] }>>;
+
+  /** Owner-only. Rejected once an exact decision candidate is frozen. */
+  recordExpertAdviceOutcome(
+    roomId: string,
+    input: RecordExpertAdviceOutcomeInput,
     context: MutationContext,
   ): Promise<ActionResult>;
 }

@@ -589,6 +589,12 @@ select {
   font-weight: 700;
 }
 
+.tag-expert {
+  border-color: var(--advisory-ink);
+  color: var(--advisory-ink);
+  font-weight: 700;
+}
+
 .tag-muted {
   opacity: 0.7;
 }

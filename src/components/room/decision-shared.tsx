@@ -3,6 +3,7 @@
 import type {
   Conflict,
   DecisionRecord,
+  FinalDecisionCandidate,
   FinalDecisionPreview,
   Proposal,
   RoomState,
@@ -13,6 +14,40 @@ const DECISION_POLICY_LABEL: Record<RoomState["decisionPolicy"], string> = {
   owner_decides: "Responsible owner decides",
   equal_authority_consensus: "Equal decision-makers must agree",
 };
+
+const EXPERT_ADVICE_STATUS_LABEL: Record<FinalDecisionCandidate["expertAdvice"][number]["status"], string> = {
+  open: "Open",
+  resolved: "Resolved",
+  accepted_risk: "Accepted risk",
+  rejected: "Rejected",
+};
+
+/**
+ * Deterministic expert advice embedded in the exact candidate/record. Never
+ * rendered as human alignment or a required approver -- see
+ * `src/domain/rooms/expert.ts` for why the Security Expert can never gain
+ * that authority.
+ */
+export function ExpertAdviceList({
+  advice,
+}: {
+  advice: readonly FinalDecisionCandidate["expertAdvice"][number][];
+}) {
+  if (advice.length === 0) return null;
+  return (
+    <div className="decision-sublist" data-testid="decision-expert-advice">
+      <h4>Security Expert · Advisory</h4>
+      <ul>
+        {advice.map((entry) => (
+          <li key={entry.findingId}>
+            {entry.title} — {EXPERT_ADVICE_STATUS_LABEL[entry.status]}
+            {entry.resolutionRationale ? `: ${entry.resolutionRationale}` : ""}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 /**
  * Shared drafts, formatting, and read-only views for the four workspaces
@@ -175,6 +210,7 @@ export function DecisionPreviewView({
         empty="No unresolved warnings."
       />
       <DecisionList title="Dissent" entries={preview.dissent} empty="No dissent recorded." />
+      <ExpertAdviceList advice={preview.expertAdvice} />
       <DecisionList
         title="Required approvers"
         entries={preview.requiredApprovalParticipantIds.map((id) => participantLabel(room, id))}
@@ -228,6 +264,7 @@ export function DecisionRecordView({
         )}
       />
       <DecisionList title="Dissent" entries={record.decision.dissent} empty="No dissent recorded." />
+      <ExpertAdviceList advice={record.decision.expertAdvice} />
       <DecisionList
         title="Alignment"
         entries={record.alignments.map(

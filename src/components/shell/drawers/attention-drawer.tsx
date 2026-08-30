@@ -15,6 +15,7 @@ function targetFor(item: AttentionItem, phase: RoomPhase): { drawer?: "participa
     alignment_required: { workspace: "alignment" },
     owner_decision_required: { workspace: "decision" },
     consensus_approval_required: { workspace: "decision" },
+    expert_advice_needs_disposition: { workspace: "alignment" },
     owner_progress_required: {
       workspace:
         phase === "proposals" ? "proposals" : phase === "deliberation" ? "issues" : phase === "voting" ? "alignment" : "room",

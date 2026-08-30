@@ -164,6 +164,7 @@ describe("createRoomVisualizationState", () => {
           deadlines: [],
           actionItems: [],
           dissent: [],
+          expertAdvice: [],
           requiredApprovalParticipantIds,
           decisionHash: "hash-current",
           approvals: currentApprovals,

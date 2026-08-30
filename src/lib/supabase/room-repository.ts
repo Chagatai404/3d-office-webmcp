@@ -13,6 +13,7 @@ import {
   type ClaimSeatInput,
   type CreateRoomInput,
   type ManageJoinRequestInput,
+  type RecordExpertAdviceOutcomeInput,
   type RemoveParticipantInput,
   type RequestJoinByInviteInput,
   type RequestJoinByPasscodeInput,
@@ -315,6 +316,37 @@ export class SupabaseRoomRepository implements RoomRepository {
       p_room_id: roomId, p_participant_id: input.participantId,
       p_decision_role: input.decisionRole,
       p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  enableSecurityExpert(roomId: string, context: MutationContext) {
+    return this.callWithData(
+      "enable_security_expert",
+      { p_room_id: roomId, p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin },
+      z.object({ expertParticipantId: z.string().min(1) }).strict(),
+    );
+  }
+
+  runSecurityExpertReview(roomId: string, context: MutationContext) {
+    return this.callWithData(
+      "run_security_expert_review",
+      { p_room_id: roomId, p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin },
+      z.object({ findingIds: z.array(z.string().min(1)) }).strict(),
+    );
+  }
+
+  recordExpertAdviceOutcome(
+    roomId: string,
+    input: RecordExpertAdviceOutcomeInput,
+    context: MutationContext,
+  ) {
+    return this.call("record_expert_advice_outcome", {
+      p_room_id: roomId,
+      p_finding_id: input.findingId,
+      p_status: input.status,
+      p_rationale: input.rationale,
+      p_expected_version: context.expectedRoomVersion,
+      p_origin: context.actor.origin,
     });
   }
 

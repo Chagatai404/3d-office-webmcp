@@ -129,7 +129,9 @@ export function ParticipantPanel() {
 
               <div className="participant-tags">
                 <span className="tag">Seat {participant.seatIndex + 1}</span>
-                {participant.kind === "simulation" ? (
+                {participant.kind === "expert" ? (
+                  <span className="tag tag-expert">Security Expert · Advisory</span>
+                ) : participant.kind === "simulation" ? (
                   <span className="tag tag-simulation">Simulated participant</span>
                 ) : (
                   <span className="tag">Human</span>

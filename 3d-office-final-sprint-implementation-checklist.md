@@ -644,78 +644,77 @@ from canonical room state and is never an authority/workflow table.
 
 ## Scenario
 
-- [ ] Decision:
+- [x] Decision:
   > **Should the startup ship AI-assisted onboarding in the upcoming release?**
-- [ ] Real judge participant:
-  - [ ] Founder / Product Lead
-  - [ ] owner
-  - [ ] decision-maker
-- [ ] Simulated participants:
-  - [ ] Engineer
-  - [ ] Designer
-  - [ ] Growth / Marketing
-- [ ] Optional expert:
-  - [ ] Security Expert
-  - [ ] advisory only
+- [x] Real judge participant:
+  - [x] Founder / Product Lead
+  - [x] owner
+  - [x] decision-maker
+- [x] Simulated participants:
+  - [x] Engineer
+  - [x] Designer (Product Designer)
+  - [x] Growth / Marketing (Growth Lead)
+- [x] Optional expert:
+  - [x] Security Expert
+  - [x] advisory only
 
 ## Seeded concerns
 
-- [ ] Engineering:
-  - [ ] limited capacity;
-  - [ ] no auth rewrite;
-  - [ ] avoid fragile dependencies.
-- [ ] Design:
-  - [ ] accessibility;
-  - [ ] interaction consistency.
-- [ ] Growth:
-  - [ ] campaign date cannot move;
-  - [ ] product surface must stabilize before cutoff.
-- [ ] Security:
-  - [ ] behavioral tracking/privacy risk.
+- [x] Engineering:
+  - [x] limited capacity;
+  - [x] no auth rewrite;
+  - [x] avoid fragile dependencies.
+- [x] Design:
+  - [x] accessibility;
+  - [x] interaction consistency.
+- [x] Growth:
+  - [x] campaign date cannot move;
+  - [x] product surface must stabilize before cutoff.
+- [x] Security:
+  - [x] behavioral tracking/privacy risk (deterministically detected; auth-boundary expansion and data-retention scope also covered).
 
 ## Initial flawed proposal
 
-- [ ] Seed a high-scope personalized onboarding flow.
-- [ ] Include enough scope to trigger engineering objection.
-- [ ] Include enough risk to trigger accessibility/security concerns.
-- [ ] Keep scenario deterministic.
+- [x] Seed a high-scope personalized onboarding flow ("Highly personalized AI onboarding").
+- [x] Include enough scope to trigger engineering objection.
+- [x] Include enough risk to trigger accessibility/security concerns.
+- [x] Keep scenario deterministic.
 
 ## Deterministic reaction engine
 
-- [ ] Preserve/extend existing solo-judge deterministic orchestration.
-- [ ] Simulated actors respond to real room state.
-- [ ] Simulation operations use same repository/domain layer.
-- [ ] Simulation actions are labeled `simulation`.
-- [ ] No browser-exposed simulation mutation tools.
-- [ ] Reaction settlement is idempotent.
-- [ ] Concurrent triggers do not duplicate reactions.
+- [x] Preserve/extend existing solo-judge deterministic orchestration.
+- [x] Simulated actors respond to real room state.
+- [x] Simulation operations use same repository/domain layer.
+- [x] Simulation actions are labeled `simulation` (expert actions labeled `expert_service`, distinct provenance).
+- [x] No browser-exposed simulation mutation tools.
+- [x] Reaction settlement is idempotent (`demo_claim_reaction` claim keys; `expert_findings`' `unique(room_id, fingerprint)`).
+- [x] Concurrent triggers do not duplicate reactions (advisory xact lock + unique constraints, unchanged Slice 4/5 mechanism, extended to the expert path).
 
 ## Judge journey
 
-- [ ] Demo room loads already understandable.
-- [ ] Judge can prompt their agent:
-  > "Have the team assess whether we should ship this release."
-- [ ] Real WebMCP reads meeting context.
-- [ ] Simulated Engineer raises capacity blocker.
-- [ ] Simulated Designer raises accessibility blocker.
-- [ ] Growth surfaces date constraint.
-- [ ] Security agent surfaces advisory privacy concern.
-- [ ] Agent proposes reduced-scope trade-off.
-- [ ] Blocking issues resolve predictably.
-- [ ] Alignment becomes available.
-- [ ] Owner gets `Needs your attention`.
-- [ ] Judge reviews exact proposed decision.
-- [ ] Judge finalizes manually.
-- [ ] Immutable decision record appears.
-- [ ] Reset demo action restores initial deterministic state.
+- [x] Demo room loads already understandable.
+- [x] Judge can prompt their agent (see `docs/judge-demo.md`'s exact script).
+- [x] Real WebMCP reads meeting context.
+- [x] Simulated Engineer raises capacity blocker.
+- [x] Simulated Designer raises accessibility blocker.
+- [x] Growth surfaces date constraint.
+- [x] Security agent surfaces advisory privacy concern.
+- [x] Agent proposes reduced-scope trade-off.
+- [x] Blocking issues resolve predictably.
+- [x] Alignment becomes available.
+- [x] Owner gets `Needs your attention`.
+- [x] Judge reviews exact proposed decision.
+- [x] Judge finalizes manually (`HUMAN_CONFIRMATION_REQUIRED` never bypassed).
+- [x] Immutable decision record appears, including Security Expert disposition.
+- [x] Reset demo action restores initial deterministic state (`POST /api/demo/reset`, Help drawer).
 
 ### Acceptance criteria
 
-- [ ] One judge + one browser agent can experience the complete product.
-- [ ] WebMCP activity is genuine.
-- [ ] Simulated users are explicitly labeled.
-- [ ] Demo can be repeated reliably.
-- [ ] Demo does not depend on external LLM output for deterministic participants.
+- [x] One judge + one browser agent can experience the complete product.
+- [x] WebMCP activity is genuine (same domain operations/repository as production rooms).
+- [x] Simulated users are explicitly labeled ("Simulated participant" / "Security Expert · Advisory").
+- [x] Demo can be repeated reliably (atomic reset, verified by domain tests).
+- [x] Demo does not depend on external LLM output for deterministic participants.
 
 ---
 
@@ -725,33 +724,48 @@ from canonical room state and is never an authority/workflow table.
 
 ## Security Expert
 
-- [ ] Add a single Security Expert actor.
-- [ ] Expert runs server-side, not as another user's browser agent.
-- [ ] Expert uses the same domain layer.
-- [ ] Expert can:
-  - [ ] read public meeting context;
-  - [ ] add advisory position;
-  - [ ] flag risks;
-  - [ ] recommend trade-offs;
-  - [ ] suggest revisions.
-- [ ] Expert cannot:
-  - [ ] join as human;
-  - [ ] become owner;
-  - [ ] align as decision-maker;
-  - [ ] approve;
-  - [ ] finalize.
-- [ ] Expert content visibly labeled:
+- [x] Add a single Security Expert actor.
+- [x] Expert runs server-side, not as another user's browser agent.
+- [x] Expert uses the same domain layer.
+- [x] Expert can:
+  - [x] read public meeting context (proposal text, treated as untrusted data for classification only);
+  - [ ] add advisory position; (not implemented -- findings are a distinct table, not a `positions` row; judged unnecessary for the advisory-finding model actually shipped)
+  - [x] flag risks (`expert_findings`);
+  - [x] recommend trade-offs (`recommendation` field on each finding);
+  - [ ] suggest revisions. (no proposal-authoring capability; out of scope -- the expert only reviews and flags, per the brief's "advise but never align" framing)
+- [x] Expert cannot:
+  - [x] join as human;
+  - [x] become owner;
+  - [x] align as decision-maker;
+  - [x] approve;
+  - [x] finalize.
+- [x] Expert content visibly labeled:
   > Security Expert · Advisory
-- [ ] Final record classifies expert concern as:
-  - [ ] resolved;
-  - [ ] accepted risk;
-  - [ ] rejected with rationale.
+- [x] Final record classifies expert concern as:
+  - [x] resolved;
+  - [x] accepted risk;
+  - [x] rejected with rationale.
 
 ### Acceptance criteria
 
-- [ ] Security expert concern comes from real domain/expert operation.
-- [ ] Expert cannot call any human-authority operation.
-- [ ] Final decision can record how the advice was handled.
+- [x] Security expert concern comes from real domain/expert operation.
+- [x] Expert cannot call any human-authority operation (server-enforced; `tests/domain/security-expert.test.ts`).
+- [x] Final decision can record how the advice was handled.
+
+**Slice 6 status note (2026-08-30):** Implemented -- contract, migration
+(`supabase/migrations/20260830140000_security_expert_and_demo_rebuild.sql`),
+domain layer (`src/domain/rooms/expert.ts`), repository, WebMCP tools, UI
+(Participants drawer badge, Alignment workspace advisory section, Decision
+workspace/record expert-advice list, meeting-toolbar "Demo room" chip,
+Help-drawer demo guidance + Reset demo), and `/room/demo` rebuild. A minimal
+manual "Add Security Expert" / "Run security review" UI button in the
+Agents/Participants drawer was deliberately **not** built this pass (the
+WebMCP tools and the demo's automatic seeding already satisfy the underlying
+requirement; see the Slice 6 completion report's "Remaining issues" for the
+explicit scope note). Per this repository's own convention, this agent does
+not self-certify the gate; a human reviewer should confirm, and the real
+Chrome WebMCP inspector pass in `docs/judge-demo.md` still needs a human to
+run it.
 
 ---
 
@@ -1280,10 +1294,17 @@ the remaining human verification, so this agent does not self-certify the gate.
 
 ## Gate 6 — Demo green
 
-- [ ] deterministic startup feature scenario;
-- [ ] real WebMCP judge path;
-- [ ] reset reliable;
-- [ ] simulated participants clearly labeled.
+- [x] deterministic startup feature scenario;
+- [x] real WebMCP judge path;
+- [x] reset reliable;
+- [x] simulated participants clearly labeled.
+
+**Gate 6 status note (2026-08-30):** Implementation complete this pass -- see
+the Slice 6 completion report for exact automated-verification commands and
+results, and `docs/judge-demo.md` for the manual judge walkthrough. Per this
+repository's own convention, this agent does not self-certify the gate: a
+human reviewer should confirm, and the real Chrome WebMCP inspector pass has
+not been performed by any coding agent and remains an open manual step.
 
 ## Gate 7 — Remote environment green
 
@@ -1352,26 +1373,33 @@ The implementation is successful when this exact journey works.
 
 # 22. Canonical Solo Judge Demo Journey
 
-- [ ] Judge opens `/room/demo`.
-- [ ] Judge is the real owner / Founder.
-- [ ] Simulated Engineer, Designer, and Growth participants are already visible.
-- [ ] Security Expert is clearly advisory.
-- [ ] Judge prompts:
-  > "Have the team assess whether we should ship this release."
-- [ ] Judge's browser agent calls real WebMCP tools.
-- [ ] Simulated participants react deterministically.
-- [ ] Engineering capacity blocker appears.
-- [ ] Accessibility blocker appears.
-- [ ] Growth deadline constraint appears.
-- [ ] Security advisory concern appears.
-- [ ] Agent proposes reduced-scope trade-off.
-- [ ] Blocking issues resolve.
-- [ ] Alignment summary appears.
-- [ ] Judge gets `Needs your attention`.
-- [ ] Judge reviews exact final plan.
-- [ ] Judge makes final decision.
-- [ ] Decision record appears.
-- [ ] Reset restores demo to initial state.
+- [x] Judge opens `/room/demo`.
+- [x] Judge is the real owner / Founder.
+- [x] Simulated Engineer, Designer, and Growth participants are already visible.
+- [x] Security Expert is clearly advisory.
+- [x] Judge prompts (see `docs/judge-demo.md`'s exact script, adapted from
+      "Have the team assess whether we should ship this release").
+- [x] Judge's browser agent calls real WebMCP tools.
+- [x] Simulated participants react deterministically.
+- [x] Engineering capacity blocker appears.
+- [x] Accessibility blocker appears.
+- [x] Growth deadline constraint appears (seeded constraint; visible context, not necessarily an active blocking conflict).
+- [x] Security advisory concern appears.
+- [x] Agent proposes reduced-scope trade-off.
+- [x] Blocking issues resolve.
+- [x] Alignment summary appears.
+- [x] Judge gets `Needs your attention`.
+- [x] Judge reviews exact final plan.
+- [x] Judge makes final decision.
+- [x] Decision record appears.
+- [x] Reset restores demo to initial state.
+
+**Status note (2026-08-30):** Implemented and covered by
+`tests/domain/security-expert.test.ts` (Security Expert authority/idempotency/
+decision-candidate inclusion against real Postgres) and the existing,
+extended solo-demo journey coverage in `tests/domain/supabase-operations.test.ts`.
+The real Chrome WebMCP inspector walkthrough of this exact journey has not
+been performed by any coding agent -- see the Slice 6 completion report.
 
 ---
 

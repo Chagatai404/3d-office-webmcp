@@ -60,6 +60,7 @@ function availableFor(item: { phase: RoomState["phase"]; asOwner?: boolean }): s
             },
             rationale: "r", acceptedTradeoffs: [], unresolvedWarnings: [], alignments: [],
             decisionPolicy: "owner_decides", owners: [], deadlines: [], actionItems: [], dissent: [],
+            expertAdvice: [],
             requiredApprovalParticipantIds: [selfParticipantId],
             decisionHash: "eval-hash-1", approvals: [],
             missingApprovalParticipantIds: [selfParticipantId],

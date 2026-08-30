@@ -1,18 +1,25 @@
 begin;
 
+-- Canonical Gate 6 solo-judge demo baseline. This mirrors exactly what
+-- `start_demo_scenario('demo', 'solo_judge', 'product')` produces, so a
+-- fresh `supabase db reset` already has `/room/demo` ready for a first-time
+-- judge without any additional server call. The visible "Reset demo" action
+-- (`POST /api/demo/reset`) re-runs that same function transactionally.
+
 insert into public.rooms (
   id, title, brief, demo_mode, phase, version, owner_participant_id,
-  decision_policy, created_at
+  decision_policy, is_locked, created_at
 )
 values (
   'demo',
-  'Two-Week Onboarding Launch',
-  'Should the startup ship an onboarding feature update within two weeks, and what scope should it have?',
-  'multi_user',
+  'AI Onboarding Release Decision',
+  'Decide whether to ship AI-assisted onboarding in the upcoming release while respecting engineering capacity, accessibility, campaign timing, privacy, and existing authentication boundaries.',
+  'solo_judge',
   'input',
   0,
   'demo-product',
-  'equal_authority_consensus',
+  'owner_decides',
+  false,
   '2026-08-28T12:00:00Z'
 );
 
@@ -20,42 +27,36 @@ insert into public.participants (
   id, room_id, name, role, kind, meeting_role, decision_role,
   required_for_approval, created_at
 ) values
-  ('demo-product', 'demo', 'Maya', 'Product Manager', 'human', 'owner', 'decision_maker', false, '2026-08-28T12:00:00Z'),
-  ('demo-engineer', 'demo', 'Emre', 'Engineer', 'human', 'participant', 'decision_maker', true, '2026-08-28T12:00:00Z'),
-  ('demo-designer', 'demo', 'Lina', 'Designer', 'human', 'participant', 'decision_maker', true, '2026-08-28T12:00:00Z'),
-  ('demo-marketing', 'demo', 'Ari', 'Marketing Lead', 'human', 'participant', 'contributor', false, '2026-08-28T12:00:00Z');
-
-insert into public.positions (
-  id, room_id, participant_id, summary, category, priority, created_at
-) values
-  ('seed-position-product', 'demo', 'demo-product', 'Improve onboarding completion and help users reach first value faster.', 'outcome', 'high', '2026-08-28T12:01:00Z'),
-  ('seed-position-engineering', 'demo', 'demo-engineer', 'Keep the two-week scope within existing architecture and team capacity.', 'feasibility', 'critical', '2026-08-28T12:01:00Z'),
-  ('seed-position-design', 'demo', 'demo-designer', 'Preserve accessibility and interaction consistency.', 'quality', 'critical', '2026-08-28T12:01:00Z'),
-  ('seed-position-marketing', 'demo', 'demo-marketing', 'Stabilize the product surface before the fixed campaign cutoff.', 'timing', 'high', '2026-08-28T12:01:00Z');
+  ('demo-product', 'demo', 'Founder / Product Lead', 'Decision owner', 'human', 'owner', 'decision_maker', false, '2026-08-28T12:00:00Z'),
+  ('demo-engineer', 'demo', 'Engineer', 'Engineering', 'simulation', 'participant', 'advisor', true, '2026-08-28T12:00:00Z'),
+  ('demo-designer', 'demo', 'Product Designer', 'Design', 'simulation', 'participant', 'advisor', true, '2026-08-28T12:00:00Z'),
+  ('demo-marketing', 'demo', 'Growth Lead', 'Growth / Marketing', 'simulation', 'participant', 'advisor', false, '2026-08-28T12:00:00Z'),
+  ('demo-security', 'demo', 'Security Expert', 'Security Expert · Advisory', 'expert', 'participant', 'advisor', false, '2026-08-28T12:00:00Z');
 
 insert into public.constraints (
   id, room_id, participant_id, category, text, priority, created_at
 ) values
   ('constraint-product-completion', 'demo', 'demo-product', 'outcome', 'Improve onboarding completion.', 'high', '2026-08-28T12:02:00Z'),
   ('constraint-product-value', 'demo', 'demo-product', 'outcome', 'Help users reach first value faster.', 'high', '2026-08-28T12:02:01Z'),
-  ('constraint-engineering-capacity', 'demo', 'demo-engineer', 'capacity', 'Implementation capacity is limited to two weeks.', 'critical', '2026-08-28T12:02:02Z'),
+  ('constraint-engineering-capacity', 'demo', 'demo-engineer', 'capacity', 'Only about two engineering days are available for this release.', 'critical', '2026-08-28T12:02:02Z'),
   ('constraint-engineering-auth', 'demo', 'demo-engineer', 'architecture', 'Do not rewrite authentication.', 'critical', '2026-08-28T12:02:03Z'),
-  ('constraint-engineering-dependencies', 'demo', 'demo-engineer', 'reliability', 'Avoid fragile new dependencies.', 'high', '2026-08-28T12:02:04Z'),
-  ('constraint-design-accessibility', 'demo', 'demo-designer', 'accessibility', 'Meet accessibility requirements.', 'critical', '2026-08-28T12:02:05Z'),
-  ('constraint-design-consistency', 'demo', 'demo-designer', 'consistency', 'Preserve visual and interaction consistency.', 'high', '2026-08-28T12:02:06Z'),
-  ('constraint-marketing-date', 'demo', 'demo-marketing', 'timing', 'The campaign date cannot move.', 'critical', '2026-08-28T12:02:07Z'),
-  ('constraint-marketing-cutoff', 'demo', 'demo-marketing', 'timing', 'The product surface must stabilize before campaign cutoff.', 'critical', '2026-08-28T12:02:08Z');
+  ('constraint-engineering-dependencies', 'demo', 'demo-engineer', 'reliability', 'Reuse existing infrastructure; avoid fragile new dependencies.', 'high', '2026-08-28T12:02:04Z'),
+  ('constraint-design-accessibility', 'demo', 'demo-designer', 'accessibility', 'Accessibility cannot regress.', 'critical', '2026-08-28T12:02:05Z'),
+  ('constraint-design-consistency', 'demo', 'demo-designer', 'consistency', 'Interaction patterns must remain consistent; avoid untested onboarding patterns.', 'high', '2026-08-28T12:02:06Z'),
+  ('constraint-marketing-date', 'demo', 'demo-marketing', 'timing', 'The campaign launch date cannot move.', 'critical', '2026-08-28T12:02:07Z'),
+  ('constraint-marketing-cutoff', 'demo', 'demo-marketing', 'timing', 'The onboarding surface must stabilize before the campaign cutoff; the launch needs a measurable but simple experiment.', 'critical', '2026-08-28T12:02:08Z'),
+  ('constraint-security-minimal-data', 'demo', 'demo-security', 'privacy', 'Collect only the data needed; avoid unnecessary auth/security boundary expansion.', 'critical', '2026-08-28T12:02:09Z');
 
 insert into public.proposals (
   id, room_id, participant_id, title, summary, rationale, expected_outcomes,
   referenced_constraint_ids, parent_proposal_id, status, created_at
 ) values (
-  'seed-proposal-full-rebuild',
+  'seed-proposal-onboarding-v1',
   'demo',
   'demo-product',
-  'Full personalized onboarding rebuild',
-  'Rebuild onboarding as a custom multi-step flow with new event tracking and expanded personalization before the scheduled campaign launch.',
-  'A broad redesign could maximize short-term onboarding gains, but has not yet been reconciled with delivery and accessibility constraints.',
+  'Highly personalized AI onboarding',
+  'Roll out AI-assisted onboarding with behavioral event tracking, a persistent per-user profile, dynamic onboarding paths, new auth-linked profile fields, broad analytics instrumentation, and a custom interactive onboarding UI, in the upcoming release.',
+  'Maximizes short-term onboarding personalization, but has not yet been reconciled with engineering capacity, accessibility, or data-handling constraints.',
   array['Higher onboarding completion', 'Faster time to first value'],
   array['constraint-product-completion', 'constraint-product-value'],
   null,
@@ -105,7 +106,7 @@ insert into public.conflicts (
   raised_by_actor_id, severity, reason, status, created_at, resolved_at
 ) values
   (
-    'seed-conflict-resolved', 'demo', 'seed-proposal-full-rebuild',
+    'seed-conflict-resolved', 'demo', 'seed-proposal-onboarding-v1',
     'constraint-design-consistency', 'system', null, 'warning',
     'Resolved fixture that must not appear in open issues.', 'resolved',
     '2026-08-28T12:04:00Z', '2026-08-28T12:05:00Z'

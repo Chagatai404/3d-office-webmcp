@@ -19,9 +19,20 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   await expect(engineer.getByTestId("connection-status")).toHaveText("Connected");
   await expect(designer.getByTestId("connection-status")).toHaveText("Connected");
 
+  // This test exercises the legacy multi_user demo shape (four
+  // independently claimable human seats), not the Gate 6 solo_judge default
+  // the shared "demo" room now starts in (supabase/seed.sql). Reset to
+  // multi_user explicitly so this test is self-sufficient regardless of
+  // which mode a previous test or the fresh seed left "demo" in.
+  await engineer.getByTestId("reset-multi-user-demo").click();
+  await expect(engineer.getByTestId("demo-mode")).toHaveText("Mode: multi_user");
+
   // Before a claim, a session gets orientation and no write surface at all.
-  await expect.poll(() => toolNames(engineer)).toEqual(["get_meeting_context"]);
-  await expect.poll(() => toolNames(designer)).toEqual(["get_meeting_context"]);
+  // `get_expert_advice` is present because the demo's Security Expert is
+  // always enabled -- like `get_meeting_context`, it is a read tool
+  // available before a seat is claimed.
+  await expect.poll(() => toolNames(engineer)).toEqual(["get_expert_advice", "get_meeting_context"]);
+  await expect.poll(() => toolNames(designer)).toEqual(["get_expert_advice", "get_meeting_context"]);
   const preClaimContext = JSON.parse(String(await executeTool(engineer, "get_meeting_context", {})));
   expect(preClaimContext).toMatchObject({
     ok: true,
@@ -57,7 +68,7 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
         roomId: "demo",
         phase: "input",
         roomVersion: 2,
-        currentParticipant: { participantId: "demo-engineer", role: "Engineer" },
+        currentParticipant: { participantId: "demo-engineer", role: "Engineering" },
       },
     },
   });
@@ -68,7 +79,7 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   );
   expect(designerContextSnapshot.data.trustedContext.currentParticipant).toMatchObject({
     participantId: "demo-designer",
-    role: "Designer",
+    role: "Design",
   });
   expect(designerContextSnapshot.data.trustedContext.roomId).toBe(meetingContext.data.trustedContext.roomId);
 
@@ -143,7 +154,7 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   expect(openIssuesResult.data.openIssues[0]).toMatchObject({
     proposal: { title: "Progressive onboarding hints" },
     constraint: { id: constraint.id },
-    raisedBy: { actorId: "demo-designer", displayName: "Lina" },
+    raisedBy: { actorId: "demo-designer", displayName: "Product Designer" },
     severity: "blocking",
     status: "open",
   });
@@ -296,7 +307,7 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   await expect(designer.getByTestId("room-version")).toHaveText("15");
   await expect(engineer.getByTestId("finalized-at")).toBeVisible();
   await expect.poll(() => toolNames(engineer)).toEqual([
-    "get_current_decision", "get_decision_record", "get_meeting_context",
+    "get_current_decision", "get_decision_record", "get_expert_advice", "get_meeting_context",
   ]);
 
   const engineerRecord = JSON.parse(String(await executeTool(engineer, "get_decision_record", {})));
@@ -356,9 +367,6 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   await page.getByTestId("start-solo-demo").click();
   await expect(page.getByTestId("demo-mode")).toHaveText("Mode: solo_judge");
   await expect(page.getByTestId("room-phase")).toHaveText("input");
-  await expect(page.getByTestId("room-version")).toHaveText("3");
-  await expect(page.getByTestId("participant-kind-demo-product"))
-    .toHaveText("Human Participant · owner · decision_maker");
   await expect(page.getByTestId("participant-kind-demo-engineer"))
     .toHaveText("Simulated Participant · participant · advisor");
   await expect(page.getByTestId("participant-kind-demo-designer"))
@@ -366,8 +374,15 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   await expect(page.getByTestId("participant-kind-demo-marketing"))
     .toHaveText("Simulated Participant · participant · advisor");
 
-  await page.getByTestId("claim-demo-product").click();
+  // The Founder seat is claimed automatically -- RoomProvider's demo
+  // bootstrap effect claims the always-unclaimed `demo-product` seat for a
+  // fresh solo_judge session, so no explicit click is needed here (matching
+  // the real /room/demo product behaviour, see room-provider.tsx). That
+  // claim is one more version bump than the raw post-reset settle.
   await expect(page.getByText("Your seat")).toBeVisible();
+  await expect(page.getByTestId("room-version")).toHaveText("4");
+  await expect(page.getByTestId("participant-kind-demo-product"))
+    .toHaveText("Human Participant · owner · decision_maker");
   await expect.poll(() => toolNames(page)).toEqual(expect.arrayContaining([
     "share_my_context", "get_meeting_context", "get_my_attention_items",
   ]));
@@ -394,10 +409,12 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
     expectedOutcomes: ["Higher completion"],
     referencedConstraintIds: ["constraint-product-completion", "constraint-product-value"],
   })));
-  expect(proposal).toMatchObject({ ok: true, roomVersion: 10 });
+  // +1 versus pre-Slice-6: this proposal's "new event tracking" language also
+  // deterministically triggers one Security Expert finding during Deliberation.
+  expect(proposal).toMatchObject({ ok: true, roomVersion: 11 });
   await expect(page.getByTestId("room-phase")).toHaveText("deliberation");
   await expect(page.getByTestId("conflicts")).toContainText("engineering capacity");
-  await expect(page.getByTestId("conflicts")).toContainText("accessibility review scope");
+  await expect(page.getByTestId("conflicts")).toContainText("accessibility/interaction validation");
   await expect(page.getByTestId("activity")).toContainText("objection.raised · simulation");
 
   const issues = JSON.parse(String(await executeTool(page, "get_open_issues", {})));
@@ -419,7 +436,11 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
       ],
     },
   })));
-  expect(tradeoff).toMatchObject({ ok: true, roomVersion: 17 });
+  // +2 versus pre-Slice-6: the revised text no longer matches the tracking
+  // category, so the Security Expert review also auto-resolves the
+  // original finding (one more audited bump) once both blocking conflicts
+  // resolve.
+  expect(tradeoff).toMatchObject({ ok: true, roomVersion: 19 });
   await expect(page.getByTestId("room-phase")).toHaveText("voting");
   await expect(page.getByTestId("alignments").locator("li")).toHaveCount(3);
   await expect(page.getByTestId("activity")).toContainText("conflict.resolved · simulation");
@@ -434,7 +455,7 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
     choice: "support",
     comment: "Ready for exact human review.",
   })));
-  expect(alignment).toMatchObject({ ok: true, roomVersion: 19 });
+  expect(alignment).toMatchObject({ ok: true, roomVersion: 21 });
   await expect(page.getByTestId("room-phase")).toHaveText("approval");
   await expect(page.getByTestId("approvals")).toBeEmpty();
   await expect.poll(() => toolNames(page)).toEqual(expect.arrayContaining([
@@ -455,14 +476,14 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   expect(approvalRequest).toMatchObject({
     ok: false,
     error: { code: "HUMAN_CONFIRMATION_REQUIRED" },
-    roomVersion: 19,
+    roomVersion: 21,
   });
   await page.getByLabel("I reviewed and confirm this exact final decision.").check();
   await page.getByTestId("confirm-approval").click();
   await expect(page.getByTestId("room-phase")).toHaveText("finalized");
-  await expect(page.getByTestId("room-version")).toHaveText("20");
+  await expect(page.getByTestId("room-version")).toHaveText("22");
   await expect.poll(() => toolNames(page)).toEqual([
-    "get_current_decision", "get_decision_record", "get_meeting_context",
+    "get_current_decision", "get_decision_record", "get_expert_advice", "get_meeting_context",
   ]);
 
   const record = JSON.parse(String(await executeTool(page, "get_decision_record", {})));
@@ -485,8 +506,9 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   await expect(page.getByTestId("alignments")).toBeEmpty();
 
   // The replay releases the seat, so the write tools leave with it until the
-  // judge claims again.
-  await expect.poll(() => toolNames(page)).toEqual(["get_meeting_context"]);
+  // judge claims again. get_expert_advice stays -- the Security Expert
+  // survives a demo reset, same as get_meeting_context.
+  await expect.poll(() => toolNames(page)).toEqual(["get_expert_advice", "get_meeting_context"]);
   await page.getByTestId("claim-demo-product").click();
   await expect(page.getByText("Your seat")).toBeVisible();
   await expect.poll(() => toolNames(page)).toEqual(expect.arrayContaining([
