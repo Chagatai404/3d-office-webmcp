@@ -1,41 +1,50 @@
 import {
   addPositionInputSchema,
   approveFinalDecisionInputSchema,
-  castVoteInputSchema,
-  claimInvitationInputSchema,
+  expressAlignmentInputSchema,
   claimSeatInputSchema,
   createRoomInputSchema,
   createdRoomSchema,
-  manageRoomInvitationInputSchema,
+  manageJoinRequestInputSchema,
+  removeParticipantInputSchema,
+  requestJoinByInviteInputSchema,
+  requestJoinByPasscodeInputSchema,
   raiseObjectionInputSchema,
-  regeneratedRoomInvitationSchema,
   proposeTradeoffInputSchema,
   resolveObjectionInputSchema,
   roomPhaseSchema,
+  setDecisionPolicyInputSchema,
+  setParticipantDecisionRoleInputSchema,
   startDemoScenarioInputSchema,
   submitProposalInputSchema,
+  transferOwnershipInputSchema,
   type ActionErrorCode,
   type ActionResult,
   type AddPositionInput,
   type ApproveFinalDecisionInput,
-  type CastVoteInput,
-  type ClaimInvitationInput,
-  type ClaimInvitationResult,
+  type ExpressAlignmentInput,
   type ClaimSeatInput,
   type CreatedRoom,
   type CreateRoomInput,
   type DecisionRecord,
   type FinalDecisionPreview,
-  type ManageRoomInvitationInput,
+  type JoinRequest,
+  type JoinRequestResult,
+  type ManageJoinRequestInput,
+  type RemoveParticipantInput,
+  type RequestJoinByInviteInput,
+  type RequestJoinByPasscodeInput,
   type RaiseObjectionInput,
-  type RegeneratedRoomInvitation,
   type ProposeTradeoffInput,
   type ResolveObjectionInput,
   type RoomInvitePreview,
   type RoomPhase,
   type RoomState,
+  type SetDecisionPolicyInput,
+  type SetParticipantDecisionRoleInput,
   type StartDemoScenarioInput,
   type SubmitProposalInput,
+  type TransferOwnershipInput,
 } from "@/contracts/room";
 import { buildInviteUrl } from "./invitations";
 import type { DomainActor, MutationContext, RoomRepository } from "./repository";
@@ -92,18 +101,14 @@ async function prepareMutation(
 
 export interface CreateRoomContext {
   actor: DomainActor;
-  /** Absolute origin used to build shareable invite links, e.g. `https://app.example`. */
-  inviteBaseUrl: string;
+  baseUrl?: string;
 }
 
 /**
- * Creates a private, non-demo room. Organizer identity comes from the
+ * Creates a private, non-demo room. Owner identity comes from the
  * authenticated session only: the input schema is strict, so a request body
- * cannot carry `organizerUserId`, `actorId`, `participantId`, `userId` or
- * `origin`, and the database sets `organizer_user_id` from `auth.uid()`.
- *
- * Raw invitation tokens leave the system exactly once, inside the returned
- * invite URLs; they are never persisted and never enter `RoomState`.
+ * cannot carry authority identifiers or roles, and the database binds the
+ * single owner participant to `auth.uid()` atomically.
  */
 export async function createRoom(
   repository: RoomRepository,
@@ -114,49 +119,35 @@ export async function createRoom(
   if (!parsed.success) {
     return failure("VALIDATION_ERROR", "Room creation input is invalid.", 0);
   }
-  const distinctNames = new Set(
-    parsed.data.participants.map((participant) => participant.name.trim()),
-  );
-  if (distinctNames.size !== parsed.data.participants.length) {
-    return failure(
-      "VALIDATION_ERROR",
-      "Participant names must be unique within a room.",
-      0,
-    );
-  }
   if (!context.actor.authUserId) {
     return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
   }
 
-  const created = await repository.createRoom(parsed.data, context.actor);
+  const created = await repository.createRoom(
+    {
+      ...parsed.data,
+      decisionPolicy: parsed.data.decisionPolicy ?? "owner_decides",
+    },
+    context.actor,
+  );
   if (!created.ok) return created;
 
+  // A caller without an HTTP request (a direct domain-layer test, for
+  // instance) has no origin to derive; fall back to a placeholder absolute
+  // origin so the invite URL stays a valid, shareable link either way.
+  const baseUrl = (context.baseUrl?.replace(/\/+$/, "") || null) ?? "http://localhost:3000";
   return {
     ...created,
     data: createdRoomSchema.parse({
       roomId: created.data.roomId,
-      participantInvites: created.data.participantInvites.map((invite) => ({
-        participantId: invite.participantId,
-        role: invite.role,
-        inviteUrl: buildInviteUrl(
-          context.inviteBaseUrl,
-          created.data.roomId,
-          invite.inviteToken,
-        ),
-      })),
+      ownerParticipantId: created.data.ownerParticipantId,
+      passcode: created.data.passcode,
+      inviteUrl: buildInviteUrl(baseUrl, created.data.roomId, created.data.inviteToken),
     }),
   };
 }
 
-/**
- * Resolves a raw invitation token into the narrow pre-membership preview.
- *
- * An unknown, expired, revoked or foreign-claimed token is not an error: it is
- * answered with the `inviteValid: false` branch, which carries no room or
- * participant fields. Only a missing token is a validation failure, because
- * there is nothing to resolve.
- */
-export async function previewRoomInvitation(
+export async function previewRoomInvite(
   repository: RoomRepository,
   inviteToken: unknown,
   actor: DomainActor,
@@ -167,28 +158,247 @@ export async function previewRoomInvitation(
   if (typeof inviteToken !== "string" || inviteToken.length === 0) {
     return failure("VALIDATION_ERROR", "An invitation token is required.", 0);
   }
-  return repository.previewInvitation(inviteToken, actor);
+  return repository.previewInvite(inviteToken, actor);
 }
 
-/**
- * Binds the authenticated session to the one seat its capability names. The
- * input carries no seat, participant or user field, so the claimed seat is
- * always the one the token was minted for; the database performs the whole
- * claim atomically and increments the room version once.
- */
-export async function claimRoomInvitation(
+export async function requestJoinByPasscode(
   repository: RoomRepository,
-  input: ClaimInvitationInput,
+  input: RequestJoinByPasscodeInput,
   actor: DomainActor,
-): Promise<ActionResult<ClaimInvitationResult>> {
-  const parsed = claimInvitationInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return failure("VALIDATION_ERROR", "Invitation claim input is invalid.", 0);
-  }
+): Promise<ActionResult<JoinRequestResult>> {
+  const parsed = requestJoinByPasscodeInputSchema.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION_ERROR", "Join request input is invalid.", 0);
   if (!actor.authUserId) {
     return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
   }
-  return repository.claimInvitation(parsed.data, actor);
+  return repository.requestJoinByPasscode(parsed.data, actor);
+}
+
+export async function requestJoinByInvite(
+  repository: RoomRepository,
+  input: RequestJoinByInviteInput,
+  actor: DomainActor,
+): Promise<ActionResult<JoinRequestResult>> {
+  const parsed = requestJoinByInviteInputSchema.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION_ERROR", "Join request input is invalid.", 0);
+  if (!actor.authUserId) return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
+  return repository.requestJoinByInvite(parsed.data, actor);
+}
+
+export function getMyJoinRequest(repository: RoomRepository, joinRequestId: string, actor: DomainActor) {
+  if (!actor.authUserId || !joinRequestId) return Promise.resolve(failure<JoinRequest>("NOT_AUTHORIZED", "Join request unavailable.", 0));
+  return repository.getMyJoinRequest(joinRequestId, actor);
+}
+
+export function listJoinRequests(repository: RoomRepository, roomId: string, actor: DomainActor) {
+  if (!actor.authUserId) return Promise.resolve(failure<JoinRequest[]>("NOT_AUTHORIZED", "Owner authority is required.", 0));
+  return repository.listJoinRequests(roomId, actor);
+}
+
+async function manageJoinRequest(
+  repository: RoomRepository,
+  roomId: string,
+  input: ManageJoinRequestInput,
+  context: MutationContext,
+  action: "admit" | "reject",
+): Promise<ActionResult<JoinRequest>> {
+  const parsed = manageJoinRequestInputSchema.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION_ERROR", "Join request input is invalid.", context.expectedRoomVersion);
+  const room = await prepareMutation(repository, roomId, context, ["input", "proposals", "deliberation", "voting", "approval"]);
+  if ("ok" in room) return room;
+  const self = room.participants.find((participant) => participant.id === room.selfParticipantId);
+  if (!self || self.id !== room.ownerParticipantId || self.meetingRole !== "owner") {
+    return failure("NOT_AUTHORIZED", "Only the current room owner can manage the waiting room.", room.version);
+  }
+  return action === "admit"
+    ? repository.admitJoinRequest(roomId, parsed.data, context)
+    : repository.rejectJoinRequest(roomId, parsed.data, context);
+}
+
+export function admitJoinRequest(repository: RoomRepository, roomId: string, input: ManageJoinRequestInput, context: MutationContext) {
+  return manageJoinRequest(repository, roomId, input, context, "admit");
+}
+
+export function rejectJoinRequest(repository: RoomRepository, roomId: string, input: ManageJoinRequestInput, context: MutationContext) {
+  return manageJoinRequest(repository, roomId, input, context, "reject");
+}
+
+const OWNER_LIFECYCLE_PHASES: RoomPhase[] = [
+  "input",
+  "proposals",
+  "deliberation",
+  "voting",
+  "approval",
+];
+
+/**
+ * Every owner-lifecycle operation (lock/unlock/remove/transfer) shares this
+ * gate: derive the room, reject stale/finalized state, then confirm the
+ * caller's own canonical seat is the current owner. This is a courtesy check
+ * only -- the database repeats the identical derivation from `auth.uid()`
+ * inside the same transaction that performs the mutation, so a spoofed or
+ * stale client cannot skip it.
+ */
+async function requireOwnerRoom(
+  repository: RoomRepository,
+  roomId: string,
+  context: MutationContext,
+): Promise<RoomState | ActionResult<never>> {
+  const room = await prepareMutation(repository, roomId, context, OWNER_LIFECYCLE_PHASES);
+  if ("ok" in room) return room;
+  const self = room.participants.find((participant) => participant.id === room.selfParticipantId);
+  if (!self || self.id !== room.ownerParticipantId || self.meetingRole !== "owner") {
+    return failure("NOT_AUTHORIZED", "Only the current room owner can perform this action.", room.version);
+  }
+  return room;
+}
+
+/** Owner-only. Existing participants keep normal access; new join requests are refused. */
+export async function lockMeeting(
+  repository: RoomRepository,
+  roomId: string,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  return repository.lockMeeting(roomId, context);
+}
+
+/** Owner-only. Allows new join requests again. */
+export async function unlockMeeting(
+  repository: RoomRepository,
+  roomId: string,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  return repository.unlockMeeting(roomId, context);
+}
+
+/**
+ * Owner-only. `input.participantId` is always the target of the removal, not
+ * caller authority -- the acting owner is derived from the authenticated
+ * session, never from a request field.
+ */
+export async function removeParticipant(
+  repository: RoomRepository,
+  roomId: string,
+  input: RemoveParticipantInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = removeParticipantInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Removal input is invalid.", context.expectedRoomVersion);
+  }
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  if (parsed.data.participantId === room.ownerParticipantId) {
+    return failure(
+      "NOT_AUTHORIZED",
+      "The current owner cannot remove themselves. Transfer ownership first.",
+      room.version,
+    );
+  }
+  return repository.removeParticipant(roomId, parsed.data, context);
+}
+
+/**
+ * Owner-only. Atomically moves meeting authority to another active human
+ * participant. `input.participantId` names the *new* owner; the current
+ * owner is derived from the authenticated session, never from the request.
+ */
+export async function transferOwnership(
+  repository: RoomRepository,
+  roomId: string,
+  input: TransferOwnershipInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = transferOwnershipInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Ownership transfer input is invalid.", context.expectedRoomVersion);
+  }
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  if (parsed.data.participantId === room.ownerParticipantId) {
+    return failure(
+      "VALIDATION_ERROR",
+      "The target is already the meeting owner.",
+      room.version,
+    );
+  }
+  return repository.transferOwnership(roomId, parsed.data, context);
+}
+
+/**
+ * Owner-only. Changes the room's decision authority model.
+ *
+ * Rejected once an exact decision candidate is frozen (`approval` phase with
+ * a stored hash): a policy change would silently redefine who is required to
+ * approve an already-reviewed candidate. Returning to Alignment first keeps
+ * the invariant simple and testable, rather than trying to safely recompute
+ * both a changed policy and a changed candidate at once.
+ */
+export async function setDecisionPolicy(
+  repository: RoomRepository,
+  roomId: string,
+  input: SetDecisionPolicyInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = setDecisionPolicyInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure(
+      "VALIDATION_ERROR",
+      "Decision policy input is invalid.",
+      context.expectedRoomVersion,
+    );
+  }
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  return repository.setDecisionPolicy(roomId, parsed.data, context);
+}
+
+/**
+ * Owner-only. Promotes/demotes an active human participant between
+ * `decision_maker` and `contributor`. `advisor` is never assignable through
+ * this operation, so simulations and experts can never be promoted.
+ *
+ * The current owner can never cease being a decision-maker: `owner_decides`
+ * relies on the owner always qualifying as the sole required approver, and
+ * `equal_authority_consensus` requires the owner to remain a decision-maker
+ * so consensus always has at least one required approver.
+ *
+ * Rejected once an exact decision candidate is frozen, for the same reason
+ * `setDecisionPolicy` is: changing who counts as a decision-maker after the
+ * candidate's authority metadata was already reviewed would silently change
+ * the meaning of a hash someone may already be looking at.
+ */
+export async function setParticipantDecisionRole(
+  repository: RoomRepository,
+  roomId: string,
+  input: SetParticipantDecisionRoleInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = setParticipantDecisionRoleInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure(
+      "VALIDATION_ERROR",
+      "Decision-role input is invalid.",
+      context.expectedRoomVersion,
+    );
+  }
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  if (
+    parsed.data.participantId === room.ownerParticipantId &&
+    parsed.data.decisionRole !== "decision_maker"
+  ) {
+    return failure(
+      "NOT_AUTHORIZED",
+      "The current owner cannot cease being a decision maker.",
+      room.version,
+    );
+  }
+  return repository.setParticipantDecisionRole(roomId, parsed.data, context);
 }
 
 export function getMeetingContext(
@@ -299,26 +509,36 @@ export async function resolveParticipantObjection(
   return repository.resolveObjection(roomId, parsed.data, context);
 }
 
-export async function castParticipantVote(
+/**
+ * A claimed human expresses or updates their own alignment on the active
+ * proposal during the Alignment phase (internal phase enum: `voting`).
+ *
+ * This is deliberately not a vote: it is upserted per participant/proposal,
+ * carries no weight, and does not by itself gate any phase transition or
+ * finalization. It exists so the responsible decision authority can see
+ * support, concerns, strong objections, and missing perspectives before
+ * acting — see `owner_decides` / `equal_authority_consensus` finalization.
+ */
+export async function expressMyAlignment(
   repository: RoomRepository,
   roomId: string,
-  input: CastVoteInput,
+  input: ExpressAlignmentInput,
   context: MutationContext,
 ): Promise<ActionResult> {
-  const parsed = castVoteInputSchema.safeParse(input);
+  const parsed = expressAlignmentInputSchema.safeParse(input);
   if (!parsed.success) {
-    return failure("VALIDATION_ERROR", "Vote input is invalid.", context.expectedRoomVersion);
+    return failure("VALIDATION_ERROR", "Alignment input is invalid.", context.expectedRoomVersion);
   }
   if (!["manual_ui", "webmcp"].includes(context.actor.origin)) {
     return failure(
       "NOT_AUTHORIZED",
-      "Only an authenticated human participant may use this voting operation.",
+      "Only an authenticated human participant may express alignment.",
       context.expectedRoomVersion,
     );
   }
   const room = await prepareMutation(repository, roomId, context, ["voting"]);
   if ("ok" in room) return room;
-  return repository.castVote(roomId, parsed.data, context);
+  return repository.expressAlignment(roomId, parsed.data, context);
 }
 
 export async function previewFinalDecision(
@@ -405,15 +625,15 @@ export async function markMyInputReady(
 }
 
 /**
- * Organizer-only production phase advance.
+ * Owner-only production phase advance.
  *
  * Deliberately not `advanceDemoRoomPhase`: that one is a demo-room developer
  * affordance authorized by any claimed seat, while this one is authorized by
- * the server-derived organizer of a real room and enforces the per-phase
+ * the server-derived owner membership of a real room and enforces the per-phase
  * prerequisites (readiness, an active proposal, no blocking conflict, the
  * existing voting rules).
  *
- * `approval` is not a source phase here, so an organizer can move a room into
+ * `approval` is not a source phase here, so an owner can move a room into
  * approval but never past it: finalization stays with the last required human
  * approval.
  */
@@ -448,57 +668,6 @@ export async function advanceRoomPhase(
     );
   }
   return repository.advanceRoomPhase(roomId, parsed.data, context);
-}
-
-/**
- * Organizer-only rotation for an unclaimed seat invitation.
- *
- * The participant id names the target seat, not the actor. Organizer authority
- * is resolved in the database from `auth.uid()`, and the raw token is returned
- * only as a fresh invite URL.
- */
-export async function regenerateRoomInvitation(
-  repository: RoomRepository,
-  roomId: string,
-  input: ManageRoomInvitationInput,
-  context: MutationContext,
-  inviteBaseUrl: string,
-): Promise<ActionResult<RegeneratedRoomInvitation>> {
-  const parsed = manageRoomInvitationInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return failure("VALIDATION_ERROR", "Invitation management input is invalid.", context.expectedRoomVersion);
-  }
-  const room = await prepareMutation(repository, roomId, context, ["input"]);
-  if ("ok" in room) return room;
-  const result = await repository.regenerateInvitation(roomId, parsed.data, context);
-  if (!result.ok) return result;
-  return {
-    ...result,
-    data: regeneratedRoomInvitationSchema.parse({
-      participantId: result.data.participantId,
-      role: result.data.role,
-      inviteUrl: buildInviteUrl(inviteBaseUrl, roomId, result.data.inviteToken),
-    }),
-  };
-}
-
-/**
- * Organizer-only revocation for an unclaimed seat invitation. A revoked link
- * stops preview/claim but never removes or changes the participant seat.
- */
-export async function revokeRoomInvitation(
-  repository: RoomRepository,
-  roomId: string,
-  input: ManageRoomInvitationInput,
-  context: MutationContext,
-): Promise<ActionResult> {
-  const parsed = manageRoomInvitationInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return failure("VALIDATION_ERROR", "Invitation management input is invalid.", context.expectedRoomVersion);
-  }
-  const room = await prepareMutation(repository, roomId, context, ["input"]);
-  if ("ok" in room) return room;
-  return repository.revokeInvitation(roomId, parsed.data, context);
 }
 
 export async function advanceDemoRoomPhase(

@@ -1,331 +1,142 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiRoomOnboardingClient } from "@/clients/api-room-onboarding-client";
 import type { RoomOnboardingClient } from "@/clients/room-onboarding-client";
-import type { RoomInvitePreview } from "@/contracts/room";
+import type { JoinRequest, RoomInvitePreview } from "@/contracts/room";
 import styles from "@/components/onboarding/onboarding.module.css";
+import {
+  JOIN_REQUEST_CREATED_EVENT,
+  readPendingJoinRequest,
+  savePendingJoinRequest,
+} from "@/webmcp/join-request-store";
+import { useOnboardingWebMcpTools } from "@/webmcp/register-tools";
 
-type JoinRoomProps = {
-  roomId: string;
-  inviteToken: string | null;
-  client?: RoomOnboardingClient;
-};
+type Props = { roomId?: string; inviteToken?: string | null; client?: RoomOnboardingClient };
 
-type PreviewState =
-  | { kind: "loading" }
-  | { kind: "unavailable" }
-  | { kind: "failure" }
-  | { kind: "route-mismatch" }
-  | { kind: "valid"; preview: Extract<RoomInvitePreview, { inviteValid: true }> };
-
-type ClaimState =
-  | { kind: "idle" }
-  | { kind: "pending" }
-  | { kind: "race-lost"; recovery?: string }
-  | { kind: "failure"; recovery?: string }
-  | { kind: "success" };
-
-function previewToState(
-  roomId: string,
-  preview: RoomInvitePreview,
-): PreviewState {
-  if (!preview.inviteValid) return { kind: "unavailable" };
-  if (preview.roomId !== roomId) return { kind: "route-mismatch" };
-  return { kind: "valid", preview };
-}
-
-export function JoinRoom({ roomId, inviteToken, client: suppliedClient }: JoinRoomProps) {
+export function JoinRoom({ roomId: routeRoomId, inviteToken = null, client: suppliedClient }: Props) {
+  useOnboardingWebMcpTools("join");
   const router = useRouter();
-  const [client] = useState<RoomOnboardingClient>(
-    () => suppliedClient ?? new ApiRoomOnboardingClient(),
-  );
-  const [previewState, setPreviewState] = useState<PreviewState>(() =>
-    inviteToken ? { kind: "loading" } : { kind: "unavailable" },
-  );
-  const [claimState, setClaimState] = useState<ClaimState>({ kind: "idle" });
-  const previewRequest = useRef(0);
-  const claimInFlight = useRef(false);
+  const [client] = useState(() => suppliedClient ?? new ApiRoomOnboardingClient());
+  const [roomId, setRoomId] = useState(routeRoomId ?? "");
+  const [passcode, setPasscode] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [role, setRole] = useState("");
+  const [preview, setPreview] = useState<RoomInvitePreview | null>(null);
+  const [joinRequest, setJoinRequest] = useState<JoinRequest | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const submitting = useRef(false);
 
-  const refreshPreview = useCallback(async () => {
-    const requestId = ++previewRequest.current;
-    setClaimState({ kind: "idle" });
-
-    if (!inviteToken) {
-      setPreviewState({ kind: "unavailable" });
-      return;
+  // Resumes a join request `join_meeting` (a WebMCP tool) created for this
+  // browser session, whether it happened before this page mounted (read on
+  // mount) or while it is already open (the `webmcp:join-request-created`
+  // event `savePendingJoinRequest` dispatches).
+  useEffect(() => {
+    async function adopt(pendingRequest: { joinRequestId: string; roomId: string }) {
+      const result = await client.getMyJoinRequest(pendingRequest.joinRequestId);
+      if (result.ok) setJoinRequest(result.data);
     }
+    const initial = readPendingJoinRequest();
+    if (initial) void adopt(initial);
 
-    setPreviewState({ kind: "loading" });
-    try {
-      const preview = await client.previewInvitation(inviteToken);
-      if (requestId !== previewRequest.current) return;
-
-      setPreviewState(previewToState(roomId, preview));
-    } catch {
-      if (requestId === previewRequest.current) {
-        setPreviewState({ kind: "failure" });
-      }
+    function onCreated(event: Event) {
+      const detail = (event as CustomEvent<{ joinRequestId: string; roomId: string }>).detail;
+      if (detail) void adopt(detail);
     }
-  }, [client, inviteToken, roomId]);
+    window.addEventListener(JOIN_REQUEST_CREATED_EVENT, onCreated);
+    return () => window.removeEventListener(JOIN_REQUEST_CREATED_EVENT, onCreated);
+  }, [client]);
 
   useEffect(() => {
-    const requestId = ++previewRequest.current;
     if (!inviteToken) return;
-
-    void client
-      .previewInvitation(inviteToken)
-      .then((preview) => {
-        if (requestId === previewRequest.current) {
-          setPreviewState(previewToState(roomId, preview));
-        }
+    let active = true;
+    client.previewInvite(inviteToken)
+      .then((value) => {
+        if (!active) return;
+        setPreview(value);
+        if (value.inviteValid) setRoomId(value.roomId);
       })
-      .catch(() => {
-        if (requestId === previewRequest.current) {
-          setPreviewState({ kind: "failure" });
-        }
-      });
+      .catch(() => { if (active) setError("We couldn’t check this invitation."); });
+    return () => { active = false; };
+  }, [client, inviteToken]);
 
-    return () => {
-      previewRequest.current += 1;
+  useEffect(() => {
+    if (!joinRequest || joinRequest.status !== "waiting") return;
+    let active = true;
+    const check = async () => {
+      try {
+        const result = await client.getMyJoinRequest(joinRequest.id);
+        if (!active || !result.ok) return;
+        setJoinRequest(result.data);
+        if (result.data.status === "admitted") router.push(`/room/${encodeURIComponent(result.data.roomId)}`);
+      } catch { /* transient polling failures retain the safe waiting state */ }
     };
-  }, [client, inviteToken, roomId]);
+    const interval = window.setInterval(() => void check(), 2000);
+    return () => { active = false; window.clearInterval(interval); };
+  }, [client, joinRequest, router]);
 
-  async function claimInvitation() {
-    if (
-      !inviteToken ||
-      previewState.kind !== "valid" ||
-      previewState.preview.alreadyClaimed ||
-      claimInFlight.current
-    ) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submitting.current) return;
+    setError(null);
+    if (!displayName.trim() || !role.trim() || (!inviteToken && (!roomId.trim() || !passcode))) {
+      setError("Complete all join details.");
       return;
     }
-
-    claimInFlight.current = true;
-    setClaimState({ kind: "pending" });
-
+    submitting.current = true;
+    setPending(true);
     try {
-      const result = await client.claimInvitation({ inviteToken });
-      if (!result.ok) {
-        claimInFlight.current = false;
-        const kind =
-          result.error.code === "NOT_AUTHORIZED" ? "race-lost" : "failure";
-        setClaimState(
-          result.error.recovery
-            ? { kind, recovery: result.error.recovery }
-            : { kind },
-        );
-        return;
+      const result = inviteToken
+        ? await client.requestJoinByInvite({ inviteToken, displayName: displayName.trim(), role: role.trim() })
+        : await client.requestJoinByPasscode({ roomId: roomId.trim(), passcode, displayName: displayName.trim(), role: role.trim() });
+      if (!result.ok) setError(result.error.message);
+      else {
+        setJoinRequest(result.data.joinRequest);
+        savePendingJoinRequest({
+          joinRequestId: result.data.joinRequest.id,
+          roomId: result.data.roomId,
+        }, false);
       }
-
-      const preview = previewState.preview;
-      if (
-        result.data.roomId !== roomId ||
-        result.data.roomId !== preview.roomId ||
-        result.data.participantId !== preview.participant.id
-      ) {
-        claimInFlight.current = false;
-        setClaimState({ kind: "failure" });
-        return;
-      }
-
-      setClaimState({ kind: "success" });
-      router.push(`/room/${encodeURIComponent(result.data.roomId)}`);
     } catch {
-      claimInFlight.current = false;
-      setClaimState({ kind: "failure" });
+      setError("We couldn’t submit your join request.");
+    } finally {
+      submitting.current = false;
+      setPending(false);
     }
   }
 
+  if (joinRequest?.status === "waiting") return <JoinStatus title="Waiting for the meeting owner to admit you." detail="This page checks your private request status automatically." />;
+  if (joinRequest?.status === "rejected") return <JoinStatus title="Your join request was declined." detail="The owner did not admit this request." rejected />;
+  if (joinRequest?.status === "admitted") return <JoinStatus title="You’re admitted." detail="Opening the meeting…" />;
+  if (inviteToken && preview && !preview.inviteValid) return <JoinStatus title="This invitation can’t be used." detail="It may be invalid, expired, or revoked." rejected />;
+
   return (
     <main className={styles.joinPage}>
-      <header className={styles.joinHeader}>
-        <Link className={styles.brand} href="/">
-          <span aria-hidden="true" className={styles.brandMark}>
-            3D
-          </span>
-          Decision Office
-        </Link>
-        <span className={styles.secureLabel}>Secure invitation</span>
-      </header>
-
-      <section className={styles.joinStage} aria-live="polite">
-        {previewState.kind === "loading" ? (
-          <div className={styles.joinStateCard} role="status">
-            <span className={styles.loadingMark} aria-hidden="true" />
-            <p className={styles.eyebrow}>Checking invitation</p>
-            <h1>Preparing your safe preview…</h1>
-            <p>We’re confirming the invitation before showing room details.</p>
+      <header className={styles.joinHeader}><Link className={styles.brand} href="/">Quorum</Link><span className={styles.secureLabel}>Secure waiting room</span></header>
+      <section className={styles.joinStage}>
+        <form className={styles.joinCard} onSubmit={submit} aria-label="Join meeting">
+          <div className={styles.joinCardIntro}>
+            <p className={styles.eyebrow}>{inviteToken ? "Invitation" : "Join meeting"}</p>
+            <h1>{preview?.inviteValid ? preview.title : "Request a seat"}</h1>
+            <p>{preview?.inviteValid ? preview.brief : "A valid passcode or invite lets you request admission. The owner decides who enters."}</p>
           </div>
-        ) : null}
-
-        {previewState.kind === "unavailable" ? (
-          <UnavailableInvitation />
-        ) : null}
-
-        {previewState.kind === "route-mismatch" ? (
-          <div className={styles.joinStateCard} role="alert">
-            <p className={styles.eyebrow}>Invitation route mismatch</p>
-            <h1>This invitation can’t be used at this address.</h1>
-            <p>
-              Open the original invitation link again, or contact the organizer
-              for the correct link. No room access was attempted.
-            </p>
-            <Link className={styles.secondaryAction} href="/">
-              Back home
-            </Link>
-          </div>
-        ) : null}
-
-        {previewState.kind === "failure" ? (
-          <div className={styles.joinStateCard} role="alert">
-            <p className={styles.eyebrow}>Preview unavailable</p>
-            <h1>We couldn’t check this invitation.</h1>
-            <p>Check your connection and try once more. Nothing has been claimed.</p>
-            <button
-              type="button"
-              className={styles.secondaryButton}
-              onClick={() => void refreshPreview()}
-            >
-              Try again
-            </button>
-          </div>
-        ) : null}
-
-        {previewState.kind === "valid" ? (
-          <ValidInvitation
-            preview={previewState.preview}
-            claimState={claimState}
-            onClaim={() => void claimInvitation()}
-            onRecheck={() => void refreshPreview()}
-          />
-        ) : null}
+          {!inviteToken ? <>
+            <label>Room ID<input name="roomId" value={roomId} onChange={(event) => setRoomId(event.target.value)} /></label>
+            <label>Passcode<input name="passcode" type="password" value={passcode} onChange={(event) => setPasscode(event.target.value)} /></label>
+          </> : null}
+          <label>Your name<input name="displayName" autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
+          <label>Your role<input name="role" value={role} onChange={(event) => setRole(event.target.value)} placeholder="Designer" /></label>
+          {error ? <div className={styles.claimFeedback} role="alert">{error}</div> : null}
+          <button className={styles.submitButton} type="submit" disabled={pending || (Boolean(inviteToken) && !preview?.inviteValid)}>{pending ? "Requesting…" : "Request admission"}</button>
+        </form>
       </section>
-
-      <footer className={styles.joinFooter}>
-        Opening an invitation never joins automatically. You choose when to claim
-        the role shown above.
-      </footer>
     </main>
   );
 }
 
-function UnavailableInvitation() {
-  return (
-    <div className={styles.joinStateCard} role="alert">
-      <p className={styles.eyebrow}>Invitation unavailable</p>
-      <h1>This invitation can’t be used.</h1>
-      <p>
-        It may be invalid, expired, revoked, or already claimed by another
-        participant. Contact the organizer for a new invitation.
-      </p>
-      <Link className={styles.secondaryAction} href="/">
-        Back home
-      </Link>
-    </div>
-  );
-}
-
-type ValidInvitationProps = {
-  preview: Extract<RoomInvitePreview, { inviteValid: true }>;
-  claimState: ClaimState;
-  onClaim: () => void;
-  onRecheck: () => void;
-};
-
-function ValidInvitation({
-  preview,
-  claimState,
-  onClaim,
-  onRecheck,
-}: ValidInvitationProps) {
-  const isClaiming = claimState.kind === "pending" || claimState.kind === "success";
-
-  if (preview.alreadyClaimed) {
-    return (
-      <div className={styles.joinStateCard}>
-        <p className={styles.eyebrow}>Already a participant</p>
-        <h1>You’ve already joined this room.</h1>
-        <p>
-          This invitation belongs to your current session. Continue to the room
-          as {preview.participant.role}.
-        </p>
-        <Link className={styles.primaryAction} href={`/room/${preview.roomId}`}>
-          Open room <span aria-hidden="true">→</span>
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <article className={styles.joinCard} aria-labelledby="invitation-title">
-      <div className={styles.joinCardIntro}>
-        <p className={styles.eyebrow}>You’ve been invited</p>
-        <h1 id="invitation-title">{preview.title}</h1>
-        <p>{preview.brief}</p>
-      </div>
-
-      <div className={styles.roleReveal}>
-        <span className={styles.inviteInitials} aria-hidden="true">
-          {preview.participant.name.slice(0, 2).toUpperCase()}
-        </span>
-        <div>
-          <span>Your intended seat</span>
-          <strong>{preview.participant.name}</strong>
-          <p>{preview.participant.role}</p>
-        </div>
-      </div>
-
-      <div className={styles.joinConfirmation}>
-        <div>
-          <strong>Join consciously</strong>
-          <p>
-            This action binds your authenticated browser session to the role
-            above. The invitation—not this page—determines the seat.
-          </p>
-        </div>
-        <button
-          type="button"
-          className={styles.submitButton}
-          onClick={onClaim}
-          disabled={isClaiming}
-        >
-          {claimState.kind === "pending"
-            ? "Joining…"
-            : claimState.kind === "success"
-              ? "Opening room…"
-              : `Join as ${preview.participant.role}`}
-          {!isClaiming ? <span aria-hidden="true">→</span> : null}
-        </button>
-      </div>
-
-      {claimState.kind === "race-lost" ? (
-        <div className={styles.claimFeedback} role="alert">
-          <strong>This invitation was claimed before your join completed.</strong>
-          <span>
-            {claimState.recovery ??
-              "Ask the organizer for a new link if this seat should be yours."}
-          </span>
-          <button type="button" className={styles.inlineButton} onClick={onRecheck}>
-            Check invitation again
-          </button>
-        </div>
-      ) : null}
-
-      {claimState.kind === "failure" ? (
-        <div className={styles.claimFeedback} role="alert">
-          <strong>We couldn’t complete your join.</strong>
-          <span>
-            {claimState.recovery ??
-              "Your invitation was not accepted. Check your connection and try again."}
-          </span>
-          <button type="button" className={styles.inlineButton} onClick={onClaim}>
-            Try joining again
-          </button>
-        </div>
-      ) : null}
-    </article>
-  );
+function JoinStatus({ title, detail, rejected = false }: { title: string; detail: string; rejected?: boolean }) {
+  return <main className={styles.joinPage}><section className={styles.joinStage}><div className={styles.joinStateCard} role="status"><p className={styles.eyebrow}>{rejected ? "Request closed" : "Waiting room"}</p><h1>{title}</h1><p>{detail}</p>{rejected ? <Link className={styles.secondaryAction} href="/">Back to start</Link> : null}</div></section></main>;
 }

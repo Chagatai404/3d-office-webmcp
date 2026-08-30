@@ -10,15 +10,19 @@ import {
   type DecisionRecord,
   type FinalDecisionPreview,
   type JsonValue,
-  type ManageRoomInvitationInput,
+  type JoinRequest,
+  type ManageJoinRequestInput,
   type Participant,
   type Position,
-  type RegeneratedRoomInvitation,
+  type RemoveParticipantInput,
   type ResolveObjectionInput,
   type RoomClient,
   type RoomPhase,
   type RoomState,
+  type SetDecisionPolicyInput,
+  type SetParticipantDecisionRoleInput,
   type StartDemoScenarioInput,
+  type TransferOwnershipInput,
 } from "@/contracts/room";
 
 /**
@@ -277,8 +281,8 @@ export class MockRoomClient implements RoomClient {
     );
   }
 
-  async castMyVote(roomId: string): Promise<ActionResult> {
-    return this.#notInThisMilestone(roomId, "voting", "Voting");
+  async expressMyAlignment(roomId: string): Promise<ActionResult> {
+    return this.#notInThisMilestone(roomId, "voting", "Sharing alignment");
   }
 
   async previewFinalDecision(
@@ -359,28 +363,49 @@ export class MockRoomClient implements RoomClient {
     );
   }
 
-  regenerateInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-  ): Promise<ActionResult<RegeneratedRoomInvitation>> {
-    void input;
-    return Promise.resolve(
-      this.#notInThisMilestone(
-        roomId,
-        "input",
-        "Regenerating an invitation",
-      ),
-    );
+  listJoinRequests(roomId: string): Promise<ActionResult<JoinRequest[]>> {
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Listing join requests"));
   }
 
-  revokeInvitation(
+  admitJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
+    void input;
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Admitting a join request"));
+  }
+
+  rejectJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
+    void input;
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Rejecting a join request"));
+  }
+
+  lockMeeting(roomId: string): Promise<ActionResult> {
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Locking the meeting"));
+  }
+
+  unlockMeeting(roomId: string): Promise<ActionResult> {
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Unlocking the meeting"));
+  }
+
+  removeParticipant(roomId: string, input: RemoveParticipantInput): Promise<ActionResult> {
+    void input;
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Removing a participant"));
+  }
+
+  transferOwnership(roomId: string, input: TransferOwnershipInput): Promise<ActionResult> {
+    void input;
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Transferring ownership"));
+  }
+
+  setDecisionPolicy(roomId: string, input: SetDecisionPolicyInput): Promise<ActionResult> {
+    void input;
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Changing the decision policy"));
+  }
+
+  setParticipantDecisionRole(
     roomId: string,
-    input: ManageRoomInvitationInput,
+    input: SetParticipantDecisionRoleInput,
   ): Promise<ActionResult> {
     void input;
-    return Promise.resolve(
-      this.#notInThisMilestone(roomId, "input", "Revoking an invitation"),
-    );
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Changing decision authority"));
   }
 
   #snapshot(): RoomState {

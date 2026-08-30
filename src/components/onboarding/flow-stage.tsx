@@ -61,6 +61,7 @@ export function useFlowStage(): FlowStageValue {
 /** Where the camera stands on each screen of the flow. */
 function poseForPath(pathname: string): PreMeetingPoseId {
   if (pathname.startsWith("/new")) return "create";
+  if (pathname.startsWith("/join")) return "join";
   if (pathname.endsWith("/setup")) return "lobby";
   return "welcome";
 }
@@ -97,7 +98,10 @@ export function FlowStage({ children }: { children: ReactNode }) {
   // next screen means the push at the end of it resolves against a route that
   // is already there, rather than leaving the room empty while it loads.
   useEffect(() => {
-    if (poseForPath(pathname) === "welcome") router.prefetch("/new");
+    if (poseForPath(pathname) === "welcome") {
+      router.prefetch("/new");
+      router.prefetch("/join");
+    }
   }, [pathname, router]);
 
   const enter = useCallback(

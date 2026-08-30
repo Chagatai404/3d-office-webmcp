@@ -3,22 +3,29 @@ import type {
   ActionResult,
   AddPositionInput,
   ApproveFinalDecisionInput,
-  CastVoteInput,
-  ClaimInvitationInput,
-  ClaimInvitationResult,
   ClaimSeatInput,
   CreateRoomInput,
   DecisionRecord,
+  ExpressAlignmentInput,
   FinalDecisionPreview,
-  ManageRoomInvitationInput,
+  JoinRequest,
+  JoinRequestResult,
+  ManageJoinRequestInput,
+  RecordExpertAdviceOutcomeInput,
+  RemoveParticipantInput,
+  RequestJoinByInviteInput,
+  RequestJoinByPasscodeInput,
   RaiseObjectionInput,
   ResolveObjectionInput,
   ProposeTradeoffInput,
   RoomInvitePreview,
   RoomPhase,
   RoomState,
+  SetDecisionPolicyInput,
+  SetParticipantDecisionRoleInput,
   StartDemoScenarioInput,
   SubmitProposalInput,
+  TransferOwnershipInput,
 } from "@/contracts/room";
 
 export interface DomainActor {
@@ -32,27 +39,12 @@ export interface MutationContext {
   humanConfirmed?: boolean;
 }
 
-export interface CreatedRoomInvitation {
-  participantId: string;
-  role: string;
-  /**
-   * Raw invitation capability. It exists only on this creation boundary: it is
-   * never persisted (only its hash is) and never reaches `RoomState`.
-   */
-  inviteToken: string;
-}
-
-/** Internal creation record. The public DTO adds invite URLs and drops tokens. */
+/** Internal creation record returned by the atomic database operation. */
 export interface CreatedRoomRecord {
   roomId: string;
-  participantInvites: CreatedRoomInvitation[];
-}
-
-/** Internal invite-management record. The public DTO adds the invite URL. */
-export interface RegeneratedRoomInvitationRecord {
-  participantId: string;
-  role: string;
+  ownerParticipantId: string;
   inviteToken: string;
+  passcode: string;
 }
 
 export interface RoomRepository {
@@ -61,14 +53,19 @@ export interface RoomRepository {
     input: CreateRoomInput,
     actor: DomainActor,
   ): Promise<ActionResult<CreatedRoomRecord>>;
-  previewInvitation(
+  previewInvite(
     inviteToken: string,
     actor: DomainActor,
   ): Promise<ActionResult<RoomInvitePreview>>;
-  claimInvitation(
-    input: ClaimInvitationInput,
+  requestJoinByPasscode(
+    input: RequestJoinByPasscodeInput,
     actor: DomainActor,
-  ): Promise<ActionResult<ClaimInvitationResult>>;
+  ): Promise<ActionResult<JoinRequestResult>>;
+  requestJoinByInvite(input: RequestJoinByInviteInput, actor: DomainActor): Promise<ActionResult<JoinRequestResult>>;
+  getMyJoinRequest(joinRequestId: string, actor: DomainActor): Promise<ActionResult<JoinRequest>>;
+  listJoinRequests(roomId: string, actor: DomainActor): Promise<ActionResult<JoinRequest[]>>;
+  admitJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext): Promise<ActionResult<JoinRequest>>;
+  rejectJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext): Promise<ActionResult<JoinRequest>>;
   claimSeat(
     roomId: string,
     input: ClaimSeatInput,
@@ -99,9 +96,9 @@ export interface RoomRepository {
     input: ProposeTradeoffInput,
     context: MutationContext,
   ): Promise<ActionResult>;
-  castVote(
+  expressAlignment(
     roomId: string,
-    input: CastVoteInput,
+    input: ExpressAlignmentInput,
     context: MutationContext,
   ): Promise<ActionResult>;
   previewFinalDecision(
@@ -126,16 +123,6 @@ export interface RoomRepository {
     nextPhase: RoomPhase,
     context: MutationContext,
   ): Promise<ActionResult>;
-  regenerateInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-    context: MutationContext,
-  ): Promise<ActionResult<RegeneratedRoomInvitationRecord>>;
-  revokeInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-    context: MutationContext,
-  ): Promise<ActionResult>;
   advanceDemoPhase(
     roomId: string,
     nextPhase: RoomPhase,
@@ -145,5 +132,50 @@ export interface RoomRepository {
     roomId: string,
     input: StartDemoScenarioInput,
     authUserId: string,
+  ): Promise<ActionResult>;
+  lockMeeting(roomId: string, context: MutationContext): Promise<ActionResult>;
+  unlockMeeting(roomId: string, context: MutationContext): Promise<ActionResult>;
+  removeParticipant(
+    roomId: string,
+    input: RemoveParticipantInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  transferOwnership(
+    roomId: string,
+    input: TransferOwnershipInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  setDecisionPolicy(
+    roomId: string,
+    input: SetDecisionPolicyInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  setParticipantDecisionRole(
+    roomId: string,
+    input: SetParticipantDecisionRoleInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+
+  /** Owner-only. Idempotent: enabling an already-enabled expert is a no-op success. */
+  enableSecurityExpert(
+    roomId: string,
+    context: MutationContext,
+  ): Promise<ActionResult<{ expertParticipantId: string }>>;
+
+  /**
+   * Any active human participant. Idempotent per active proposal (a
+   * fingerprint-unique constraint on `expert_findings` guards duplicate
+   * findings even under concurrent calls).
+   */
+  runSecurityExpertReview(
+    roomId: string,
+    context: MutationContext,
+  ): Promise<ActionResult<{ findingIds: string[] }>>;
+
+  /** Owner-only. Rejected once an exact decision candidate is frozen. */
+  recordExpertAdviceOutcome(
+    roomId: string,
+    input: RecordExpertAdviceOutcomeInput,
+    context: MutationContext,
   ): Promise<ActionResult>;
 }

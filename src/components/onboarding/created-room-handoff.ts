@@ -1,10 +1,9 @@
 import type { CreateRoomInput, CreatedRoom } from "@/contracts/room";
 
 /**
- * Volatile handoff for the single client-side transition from creation to setup.
- * Raw invitation capabilities never enter RoomState or durable browser storage.
- * A refresh intentionally clears this value; B2 can replace it with an
- * organizer-authorized refetch when that backend surface exists.
+ * @deprecated Slice 1 routes creators directly into the room. Kept only for
+ * compatibility with the old setup page tests/bookmarks; it contains no
+ * invitation capability or participant-seat configuration.
  */
 type PendingCreatedRoom = {
   createdRoom: CreatedRoom;
@@ -23,7 +22,9 @@ export function stageCreatedRoomForSetup(
     input: {
       title: input.title,
       brief: input.brief,
-      participants: input.participants.map((participant) => ({ ...participant })),
+      creatorName: input.creatorName,
+      creatorRole: input.creatorRole,
+      ...(input.decisionPolicy ? { decisionPolicy: input.decisionPolicy } : {}),
     },
   };
 }

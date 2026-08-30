@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRoom } from "@/components/room/room-provider";
 import { RoomSummary } from "@/components/room/room-summary";
 import type { SceneInteraction } from "@/visualization/scene/scene-interaction";
+import { subscribeToUiConfirmation } from "@/webmcp/confirmation-bridge";
 import { DrawerHost } from "./drawers/drawer-host";
 import { MeetingShellProvider, useShell } from "./shell-provider";
 import { MeetingToolbar } from "./meeting-toolbar";
@@ -40,7 +41,21 @@ const RoomVisualization = dynamic(
 
 function World() {
   const { visualization } = useRoom();
-  const { request, activeWorkspace, reducedMotion, goToWorkspace, handleArrive } = useShell();
+  const { request, activeWorkspace, reducedMotion, goToWorkspace, handleArrive, openDrawer } = useShell();
+
+  // Bridges a sensitive WebMCP tool's "prepare, don't complete" refusal to
+  // the exact visible confirmation surface: open the Participants drawer for
+  // a transfer/removal (the alertdialog itself arms via
+  // `subscribeToArmedParticipantsRequest` inside `ParticipantPanel`), or move
+  // the camera to the Decision workspace for a final-decision confirmation.
+  useEffect(
+    () =>
+      subscribeToUiConfirmation((event) => {
+        if (event.kind === "participants") openDrawer("participants");
+        else goToWorkspace("decision");
+      }),
+    [openDrawer, goToWorkspace],
+  );
 
   const interaction = useMemo<SceneInteraction>(
     () => ({

@@ -100,7 +100,7 @@ export function IssuesWorkspace() {
         Issues
       </h2>
       <p className="panel-note">
-        Blocking objections open: {blockingOpenCount}. Nothing here can be voted on until they are settled.
+        Blocking objections open: {blockingOpenCount}. Alignment cannot open until they are settled.
       </p>
 
       <form

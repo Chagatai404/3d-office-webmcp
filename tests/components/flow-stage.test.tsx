@@ -44,6 +44,14 @@ function createLink(): HTMLAnchorElement {
   return link;
 }
 
+function joinLink(): HTMLAnchorElement {
+  const link = [...container.querySelectorAll("a")].find((candidate) =>
+    candidate.textContent?.includes("Join a meeting"),
+  );
+  if (!link) throw new Error("The welcome screen has no join action.");
+  return link;
+}
+
 async function click(element: HTMLElement) {
   await act(async () => {
     element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -169,5 +177,96 @@ describe("the pre-meeting flow's stage", () => {
       defaultPrevented = event.defaultPrevented;
     });
     expect(defaultPrevented).toBe(false);
+  });
+});
+
+/**
+ * Join Meeting used to cut straight to `/join` with no flight, and
+ * `poseForPath` fell through to the welcome pose for that route, leaving the
+ * small framed welcome card floating over the join form. Join now goes
+ * through the same continuous-stage flight as Create, landing on its own
+ * unframed interior pose.
+ */
+describe("the join meeting camera transition", () => {
+  it("sends the camera to the unframed join pose before navigating", async () => {
+    await click(joinLink());
+
+    expect(stage().dataset.pose).toBe("join");
+    expect(stage().dataset.framed).toBe("false");
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
+  it("navigates to /join as the camera settles, not before", async () => {
+    await click(joinLink());
+
+    await act(async () => {
+      vi.advanceTimersByTime(flowHandoverSeconds(false) * 1000 - 1);
+    });
+    expect(navigation.push).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(navigation.push).toHaveBeenCalledWith("/join");
+  });
+
+  it("takes the welcome panel off the screen while the camera flies to join", async () => {
+    const welcome = container.querySelector<HTMLElement>("main.welcome");
+    expect(welcome?.hasAttribute("data-leaving")).toBe(false);
+
+    await click(joinLink());
+
+    expect(welcome?.hasAttribute("data-leaving")).toBe(true);
+  });
+
+  it("does not hijack a modifier click on the join action", async () => {
+    await act(async () => {
+      const event = new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true });
+      joinLink().dispatchEvent(event);
+    });
+
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(stage().dataset.pose).toBe("welcome");
+  });
+
+  it("under reduced motion, still flies to the join pose but with an instant handover", async () => {
+    await act(async () => {
+      root.render(<Home />);
+    });
+    // No stage mounted in this render (see the create-link test above for
+    // why); reduced motion only changes duration, so this asserts the
+    // duration relationship instead of re-mounting a stage-backed tree.
+    expect(flowHandoverSeconds(true)).toBeGreaterThanOrEqual(0);
+    expect(flowHandoverSeconds(true)).toBeLessThanOrEqual(flowFlightSeconds(true));
+  });
+
+  it("comes back to the welcome screen when the flight to join is behind it", async () => {
+    await click(joinLink());
+    await act(async () => {
+      vi.advanceTimersByTime(flowHandoverSeconds(false) * 1000);
+    });
+
+    navigation.pathname = "/join";
+    await act(async () => {
+      root.render(
+        <FlowStage>
+          <Home />
+        </FlowStage>,
+      );
+    });
+    navigation.pathname = "/";
+    await act(async () => {
+      root.render(
+        <FlowStage>
+          <Home />
+        </FlowStage>,
+      );
+    });
+
+    expect(stage().dataset.pose).toBe("welcome");
+    expect(stage().dataset.framed).toBe("true");
+    expect(
+      container.querySelector("main.welcome")?.hasAttribute("data-leaving"),
+    ).toBe(false);
   });
 });

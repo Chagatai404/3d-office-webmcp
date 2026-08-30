@@ -589,8 +589,44 @@ select {
   font-weight: 700;
 }
 
+.tag-expert {
+  border-color: var(--advisory-ink);
+  color: var(--advisory-ink);
+  font-weight: 700;
+}
+
 .tag-muted {
   opacity: 0.7;
+}
+
+.tag-owner {
+  border-color: var(--warn-accent);
+  color: var(--warn-ink);
+  font-weight: 700;
+}
+
+.participant-owner-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.participant-confirm {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--warn-accent);
+  border-radius: 0.6rem;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.participant-confirm p {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
 }
 
 /* ---------------------------------------------------------------- positions */
@@ -1365,6 +1401,27 @@ select {
   border-radius: 50%;
   background: var(--accent);
   animation: msPulse 2.2s ease-out infinite;
+}
+
+.toolbar-attention {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.68rem 0.9rem;
+  border: 0;
+  border-radius: 0.9rem;
+  background: var(--surface-quiet);
+  box-shadow: 0 6px 20px rgba(46, 43, 39, 0.09);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.toolbar-attention-active {
+  background: var(--accent);
+  color: #fff;
 }
 
 .toolbar-help {

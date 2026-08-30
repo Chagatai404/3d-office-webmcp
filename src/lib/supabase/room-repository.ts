@@ -1,32 +1,37 @@
 import { z } from "zod";
 import {
   actionResultSchema,
-  claimInvitationResultSchema,
   decisionRecordSchema,
   finalDecisionPreviewSchema,
-  regeneratedRoomInvitationSchema,
+  joinRequestResultSchema,
+  joinRequestSchema,
   roomInvitePreviewSchema,
   type ActionResult,
   type AddPositionInput,
   type ApproveFinalDecisionInput,
-  type CastVoteInput,
-  type ClaimInvitationInput,
+  type ExpressAlignmentInput,
   type ClaimSeatInput,
   type CreateRoomInput,
-  type ManageRoomInvitationInput,
+  type ManageJoinRequestInput,
+  type RecordExpertAdviceOutcomeInput,
+  type RemoveParticipantInput,
+  type RequestJoinByInviteInput,
+  type RequestJoinByPasscodeInput,
   type RaiseObjectionInput,
   type ResolveObjectionInput,
   type ProposeTradeoffInput,
   type RoomPhase,
+  type SetDecisionPolicyInput,
+  type SetParticipantDecisionRoleInput,
   type StartDemoScenarioInput,
   type SubmitProposalInput,
+  type TransferOwnershipInput,
 } from "@/contracts/room";
 import { settleSoloDemoScenario } from "@/demo/orchestrator";
 import type {
   CreatedRoomRecord,
   DomainActor,
   MutationContext,
-  RegeneratedRoomInvitationRecord,
   RoomRepository,
 } from "@/domain/rooms/repository";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -40,22 +45,11 @@ import { loadRoomState } from "./room-state";
 const createdRoomRecordSchema = z
   .object({
     roomId: z.string().min(1),
-    participantInvites: z.array(
-      z
-        .object({
-          participantId: z.string().min(1),
-          role: z.string().min(1),
-          inviteToken: z.string().min(1),
-        })
-        .strict(),
-    ),
+    ownerParticipantId: z.string().min(1),
+    inviteToken: z.string().min(1),
+    passcode: z.string().min(6),
   })
   .strict() satisfies z.ZodType<CreatedRoomRecord>;
-
-const regeneratedRoomInvitationRecordSchema = regeneratedRoomInvitationSchema
-  .omit({ inviteUrl: true })
-  .extend({ inviteToken: z.string().min(1) })
-  .strict() satisfies z.ZodType<RegeneratedRoomInvitationRecord>;
 
 export class SupabaseRoomRepository implements RoomRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -71,7 +65,9 @@ export class SupabaseRoomRepository implements RoomRepository {
       {
         p_title: input.title,
         p_brief: input.brief,
-        p_participants: input.participants,
+        p_creator_name: input.creatorName,
+        p_creator_role: input.creatorRole,
+        p_decision_policy: input.decisionPolicy ?? "owner_decides",
         p_origin: actor.origin,
       },
       createdRoomRecordSchema,
@@ -83,10 +79,10 @@ export class SupabaseRoomRepository implements RoomRepository {
    * no seat yet, so no read policy can admit them; it answers with the narrow
    * preview DTO only, never with room state.
    */
-  previewInvitation(inviteToken: string, actor: DomainActor) {
+  previewInvite(inviteToken: string, actor: DomainActor) {
     void actor;
     return this.callWithData(
-      "preview_room_invitation",
+      "preview_room_invite",
       { p_raw_token: inviteToken },
       roomInvitePreviewSchema,
     );
@@ -96,12 +92,43 @@ export class SupabaseRoomRepository implements RoomRepository {
    * Carries no expected room version: the caller cannot read the room before
    * the claim, so the database serializes the claim on the room row instead.
    */
-  claimInvitation(input: ClaimInvitationInput, actor: DomainActor) {
+  requestJoinByPasscode(input: RequestJoinByPasscodeInput, actor: DomainActor) {
     return this.callWithData(
-      "claim_room_invitation",
-      { p_raw_token: input.inviteToken, p_origin: actor.origin },
-      claimInvitationResultSchema,
+      "request_join_by_passcode",
+      { p_room_id: input.roomId, p_passcode: input.passcode, p_display_name: input.displayName, p_role: input.role, p_origin: actor.origin },
+      joinRequestResultSchema,
     );
+  }
+
+  requestJoinByInvite(input: RequestJoinByInviteInput, actor: DomainActor) {
+    return this.callWithData("request_join_by_invite", {
+      p_raw_token: input.inviteToken, p_display_name: input.displayName,
+      p_role: input.role, p_origin: actor.origin,
+    }, joinRequestResultSchema);
+  }
+
+  getMyJoinRequest(joinRequestId: string, actor: DomainActor) {
+    void actor;
+    return this.callWithData("get_my_join_request", { p_join_request_id: joinRequestId }, joinRequestSchema);
+  }
+
+  listJoinRequests(roomId: string, actor: DomainActor) {
+    void actor;
+    return this.callWithData("list_join_requests", { p_room_id: roomId }, z.array(joinRequestSchema));
+  }
+
+  admitJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext) {
+    return this.callWithData("admit_join_request", {
+      p_room_id: roomId, p_join_request_id: input.joinRequestId,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    }, joinRequestSchema);
+  }
+
+  rejectJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext) {
+    return this.callWithData("reject_join_request", {
+      p_room_id: roomId, p_join_request_id: input.joinRequestId,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    }, joinRequestSchema);
   }
 
   claimSeat(roomId: string, input: ClaimSeatInput, context: MutationContext) {
@@ -167,8 +194,8 @@ export class SupabaseRoomRepository implements RoomRepository {
     });
   }
 
-  castVote(roomId: string, input: CastVoteInput, context: MutationContext) {
-    return this.call("cast_participant_vote", {
+  expressAlignment(roomId: string, input: ExpressAlignmentInput, context: MutationContext) {
+    return this.call("express_my_alignment", {
       p_room_id: roomId,
       p_expected_version: context.expectedRoomVersion,
       p_proposal_id: input.proposalId,
@@ -227,36 +254,6 @@ export class SupabaseRoomRepository implements RoomRepository {
     });
   }
 
-  regenerateInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-    context: MutationContext,
-  ) {
-    return this.callWithData(
-      "regenerate_room_invitation",
-      {
-        p_room_id: roomId,
-        p_expected_version: context.expectedRoomVersion,
-        p_participant_id: input.participantId,
-        p_origin: context.actor.origin,
-      },
-      regeneratedRoomInvitationRecordSchema,
-    );
-  }
-
-  revokeInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-    context: MutationContext,
-  ) {
-    return this.call("revoke_room_invitation", {
-      p_room_id: roomId,
-      p_expected_version: context.expectedRoomVersion,
-      p_participant_id: input.participantId,
-      p_origin: context.actor.origin,
-    });
-  }
-
   advanceDemoPhase(roomId: string, nextPhase: RoomPhase, context: MutationContext) {
     return this.call("advance_demo_room_phase", {
       p_room_id: roomId, p_expected_version: context.expectedRoomVersion,
@@ -274,6 +271,82 @@ export class SupabaseRoomRepository implements RoomRepository {
       p_room_id: roomId,
       p_mode: input.mode,
       p_human_role: input.mode === "solo_judge" ? input.humanRole : null,
+    });
+  }
+
+  lockMeeting(roomId: string, context: MutationContext) {
+    return this.call("lock_meeting", {
+      p_room_id: roomId, p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  unlockMeeting(roomId: string, context: MutationContext) {
+    return this.call("unlock_meeting", {
+      p_room_id: roomId, p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  removeParticipant(roomId: string, input: RemoveParticipantInput, context: MutationContext) {
+    return this.call("remove_participant", {
+      p_room_id: roomId, p_participant_id: input.participantId,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  transferOwnership(roomId: string, input: TransferOwnershipInput, context: MutationContext) {
+    return this.call("transfer_ownership", {
+      p_room_id: roomId, p_participant_id: input.participantId,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  setDecisionPolicy(roomId: string, input: SetDecisionPolicyInput, context: MutationContext) {
+    return this.call("set_decision_policy", {
+      p_room_id: roomId, p_decision_policy: input.decisionPolicy,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  setParticipantDecisionRole(
+    roomId: string,
+    input: SetParticipantDecisionRoleInput,
+    context: MutationContext,
+  ) {
+    return this.call("set_participant_decision_role", {
+      p_room_id: roomId, p_participant_id: input.participantId,
+      p_decision_role: input.decisionRole,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  enableSecurityExpert(roomId: string, context: MutationContext) {
+    return this.callWithData(
+      "enable_security_expert",
+      { p_room_id: roomId, p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin },
+      z.object({ expertParticipantId: z.string().min(1) }).strict(),
+    );
+  }
+
+  runSecurityExpertReview(roomId: string, context: MutationContext) {
+    return this.callWithData(
+      "run_security_expert_review",
+      { p_room_id: roomId, p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin },
+      z.object({ findingIds: z.array(z.string().min(1)) }).strict(),
+    );
+  }
+
+  recordExpertAdviceOutcome(
+    roomId: string,
+    input: RecordExpertAdviceOutcomeInput,
+    context: MutationContext,
+  ) {
+    return this.call("record_expert_advice_outcome", {
+      p_room_id: roomId,
+      p_finding_id: input.findingId,
+      p_status: input.status,
+      p_rationale: input.rationale,
+      p_expected_version: context.expectedRoomVersion,
+      p_origin: context.actor.origin,
     });
   }
 

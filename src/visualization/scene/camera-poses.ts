@@ -15,7 +15,7 @@ export type WorkspaceId =
   | "proposals"
   | "issues"
   | "whiteboard"
-  | "vote"
+  | "alignment"
   | "decision";
 
 export const WORKSPACE_IDS: readonly WorkspaceId[] = [
@@ -25,7 +25,7 @@ export const WORKSPACE_IDS: readonly WorkspaceId[] = [
   "proposals",
   "issues",
   "whiteboard",
-  "vote",
+  "alignment",
   "decision",
 ];
 
@@ -41,7 +41,7 @@ export const CAMERA_POSES: Record<WorkspaceId, CameraPose> = {
   proposals: { position: [1.4, 2.8, 0.6], target: [8, 2.3, 0] },
   issues: { position: [2.6, 2.7, -0.8], target: [6.4, 2.2, -5.4] },
   whiteboard: { position: [-2.6, 2.7, -0.8], target: [-6.4, 2.2, -5.4] },
-  vote: { position: [-3.4, 2.5, 8.4], target: [-3.4, 1.05, 4.8] },
+  alignment: { position: [-3.4, 2.5, 8.4], target: [-3.4, 1.05, 4.8] },
   decision: { position: [3.4, 2.3, 8.2], target: [3.4, 1.15, 4.8] },
 };
 
@@ -55,13 +55,18 @@ export const CAMERA_POSES: Record<WorkspaceId, CameraPose> = {
  * outside, three-quarters on and above, so the first screen is the product
  * itself rather than a picture of it. `create` and `lobby` are transcribed
  * 1:1 from the imported design's extended `POSES` table (`meeting-stage.js`):
- * the camera has moved inside the composition, close to the table.
+ * the camera has moved inside the composition, close to the table. `join` is
+ * deliberately symmetrical with `create` -- the same distance, height and
+ * target, mirrored to the opposite side of the table -- so creating and
+ * joining read as the same unframed interior composition approached from two
+ * sides, never as two unrelated shots.
  */
-export type PreMeetingPoseId = "welcome" | "create" | "lobby";
+export type PreMeetingPoseId = "welcome" | "create" | "join" | "lobby";
 
 export const PRE_MEETING_POSES: Record<PreMeetingPoseId, CameraPose> = {
   welcome: { position: [13.9, 16.0, 22.3], target: [0, 1.45, 0] },
   create: { position: [1.0, 5.4, 12.8], target: [0, 1.1, -1] },
+  join: { position: [-1.0, 5.4, 12.8], target: [0, 1.1, -1] },
   lobby: { position: [1.4, 5.2, 12.2], target: [0, 1.0, 0] },
 };
 
@@ -369,7 +374,7 @@ export const WORKSPACE_LABEL: Record<WorkspaceId, string> = {
   proposals: "Proposals",
   issues: "Issues",
   whiteboard: "Whiteboard",
-  vote: "Vote",
+  alignment: "Alignment",
   decision: "Decision",
 };
 
@@ -380,6 +385,6 @@ export const MOVING_LABEL: Record<WorkspaceId, string> = {
   proposals: "Moving to the candidate board",
   issues: "Moving to the issues board",
   whiteboard: "Moving to the whiteboard",
-  vote: "Moving to the voting plinth",
+  alignment: "Moving to the alignment plinth",
   decision: "Moving to the decision pedestal",
 };

@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -13,18 +14,24 @@ import {
 import type {
   ActionResult,
   AddPositionInput,
-  CastVoteInput,
   ClaimSeatInput,
   DecisionRecord,
+  ExpressAlignmentInput,
   FinalDecisionPreview,
+  JoinRequest,
+  ManageJoinRequestInput,
   Participant,
   ProposeTradeoffInput,
   RaiseObjectionInput,
+  RemoveParticipantInput,
   ResolveObjectionInput,
   RoomPhase,
   RoomState,
+  SetDecisionPolicyInput,
+  SetParticipantDecisionRoleInput,
   StartDemoScenarioInput,
   SubmitProposalInput,
+  TransferOwnershipInput,
 } from "@/contracts/room";
 
 import { getRoomClient } from "@/room-client/room-client";
@@ -66,8 +73,8 @@ export interface RoomActions {
     input: ProposeTradeoffInput,
   ): Promise<ActionResult>;
 
-  castMyVote(
-    input: CastVoteInput,
+  expressMyAlignment(
+    input: ExpressAlignmentInput,
   ): Promise<ActionResult>;
 
   previewFinalDecision(): Promise<
@@ -91,8 +98,30 @@ export interface RoomActions {
   /** Claimed human marks their own published input ready. Input phase only. */
   markMyInputReady(): Promise<ActionResult>;
 
-  /** Organizer-only production phase advance. Kept separate from `advanceDemoPhase`. */
+  /** Owner-only production phase advance. Kept separate from `advanceDemoPhase`. */
   advanceRoomPhase(phase: RoomPhase): Promise<ActionResult>;
+
+  listJoinRequests(): Promise<ActionResult<JoinRequest[]>>;
+  admitJoinRequest(input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>>;
+  rejectJoinRequest(input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>>;
+
+  /** Owner-only. Existing participants keep normal access; new join requests are refused. */
+  lockMeeting(): Promise<ActionResult>;
+
+  /** Owner-only. Allows new join requests again. */
+  unlockMeeting(): Promise<ActionResult>;
+
+  /** Owner-only. Marks an active human participant removed; history is preserved. */
+  removeParticipant(input: RemoveParticipantInput): Promise<ActionResult>;
+
+  /** Owner-only. Atomically moves meeting authority to another active human participant. */
+  transferOwnership(input: TransferOwnershipInput): Promise<ActionResult>;
+
+  /** Owner-only. Rejected once an exact decision candidate is frozen. */
+  setDecisionPolicy(input: SetDecisionPolicyInput): Promise<ActionResult>;
+
+  /** Owner-only. Rejected once an exact decision candidate is frozen. */
+  setParticipantDecisionRole(input: SetParticipantDecisionRoleInput): Promise<ActionResult>;
 }
 
 export interface RoomContextValue {
@@ -220,8 +249,8 @@ export function RoomProvider({
       proposeTradeoff: (input) =>
         client.proposeTradeoff(roomId, input),
 
-      castMyVote: (input) =>
-        client.castMyVote(roomId, input),
+      expressMyAlignment: (input) =>
+        client.expressMyAlignment(roomId, input),
 
       previewFinalDecision: () =>
         client.previewFinalDecision(roomId),
@@ -246,9 +275,48 @@ export function RoomProvider({
 
       advanceRoomPhase: (phase) =>
         client.advanceRoomPhase(roomId, phase),
+
+      listJoinRequests: () => client.listJoinRequests(roomId),
+      admitJoinRequest: (input) => client.admitJoinRequest(roomId, input),
+      rejectJoinRequest: (input) => client.rejectJoinRequest(roomId, input),
+
+      lockMeeting: () => client.lockMeeting(roomId),
+      unlockMeeting: () => client.unlockMeeting(roomId),
+      removeParticipant: (input) => client.removeParticipant(roomId, input),
+      transferOwnership: (input) => client.transferOwnership(roomId, input),
+      setDecisionPolicy: (input) => client.setDecisionPolicy(roomId, input),
+      setParticipantDecisionRole: (input) => client.setParticipantDecisionRole(roomId, input),
     }),
     [client, roomId],
   );
+
+  /**
+   * `/room/demo` bootstrap: a first-time judge should not have to know a
+   * room ID/passcode or click anything to become the Founder/Product Lead.
+   * The demo seed (`supabase/seed.sql`, and every `start_demo_scenario`
+   * reset) leaves the fixed `demo-product` seat unclaimed
+   * (`kind: "human"`, `user_id: null`); this reuses the existing, ordinary
+   * `claimSeat` action -- the same one a normal room's owner-seat claim
+   * would use -- rather than adding a new privileged endpoint. If the seat
+   * is already claimed by a different session, `claim_participant_seat`
+   * refuses with `NOT_AUTHORIZED` and this session simply stays a read-only
+   * spectator of the live demo (see docs/judge-demo.md's noted
+   * single-instance limitation).
+   *
+   * Scoped to `demoMode === "solo_judge"` specifically, not any `"demo"`
+   * room id: the legacy `multi_user` demo shape has four independently
+   * claimable human seats (each browser choosing its own), so silently
+   * auto-claiming the Founder seat for every session that merely opens the
+   * room would fight that flow instead of the one seat solo_judge actually
+   * has to auto-claim.
+   */
+  const demoBootstrapAttempted = useRef(false);
+  useEffect(() => {
+    if (roomId !== "demo" || !room || room.demoMode !== "solo_judge" || room.selfParticipantId !== null) return;
+    if (demoBootstrapAttempted.current) return;
+    demoBootstrapAttempted.current = true;
+    void actions.claimSeat({ seatId: "demo-product" });
+  }, [roomId, room, actions]);
 
   const value =
     useMemo<RoomContextValue | null>(() => {

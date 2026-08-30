@@ -47,7 +47,7 @@ function candidate(): FinalDecisionCandidate {
       createdAt,
       resolvedAt: null,
     }],
-    votes: [
+    alignments: [
       {
         proposalId: "proposal-2",
         participantId: "designer",
@@ -63,11 +63,13 @@ function candidate(): FinalDecisionCandidate {
         updatedAt: createdAt,
       },
     ],
+    decisionPolicy: "owner_decides",
     owners: [],
     deadlines: [],
     actionItems: [],
     dissent: [],
     requiredApprovalParticipantIds: ["engineer", "designer"],
+    expertAdvice: [],
   };
 }
 
@@ -77,10 +79,12 @@ describe("canonical final decision hashing", () => {
     const second = {
       requiredApprovalParticipantIds: ["designer", "engineer"],
       dissent: [],
+      expertAdvice: [],
       actionItems: [],
       deadlines: [],
       owners: [],
-      votes: [...first.votes].reverse(),
+      decisionPolicy: first.decisionPolicy,
+      alignments: [...first.alignments].reverse(),
       unresolvedWarnings: first.unresolvedWarnings,
       acceptedTradeoffs: [{
         ...first.acceptedTradeoffs[0]!,
@@ -110,9 +114,12 @@ describe("canonical final decision hashing", () => {
     ["unresolved warning", (value: FinalDecisionCandidate) => {
       value.unresolvedWarnings[0]!.reason = "A new warning.";
     }],
-    ["vote data", (value: FinalDecisionCandidate) => {
-      value.votes[0]!.choice = "abstain";
-      value.dissent = ["Designer: abstain"];
+    ["alignment data", (value: FinalDecisionCandidate) => {
+      value.alignments[0]!.choice = "concern";
+      value.dissent = ["Designer: concern"];
+    }],
+    ["decision policy", (value: FinalDecisionCandidate) => {
+      value.decisionPolicy = "equal_authority_consensus";
     }],
   ])("changes when approval-sensitive %s changes", async (_name, mutate) => {
     const baseline = candidate();

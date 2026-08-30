@@ -2,27 +2,25 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AlignmentWorkspace } from "@/components/room/alignment-workspace";
 import { DecisionWorkspace } from "@/components/room/decision-workspace";
 import { IssuesWorkspace } from "@/components/room/issues-workspace";
 import { ProposalsWorkspace } from "@/components/room/proposals-workspace";
-import { VoteWorkspace } from "@/components/room/vote-workspace";
 import { RoomProvider } from "@/components/room/room-provider";
 import { demoRoom, demoTimestamp } from "@/fixtures/demo-room";
 import { setRoomClientForTests } from "@/room-client/room-client";
 import type {
   ActionResult,
+  Alignment,
   Approval,
   Conflict,
   DecisionRecord,
   FinalDecisionPreview,
-  ManageRoomInvitationInput,
   Proposal,
-  RegeneratedRoomInvitation,
   RoomClient,
   RoomPhase,
   RoomState,
   Tradeoff,
-  Vote,
 } from "@/contracts/room";
 
 vi.mock("@/webmcp/register-tools", () => ({
@@ -44,8 +42,10 @@ class FakeRoomClient implements RoomClient {
   readonly raiseObjectionCalls: Parameters<RoomClient["raiseObjection"]>[1][] = [];
   readonly proposeTradeoffCalls: Parameters<RoomClient["proposeTradeoff"]>[1][] = [];
   readonly resolveObjectionCalls: Parameters<RoomClient["resolveObjection"]>[1][] = [];
-  readonly castMyVoteCalls: Parameters<RoomClient["castMyVote"]>[1][] = [];
+  readonly expressMyAlignmentCalls: Parameters<RoomClient["expressMyAlignment"]>[1][] = [];
   readonly approveFinalDecisionCalls: Parameters<RoomClient["approveFinalDecision"]>[1][] = [];
+  readonly setDecisionPolicyCalls: Parameters<RoomClient["setDecisionPolicy"]>[1][] = [];
+  readonly setParticipantDecisionRoleCalls: Parameters<RoomClient["setParticipantDecisionRole"]>[1][] = [];
   previewCalls = 0;
   recordCalls = 0;
   private readonly listeners = new Set<Listener>();
@@ -95,9 +95,9 @@ class FakeRoomClient implements RoomClient {
     return this.ok("Tradeoff proposed.");
   };
 
-  castMyVote: RoomClient["castMyVote"] = async (_roomId, input) => {
-    this.castMyVoteCalls.push(input);
-    return this.ok("Vote recorded.");
+  expressMyAlignment: RoomClient["expressMyAlignment"] = async (_roomId, input) => {
+    this.expressMyAlignmentCalls.push(input);
+    return this.ok("Alignment shared.");
   };
 
   previewFinalDecision: RoomClient["previewFinalDecision"] = async () => {
@@ -142,18 +142,34 @@ class FakeRoomClient implements RoomClient {
     return this.ok(`Room phase advanced to ${phase}.`);
   };
 
-  regenerateInvitation: RoomClient["regenerateInvitation"] = async (
-    _roomId,
-    input: ManageRoomInvitationInput,
-  ) =>
-    this.ok<RegeneratedRoomInvitation>("Invitation regenerated.", {
-      participantId: input.participantId,
-      role: "Unassigned",
-      inviteUrl: `https://example.test/invite/${input.participantId}`,
-    });
-
-  revokeInvitation: RoomClient["revokeInvitation"] = async () =>
-    this.ok("Invitation revoked.");
+  listJoinRequests: RoomClient["listJoinRequests"] = async () =>
+    this.ok("Waiting room loaded.", []);
+  admitJoinRequest: RoomClient["admitJoinRequest"] = async () => {
+    throw new Error("Not used by this test.");
+  };
+  rejectJoinRequest: RoomClient["rejectJoinRequest"] = async () => {
+    throw new Error("Not used by this test.");
+  };
+  lockMeeting: RoomClient["lockMeeting"] = async () => {
+    throw new Error("Not used by this test.");
+  };
+  unlockMeeting: RoomClient["unlockMeeting"] = async () => {
+    throw new Error("Not used by this test.");
+  };
+  removeParticipant: RoomClient["removeParticipant"] = async () => {
+    throw new Error("Not used by this test.");
+  };
+  transferOwnership: RoomClient["transferOwnership"] = async () => {
+    throw new Error("Not used by this test.");
+  };
+  setDecisionPolicy: RoomClient["setDecisionPolicy"] = async (_roomId, input) => {
+    this.setDecisionPolicyCalls.push(input);
+    return this.ok("Decision policy updated.");
+  };
+  setParticipantDecisionRole: RoomClient["setParticipantDecisionRole"] = async (_roomId, input) => {
+    this.setParticipantDecisionRoleCalls.push(input);
+    return this.ok("Decision authority updated.");
+  };
 
   publish(apply: (draft: RoomState) => void) {
     const draft = this.snapshot();
@@ -228,7 +244,7 @@ function tradeoff(): Tradeoff {
   };
 }
 
-function vote(participantId: string, choice: Vote["choice"] = "support"): Vote {
+function alignmentEntry(participantId: string, choice: Alignment["choice"] = "support"): Alignment {
   return {
     proposalId: "proposal-1",
     participantId,
@@ -253,11 +269,12 @@ function finalPreview(hash = "hash-v1"): FinalDecisionPreview {
     rationale: baseProposal.rationale,
     acceptedTradeoffs: [tradeoff()],
     unresolvedWarnings: [],
-    votes: [
-      vote("participant-product"),
-      vote("participant-engineering"),
-      vote("participant-marketing", "abstain"),
+    alignments: [
+      alignmentEntry("participant-product"),
+      alignmentEntry("participant-engineering"),
+      alignmentEntry("participant-marketing", "concern"),
     ],
+    decisionPolicy: "equal_authority_consensus",
     owners: [
       {
         participantId: "participant-product",
@@ -278,7 +295,8 @@ function finalPreview(hash = "hash-v1"): FinalDecisionPreview {
         dueAt: null,
       },
     ],
-    dissent: ["Marketing abstained until launch copy is reviewed."],
+    dissent: ["Marketing raised a concern until launch copy is reviewed."],
+    expertAdvice: [],
     requiredApprovalParticipantIds: [
       "participant-product",
       "participant-engineering",
@@ -300,7 +318,7 @@ function decisionRecord(room: RoomState): DecisionRecord {
     finalizedAt: room.finalizedAt ?? demoTimestamp(11),
     decision,
     acceptedTradeoffs: decision.acceptedTradeoffs,
-    votes: decision.votes,
+    alignments: decision.alignments,
     approvals: decision.approvals,
     provenance: room.activity,
   };
@@ -324,7 +342,7 @@ function roomInPhase(phase: RoomPhase): RoomState {
   if (phase === "approval" || phase === "finalized") {
     room.conflicts = [conflict("resolved")];
     room.tradeoffs = [tradeoff()];
-    room.votes = finalPreview().votes;
+    room.alignments = finalPreview().alignments;
     room.finalDecisionPreview = finalPreview();
   }
   if (phase === "finalized") {
@@ -469,33 +487,39 @@ describe("issues workspace", () => {
       },
     ]);
     expect(container.textContent).toContain(
-      "Nothing here can be voted on until they are settled.",
+      "Alignment cannot open until they are settled.",
     );
   });
 });
 
-describe("vote workspace", () => {
-  it("casts only the current participant vote and states that voting is not approval", async () => {
+describe("alignment workspace", () => {
+  it("shares only the current participant's alignment and states it is not a vote", async () => {
     const client = new FakeRoomClient(roomInPhase("voting"));
-    await mount(client, <VoteWorkspace />);
+    await mount(client, <AlignmentWorkspace />);
 
-    setValue(
-      byTestId<HTMLFormElement>("vote-form").querySelector<HTMLSelectElement>(
-        "select",
-      )!,
-      "request_changes",
-    );
-    await submit("vote-form");
+    await click(byTestId<HTMLButtonElement>("alignment-choice-strong_objection"));
 
-    expect(client.castMyVoteCalls).toEqual([
+    expect(client.expressMyAlignmentCalls).toEqual([
       {
         proposalId: "proposal-1",
-        choice: "request_changes",
+        choice: "strong_objection",
         comment: null,
       },
     ]);
-    expect("participantId" in client.castMyVoteCalls[0]!).toBe(false);
-    expect(container.textContent).toContain("It is not final approval");
+    expect("participantId" in client.expressMyAlignmentCalls[0]!).toBe(false);
+    expect(container.textContent).toContain("It is not a vote");
+  });
+
+  it("shows the owner a compact alignment summary without implying a vote count decides anything", async () => {
+    const room = roomInPhase("voting");
+    room.selfParticipantId = room.ownerParticipantId;
+    const client = new FakeRoomClient(room);
+    await mount(client, <AlignmentWorkspace />);
+
+    expect(byTestId("owner-alignment-summary")).toBeTruthy();
+    expect(container.textContent).not.toContain("Winner");
+    expect(container.textContent).not.toContain("Majority");
+    expect(container.textContent).not.toContain("Passed vote");
   });
 });
 
@@ -508,7 +532,7 @@ describe("decision workspace", () => {
     expect(client.previewCalls).toBe(1);
     expect(container.textContent).toContain("hash-v1");
 
-    const approvalButton = buttonNamed("Approve this exact decision");
+    const approvalButton = buttonNamed("Approve this decision");
     const checkbox = byTestId<HTMLElement>("approval-panel").querySelector<HTMLInputElement>(
       'input[type="checkbox"]',
     )!;

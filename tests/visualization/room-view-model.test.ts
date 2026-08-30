@@ -81,19 +81,19 @@ describe("createRoomVisualizationState", () => {
     const view = createRoomVisualizationState(demoRoom);
 
     expect(view.consensus).toEqual({
-      voteProgress: 0,
+      alignmentProgress: 0,
       approvalProgress: 0,
       hasBlockingConflict: false,
     });
   });
 
-  it("derives vote progress only for the active proposal", () => {
+  it("derives alignment progress only for the active proposal", () => {
     const view = createRoomVisualizationState(
       withDecision({
         phase: "voting",
         activeProposalId: "proposal-1",
         proposals: [candidateProposal],
-        votes: [
+        alignments: [
           {
             proposalId: "proposal-1",
             participantId: "participant-product",
@@ -104,7 +104,7 @@ describe("createRoomVisualizationState", () => {
           {
             proposalId: "proposal-0",
             participantId: "participant-design",
-            choice: "oppose",
+            choice: "concern",
             comment: null,
             updatedAt: demoTimestamp(5),
           },
@@ -113,31 +113,39 @@ describe("createRoomVisualizationState", () => {
     );
 
     expect(view.activeProposal?.id).toBe("proposal-1");
-    expect(view.consensus.voteProgress).toBeCloseTo(0.25);
+    expect(view.consensus.alignmentProgress).toBeCloseTo(0.25);
     expect(
       view.participants.find(
         (participant) => participant.id === "participant-design",
-      )?.vote,
+      )?.alignment,
     ).toBeNull();
   });
 
   it("counts approvals only against one decision hash", () => {
+    const requiredApprovalParticipantIds = [
+      "participant-product",
+      "participant-engineering",
+      "participant-marketing",
+    ];
+    const currentApprovals = [
+      {
+        participantId: "participant-product",
+        decisionHash: "hash-current",
+        approvedAt: demoTimestamp(6),
+      },
+      {
+        participantId: "participant-engineering",
+        decisionHash: "hash-current",
+        approvedAt: demoTimestamp(7),
+      },
+    ];
     const view = createRoomVisualizationState(
       withDecision({
         phase: "approval",
         activeProposalId: "proposal-1",
         proposals: [candidateProposal],
         approvals: [
-          {
-            participantId: "participant-product",
-            decisionHash: "hash-current",
-            approvedAt: demoTimestamp(6),
-          },
-          {
-            participantId: "participant-engineering",
-            decisionHash: "hash-current",
-            approvedAt: demoTimestamp(7),
-          },
+          ...currentApprovals,
           // An approval of a superseded plan must not count towards consensus.
           {
             participantId: "participant-marketing",
@@ -145,6 +153,23 @@ describe("createRoomVisualizationState", () => {
             approvedAt: demoTimestamp(8),
           },
         ],
+        finalDecisionPreview: {
+          proposal: candidateProposal,
+          rationale: candidateProposal.rationale,
+          acceptedTradeoffs: [],
+          unresolvedWarnings: [],
+          alignments: [],
+          decisionPolicy: "equal_authority_consensus",
+          owners: [],
+          deadlines: [],
+          actionItems: [],
+          dissent: [],
+          expertAdvice: [],
+          requiredApprovalParticipantIds,
+          decisionHash: "hash-current",
+          approvals: currentApprovals,
+          missingApprovalParticipantIds: ["participant-marketing"],
+        },
       }),
     );
 

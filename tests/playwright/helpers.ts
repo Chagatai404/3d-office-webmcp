@@ -49,12 +49,12 @@ export async function installWebMcpShim(context: BrowserContext) {
 
       async executeTool(
         tool: WebMcpRegisteredTool,
-        inputJson: string,
+        input: Record<string, unknown> = {},
         options?: { signal?: AbortSignal },
       ) {
         const definition = this.tools.get(tool.name);
         if (!definition) throw new Error(`Tool ${tool.name} is unavailable.`);
-        return definition.execute(JSON.parse(inputJson), {
+        return definition.execute(input, {
           signal: options?.signal ?? new AbortController().signal,
         });
       }
@@ -78,8 +78,26 @@ export async function executeTool(page: Page, name: string, input: unknown) {
     const modelContext = document.modelContext!;
     const tool = (await modelContext.getTools()).find((candidate) => candidate.name === toolName);
     if (!tool) throw new Error(`Tool ${toolName} was not discovered.`);
-    return modelContext.executeTool(tool, JSON.stringify(toolInput));
+    return modelContext.executeTool(tool, toolInput as Record<string, unknown>);
   }, { toolName: name, toolInput: input });
+}
+
+/** Capture the page-owned definition so a test can exercise a stale reference after unregistration. */
+export async function captureToolDefinition(page: Page, name: string) {
+  await page.evaluate((toolName) => {
+    const host = document.modelContext as unknown as { tools: Map<string, WebMcpToolDefinition> };
+    const definition = host.tools.get(toolName);
+    if (!definition) throw new Error(`Tool ${toolName} was not registered.`);
+    (globalThis as unknown as { __capturedWebMcpTool: WebMcpToolDefinition }).__capturedWebMcpTool = definition;
+  }, name);
+}
+
+export async function executeCapturedTool(page: Page, input: Record<string, unknown> = {}) {
+  return page.evaluate(async (toolInput) => {
+    const definition = (globalThis as unknown as { __capturedWebMcpTool?: WebMcpToolDefinition }).__capturedWebMcpTool;
+    if (!definition) throw new Error("No WebMCP tool definition has been captured.");
+    return definition.execute(toolInput, { signal: new AbortController().signal });
+  }, input);
 }
 
 /** A tool result, already parsed out of its JSON transport envelope. */
@@ -142,12 +160,6 @@ export async function newParticipantContext(browser: Browser) {
   return { context, page };
 }
 
-export interface CreatedRoomInvite {
-  role: string;
-  participantId: string;
-  inviteUrl: string;
-}
-
 /**
  * Drives the onboarding harness the way an organizer drives the product's own
  * creation form: `ApiRoomOnboardingClient.createRoom()` over `POST /api/rooms`,
@@ -156,23 +168,19 @@ export interface CreatedRoomInvite {
 export async function createRoomThroughOnboarding(
   page: Page,
   input: CreateRoomInput,
-): Promise<{ roomId: string; invites: CreatedRoomInvite[] }> {
+): Promise<{ roomId: string; ownerParticipantId: string; passcode: string; inviteUrl: string }> {
   await page.goto("/e2e/onboarding");
   await page.getByTestId("create-room-input").fill(JSON.stringify(input));
   await page.getByTestId("create-room").click();
   await expect(page.getByTestId("created-room")).toBeVisible();
 
   const roomId = (await page.getByTestId("created-room-id").innerText()).trim();
-  const invites: CreatedRoomInvite[] = [];
-  // One invitation per seat except the organizer's, which is already claimed.
-  for (let index = 0; index < input.participants.length - 1; index += 1) {
-    invites.push({
-      role: (await page.getByTestId(`invite-role-${index}`).innerText()).trim(),
-      participantId: (await page.getByTestId(`invite-participant-${index}`).innerText()).trim(),
-      inviteUrl: (await page.getByTestId(`invite-url-${index}`).innerText()).trim(),
-    });
-  }
-  return { roomId, invites };
+  const ownerParticipantId = (
+    await page.getByTestId("created-owner-participant-id").innerText()
+  ).trim();
+  const passcode = (await page.getByTestId("created-passcode").innerText()).trim();
+  const inviteUrl = (await page.getByTestId("created-invite-url").innerText()).trim();
+  return { roomId, ownerParticipantId, passcode, inviteUrl };
 }
 
 /** The raw capability an invite link carries. */
@@ -182,18 +190,68 @@ export function inviteTokenOf(inviteUrl: string): string {
   return token;
 }
 
+type JoinDetails = { displayName: string; role: string };
+
 /**
- * Opens an invite link and waits for its pre-membership preview — the first
- * step the product join route takes with the same capability.
+ * Submits a waiting-room request by room ID and passcode, the way the
+ * product `/join` form does with the same credentials.
  */
-export async function openInviteLink(page: Page, inviteUrl: string) {
-  await page.goto(`/e2e/onboarding?invite=${encodeURIComponent(inviteTokenOf(inviteUrl))}`);
-  await expect(page.getByTestId("invite-preview")).toBeVisible();
+export async function requestJoinByPasscode(
+  page: Page,
+  details: JoinDetails & { roomId: string; passcode: string },
+) {
+  await page.goto("/e2e/onboarding");
+  await page.getByTestId("join-room-id").fill(details.roomId);
+  await page.getByTestId("join-passcode").fill(details.passcode);
+  await page.getByTestId("join-display-name").fill(details.displayName);
+  await page.getByTestId("join-role").fill(details.role);
+  await page.getByTestId("request-join-by-passcode").click();
 }
 
-/** Spends the previewed capability and follows the redirect into the room. */
-export async function claimAndEnterRoom(page: Page, roomId: string) {
-  await page.getByTestId("claim-invitation").click();
-  await page.waitForURL(`**/room/${roomId}`);
+/**
+ * Opens an invite link, waits for its pre-membership preview, and submits a
+ * waiting-room request with the same capability -- the first two steps the
+ * product join route takes for an invite URL.
+ */
+export async function requestJoinByInvite(
+  page: Page,
+  details: JoinDetails & { inviteUrl: string },
+) {
+  await page.goto(`/e2e/onboarding?invite=${encodeURIComponent(inviteTokenOf(details.inviteUrl))}`);
+  await expect(page.getByTestId("invite-preview")).toBeVisible();
+  await page.getByTestId("join-display-name").fill(details.displayName);
+  await page.getByTestId("join-role").fill(details.role);
+  await page.getByTestId("request-join-by-invite").click();
+}
+
+/** Waits for the requester's private join-request status to reach a value. */
+export async function expectJoinRequestStatus(page: Page, status: "waiting" | "admitted" | "rejected") {
+  await expect(page.getByTestId("join-request-status")).toHaveText(status, { timeout: 15_000 });
+}
+
+/** Waits until a session's admitted redirect lands it inside the room. */
+export async function expectEnteredRoom(page: Page, roomId: string) {
+  await page.waitForURL(`**/room/${roomId}`, { timeout: 15_000 });
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+}
+
+/**
+ * Locates one waiting-room row on the owner's session by requester display
+ * name. The owner harness polls `listJoinRequests` on its own, so this waits
+ * for the row to appear rather than requiring the caller to refresh anything.
+ */
+export function waitingRequestRow(ownerPage: Page, displayName: string) {
+  return ownerPage.locator('[data-testid="waiting-room"] article', { hasText: displayName });
+}
+
+export async function admitFromWaitingRoom(ownerPage: Page, displayName: string) {
+  const row = waitingRequestRow(ownerPage, displayName);
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.getByRole("button", { name: "Admit" }).click();
+}
+
+export async function rejectFromWaitingRoom(ownerPage: Page, displayName: string) {
+  const row = waitingRequestRow(ownerPage, displayName);
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.getByRole("button", { name: "Reject" }).click();
 }

@@ -13,12 +13,14 @@ export function decisionCandidateFromPreview(
     rationale: preview.rationale,
     acceptedTradeoffs: preview.acceptedTradeoffs,
     unresolvedWarnings: preview.unresolvedWarnings,
-    votes: preview.votes,
+    alignments: preview.alignments,
+    decisionPolicy: preview.decisionPolicy,
     owners: preview.owners,
     deadlines: preview.deadlines,
     actionItems: preview.actionItems,
     dissent: preview.dissent,
     requiredApprovalParticipantIds: preview.requiredApprovalParticipantIds,
+    expertAdvice: preview.expertAdvice,
   };
 }
 
@@ -48,7 +50,7 @@ export function normalizeDecisionCandidate(
       }))
       .sort(byId),
     unresolvedWarnings: [...candidate.unresolvedWarnings].sort(byId),
-    votes: [...candidate.votes].sort((left, right) =>
+    alignments: [...candidate.alignments].sort((left, right) =>
       `${left.proposalId}:${left.participantId}`.localeCompare(
         `${right.proposalId}:${right.participantId}`,
       )),
@@ -63,6 +65,9 @@ export function normalizeDecisionCandidate(
     requiredApprovalParticipantIds: [
       ...candidate.requiredApprovalParticipantIds,
     ].sort(),
+    expertAdvice: [...candidate.expertAdvice].sort((left, right) =>
+      left.findingId.localeCompare(right.findingId),
+    ),
   };
 }
 

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  claimInvitationInputSchema,
-  claimInvitationResultSchema,
   createRoomInputSchema,
   createdRoomSchema,
-  manageRoomInvitationInputSchema,
-  regeneratedRoomInvitationSchema,
+  joinRequestResultSchema,
+  joinRequestSchema,
+  joinRequestStatusSchema,
+  manageJoinRequestInputSchema,
+  requestJoinByInviteInputSchema,
+  requestJoinByPasscodeInputSchema,
   roomInvitePreviewSchema,
   roomStateSchema,
   type CreateRoomInput,
@@ -16,22 +18,20 @@ import { demoRoom } from "@/fixtures/demo-room";
 const validInput: CreateRoomInput = {
   title: "Two-Week Onboarding Launch",
   brief: "Should we ship the onboarding update within two weeks?",
-  participants: [
-    { name: "Maya", role: "Product Manager", requiredForApproval: false },
-    { name: "Emre", role: "Engineer", requiredForApproval: true },
-  ],
+  creatorName: "Maya",
+  creatorRole: "Product Manager",
 };
 
 describe("room creation contract", () => {
-  it("accepts a minimal two-participant room", () => {
+  it("accepts one creator and no participant array", () => {
     expect(createRoomInputSchema.parse(validInput)).toEqual(validInput);
   });
 
-  it("requires at least two participants", () => {
+  it("rejects predetermined participant seats", () => {
     expect(
       createRoomInputSchema.safeParse({
         ...validInput,
-        participants: [validInput.participants[0]],
+        participants: [{ name: "Emre", role: "Engineer" }],
       }).success,
     ).toBe(false);
   });
@@ -42,6 +42,9 @@ describe("room creation contract", () => {
     "participantId",
     "userId",
     "origin",
+    "ownerParticipantId",
+    "meetingRole",
+    "decisionRole",
   ])("rejects browser-supplied %s authority", (field) => {
     expect(
       createRoomInputSchema.safeParse({ ...validInput, [field]: "smuggled" })
@@ -49,30 +52,16 @@ describe("room creation contract", () => {
     ).toBe(false);
   });
 
-  it.each(["id", "userId", "kind", "isClaimed"])(
-    "rejects %s on a requested participant seat",
-    (field) => {
-      expect(
-        createRoomInputSchema.safeParse({
-          ...validInput,
-          participants: [
-            { ...validInput.participants[0], [field]: "smuggled" },
-            validInput.participants[1],
-          ],
-        }).success,
-      ).toBe(false);
-    },
-  );
-
-  it("requires an explicit approval requirement per participant", () => {
+  it("accepts only supported decision policies", () => {
     expect(
       createRoomInputSchema.safeParse({
         ...validInput,
-        participants: [
-          { name: "Maya", role: "Product Manager" },
-          validInput.participants[1],
-        ],
+        decisionPolicy: "equal_authority_consensus",
       }).success,
+    ).toBe(true);
+    expect(
+      createRoomInputSchema.safeParse({ ...validInput, decisionPolicy: "majority" })
+        .success,
     ).toBe(false);
   });
 });
@@ -80,32 +69,29 @@ describe("room creation contract", () => {
 describe("created room DTO", () => {
   const createdRoom = {
     roomId: "rm_7P3KQ8M2",
-    participantInvites: [
-      {
-        participantId: "participant-engineer",
-        role: "Engineer",
-        inviteUrl:
-          "https://app.example/room/rm_7P3KQ8M2/join?invite=raw-capability",
-      },
-    ],
+    ownerParticipantId: "participant-owner",
+    inviteUrl: "https://app.example/room/rm_7P3KQ8M2/join?invite=raw-capability",
+    passcode: "AB12CD34",
   };
 
-  it("carries only the shareable invite URL", () => {
+  it("returns the room, owner participant identity, invite URL, and plaintext passcode", () => {
     expect(createdRoomSchema.parse(createdRoom)).toEqual(createdRoom);
   });
 
-  it("rejects a raw invite token on the DTO", () => {
+  it("requires a passcode with meaningful entropy", () => {
+    expect(createdRoomSchema.safeParse({ ...createdRoom, passcode: "abc" }).success).toBe(false);
+  });
+
+  it("rejects legacy seat invitations on the creation result", () => {
     expect(
       createdRoomSchema.safeParse({
         ...createdRoom,
-        participantInvites: [
-          { ...createdRoom.participantInvites[0], inviteToken: "raw" },
-        ],
+        participantInvites: [],
       }).success,
     ).toBe(false);
   });
 
-  it("builds one invite URL per predetermined seat", () => {
+  it("keeps the invite URL helper isolated to the generic invite route", () => {
     expect(buildInviteUrl("https://app.example/", "rm_7P3KQ8M2", "raw token")).toBe(
       "https://app.example/room/rm_7P3KQ8M2/join?invite=raw%20token",
     );
@@ -120,47 +106,42 @@ describe("room snapshot secrecy", () => {
     expect(roomStateSchema.safeParse(room).success).toBe(false);
   });
 
-  it("rejects an invite secret smuggled onto a participant", () => {
-    const room = structuredClone(demoRoom) as unknown as {
-      participants: Array<Record<string, unknown>>;
-    };
-    room.participants[0]!.inviteUrl =
-      "https://app.example/room/demo/join?invite=raw-capability";
+  it("rejects a passcode hash smuggled onto the room snapshot", () => {
+    const room = structuredClone(demoRoom) as unknown as Record<string, unknown>;
+    room.passcodeHash = "bf-hash";
 
     expect(roomStateSchema.safeParse(room).success).toBe(false);
   });
 
-  it("keeps the canonical snapshot free of any invite field", () => {
-    expect(JSON.stringify(demoRoom)).not.toMatch(/invite/i);
+  it("keeps the canonical snapshot free of any invite or passcode field", () => {
+    expect(JSON.stringify(demoRoom)).not.toMatch(/invite|passcode/i);
   });
 });
 
 describe("invitation preview contract", () => {
   const livePreview = {
     inviteValid: true as const,
-    alreadyClaimed: false,
     roomId: "rm_7P3KQ8M2",
     title: "Two-Week Onboarding Launch",
     brief: "Should we ship the onboarding update within two weeks?",
-    participant: { id: "participant-engineer", name: "Emre", role: "Engineer" },
+    ownerDisplayName: "Maya",
   };
 
-  it("carries the room only for a live invitation", () => {
+  it("carries only the narrow pre-membership fields for a live invitation", () => {
     expect(roomInvitePreviewSchema.parse(livePreview)).toEqual(livePreview);
   });
 
-  it("answers a refused invitation with no room at all", () => {
-    const refused = { inviteValid: false as const, alreadyClaimed: true };
+  it("answers a refused invitation with no room details at all", () => {
+    const refused = { inviteValid: false as const };
     expect(roomInvitePreviewSchema.parse(refused)).toEqual(refused);
   });
 
-  it.each(["roomId", "title", "brief", "participant"])(
+  it.each(["roomId", "title", "brief", "ownerDisplayName"])(
     "rejects %s on a refused invitation",
     (field) => {
       expect(
         roomInvitePreviewSchema.safeParse({
           inviteValid: false,
-          alreadyClaimed: false,
           [field]: livePreview[field as keyof typeof livePreview],
         }).success,
       ).toBe(false);
@@ -175,7 +156,7 @@ describe("invitation preview contract", () => {
     "positions",
     "constraints",
     "proposals",
-    "votes",
+    "alignments",
     "approvals",
     "activity",
   ])("rejects %s leaking full room state into a preview", (field) => {
@@ -190,87 +171,115 @@ describe("invitation preview contract", () => {
         .success,
     ).toBe(false);
   });
-
-  it.each(["userId", "kind", "isClaimed", "requiredForApproval"])(
-    "rejects %s on the previewed seat",
-    (field) => {
-      expect(
-        roomInvitePreviewSchema.safeParse({
-          ...livePreview,
-          participant: { ...livePreview.participant, [field]: "smuggled" },
-        }).success,
-      ).toBe(false);
-    },
-  );
 });
 
-describe("invitation claim contract", () => {
-  it("accepts a bare capability", () => {
-    expect(claimInvitationInputSchema.parse({ inviteToken: "raw" })).toEqual({
-      inviteToken: "raw",
-    });
+describe("join request status and DTO", () => {
+  it("supports exactly the four canonical states", () => {
+    for (const status of ["waiting", "admitted", "rejected", "cancelled"]) {
+      expect(joinRequestStatusSchema.safeParse(status).success).toBe(true);
+    }
+    expect(joinRequestStatusSchema.safeParse("pending").success).toBe(false);
   });
 
-  it("requires a non-empty capability", () => {
-    expect(claimInvitationInputSchema.safeParse({ inviteToken: "" }).success).toBe(false);
-    expect(claimInvitationInputSchema.safeParse({}).success).toBe(false);
+  const request = {
+    id: "join-request-1",
+    roomId: "rm_7P3KQ8M2",
+    displayName: "Emre",
+    role: "Engineer",
+    status: "waiting" as const,
+    createdAt: "2026-08-30T00:00:00.000Z",
+    resolvedAt: null,
+  };
+
+  it("parses a waiting request", () => {
+    expect(joinRequestSchema.parse(request)).toEqual(request);
   });
 
-  it.each([
-    "seatId",
-    "participantId",
-    "userId",
-    "actorId",
-    "roomId",
-    "origin",
-  ])("rejects browser-supplied %s authority", (field) => {
+  it("never exposes the requester's raw auth user id", () => {
     expect(
-      claimInvitationInputSchema.safeParse({ inviteToken: "raw", [field]: "smuggled" })
+      joinRequestSchema.safeParse({ ...request, authUserId: "auth-user-id" }).success,
+    ).toBe(false);
+    expect(
+      joinRequestSchema.safeParse({ ...request, userId: "auth-user-id" }).success,
+    ).toBe(false);
+  });
+
+  it("wraps a join request result with only the room id", () => {
+    expect(
+      joinRequestResultSchema.parse({ roomId: request.roomId, joinRequest: request }),
+    ).toEqual({ roomId: request.roomId, joinRequest: request });
+  });
+});
+
+describe("join input contracts reject caller-supplied authority", () => {
+  const spoofableFields = [
+    "participantId",
+    "ownerParticipantId",
+    "authUserId",
+    "userId",
+    "meetingRole",
+    "decisionRole",
+    "actorId",
+    "origin",
+  ];
+
+  const validPasscodeInput = {
+    roomId: "rm_7P3KQ8M2",
+    passcode: "AB12CD34",
+    displayName: "Emre",
+    role: "Engineer",
+  };
+
+  it("accepts a well-formed passcode join request", () => {
+    expect(requestJoinByPasscodeInputSchema.parse(validPasscodeInput)).toEqual(
+      validPasscodeInput,
+    );
+  });
+
+  it.each(spoofableFields)("rejects browser-supplied %s on a passcode join", (field) => {
+    expect(
+      requestJoinByPasscodeInputSchema.safeParse({ ...validPasscodeInput, [field]: "smuggled" })
         .success,
     ).toBe(false);
   });
 
-  it("names only the seat the capability was minted for", () => {
-    const result = { roomId: "rm_7P3KQ8M2", participantId: "participant-engineer" };
-    expect(claimInvitationResultSchema.parse(result)).toEqual(result);
+  const validInviteInput = {
+    inviteToken: "raw-capability",
+    displayName: "Emre",
+    role: "Engineer",
+  };
+
+  it("accepts a well-formed invite join request", () => {
+    expect(requestJoinByInviteInputSchema.parse(validInviteInput)).toEqual(validInviteInput);
+  });
+
+  it.each(spoofableFields)("rejects browser-supplied %s on an invite join", (field) => {
     expect(
-      claimInvitationResultSchema.safeParse({ ...result, inviteToken: "raw" }).success,
+      requestJoinByInviteInputSchema.safeParse({ ...validInviteInput, [field]: "smuggled" })
+        .success,
     ).toBe(false);
   });
-});
 
-describe("invitation management contract", () => {
-  it("accepts only a target participant seat", () => {
+  it("rejects an empty passcode or invite token", () => {
     expect(
-      manageRoomInvitationInputSchema.parse({ participantId: "participant-engineer" }),
-    ).toEqual({ participantId: "participant-engineer" });
+      requestJoinByPasscodeInputSchema.safeParse({ ...validPasscodeInput, passcode: "" }).success,
+    ).toBe(false);
+    expect(
+      requestJoinByInviteInputSchema.safeParse({ ...validInviteInput, inviteToken: "" }).success,
+    ).toBe(false);
   });
 
-  it.each(["actorId", "actorType", "authUserId", "userId", "origin", "role"])(
-    "rejects browser-supplied %s authority",
-    (field) => {
-      expect(
-        manageRoomInvitationInputSchema.safeParse({
-          participantId: "participant-engineer",
-          [field]: "smuggled",
-        }).success,
-      ).toBe(false);
-    },
-  );
+  it("names only the target join request as an object reference", () => {
+    expect(manageJoinRequestInputSchema.parse({ joinRequestId: "join-request-1" })).toEqual({
+      joinRequestId: "join-request-1",
+    });
+  });
 
-  it("returns only a shareable URL when an invitation is regenerated", () => {
-    const regenerated = {
-      participantId: "participant-engineer",
-      role: "Engineer",
-      inviteUrl:
-        "https://app.example/room/rm_7P3KQ8M2/join?invite=fresh-capability",
-    };
-
-    expect(regeneratedRoomInvitationSchema.parse(regenerated)).toEqual(regenerated);
+  it.each(spoofableFields)("rejects browser-supplied %s on admit/reject", (field) => {
     expect(
-      regeneratedRoomInvitationSchema.safeParse({
-        ...regenerated,
-        inviteToken: "fresh-capability",
+      manageJoinRequestInputSchema.safeParse({
+        joinRequestId: "join-request-1",
+        [field]: "smuggled",
       }).success,
     ).toBe(false);
   });

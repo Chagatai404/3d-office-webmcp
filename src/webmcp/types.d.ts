@@ -8,6 +8,7 @@ declare global {
 
   interface WebMcpToolDefinition {
     name: string;
+    title?: string;
     description: string;
     inputSchema: Record<string, unknown>;
     annotations?: WebMcpToolAnnotations;
@@ -19,6 +20,7 @@ declare global {
 
   interface WebMcpRegisteredTool {
     name: string;
+    title?: string;
     description: string;
     inputSchema: Record<string, unknown>;
     annotations?: WebMcpToolAnnotations;
@@ -32,9 +34,9 @@ declare global {
     getTools(options?: { fromOrigins?: string[] }): Promise<WebMcpRegisteredTool[]>;
     executeTool(
       tool: WebMcpRegisteredTool,
-      inputJson: string,
+      input?: Record<string, unknown>,
       options?: { signal?: AbortSignal },
-    ): Promise<unknown>;
+    ): Promise<string>;
   }
 
   interface Document {

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useShell } from "../shell-provider";
 import { DrawerShell } from "./drawer-shell";
 
-/** Leave the room. Your seat, constraints, and votes stay exactly as they are. */
+/** Leave the room. Your seat, constraints, and alignment stay exactly as they are. */
 export function LeaveDrawer() {
   const router = useRouter();
   const { closeDrawer } = useShell();
@@ -12,7 +12,7 @@ export function LeaveDrawer() {
   return (
     <DrawerShell label="Leave the room" title="Leave the room?">
       <p className="drawer-note">
-        Your constraints, objections, and votes stay exactly as they are. Your seat stays yours —
+        Your constraints, objections, and alignment stay exactly as they are. Your seat stays yours —
         you can walk back in from the same link.
       </p>
       <div className="drawer-actions">

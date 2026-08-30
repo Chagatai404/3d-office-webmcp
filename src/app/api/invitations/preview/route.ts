@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { previewRoomInvitation } from "@/domain/rooms/operations";
+import { previewRoomInvite } from "@/domain/rooms/operations";
 import { actionResponse, authenticateRoomRequest } from "@/app/api/_shared/request";
 
 /**
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = (await request.json().catch(() => null)) as { inviteToken?: unknown } | null;
   return actionResponse(
-    await previewRoomInvitation(auth.repository, body?.inviteToken, {
+    await previewRoomInvite(auth.repository, body?.inviteToken, {
       authUserId: auth.userId,
       origin: "manual_ui",
     }),

@@ -1,10 +1,12 @@
 import type {
   ActionOrigin,
   ActorType,
+  AlignmentChoice,
+  DecisionRole,
+  MeetingRole,
   ProposalStatus,
   RoomPhase,
   RoomState,
-  VoteChoice,
 } from "@/contracts/room";
 
 /**
@@ -22,13 +24,17 @@ export interface VisualParticipant {
   id: string;
   name: string;
   role: string;
-  kind: "human" | "simulation";
+  kind: "human" | "simulation" | "expert";
   isClaimed: boolean;
   isSelf: boolean;
   /** Deterministic seat around the table, stable for a given participant order. */
   seatIndex: number;
-  requiredForApproval: boolean;
-  vote: VoteChoice | null;
+  meetingRole: MeetingRole;
+  decisionRole: DecisionRole;
+  alignment: AlignmentChoice | null;
+  alignmentComment: string | null;
+  /** Whether this participant is currently a required approver under the room's decision policy. */
+  isRequiredApprover: boolean;
   hasApprovedCurrentDecision: boolean;
 }
 
@@ -78,8 +84,11 @@ export interface RoomVisualizationState {
   conflicts: VisualConflict[];
   recentActivity: VisualActivity[];
 
+  decisionPolicy: RoomState["decisionPolicy"];
+
   consensus: {
-    voteProgress: number;
+    /** Share of active humans who have shared alignment on the active proposal. Informative only — never decisive. */
+    alignmentProgress: number;
     approvalProgress: number;
     hasBlockingConflict: boolean;
   };
@@ -138,8 +147,11 @@ export function createPlaceholderVisualizationState(
       isClaimed: false,
       isSelf: false,
       seatIndex: index,
-      requiredForApproval: false,
-      vote: null,
+      meetingRole: "participant",
+      decisionRole: "contributor",
+      alignment: null,
+      alignmentComment: null,
+      isRequiredApprover: false,
       hasApprovedCurrentDecision: false,
     }),
   );
@@ -154,8 +166,9 @@ export function createPlaceholderVisualizationState(
     activeProposal: null,
     conflicts: [],
     recentActivity: [],
+    decisionPolicy: "owner_decides",
     consensus: {
-      voteProgress: 0,
+      alignmentProgress: 0,
       approvalProgress: 0,
       hasBlockingConflict: false,
     },
@@ -169,10 +182,10 @@ export function createPlaceholderVisualizationState(
 export function createRoomVisualizationState(
   room: RoomState,
 ): RoomVisualizationState {
-  const votesByParticipant = new Map(
-    room.votes
-      .filter((vote) => vote.proposalId === room.activeProposalId)
-      .map((vote) => [vote.participantId, vote.choice]),
+  const alignmentByParticipant = new Map(
+    room.alignments
+      .filter((alignment) => alignment.proposalId === room.activeProposalId)
+      .map((alignment) => [alignment.participantId, alignment]),
   );
 
   const decisionHash = currentDecisionHash(room);
@@ -181,14 +194,21 @@ export function createRoomVisualizationState(
       .filter((approval) => approval.decisionHash === decisionHash)
       .map((approval) => approval.participantId),
   );
+  const requiredApproverIds = new Set(
+    room.finalDecisionPreview?.requiredApprovalParticipantIds ?? [],
+  );
 
   const participantNames = new Map(
     room.participants.map((participant) => [participant.id, participant.name]),
   );
 
-  // Every participant has a seat at the one shared table, in join order.
-  const participants: VisualParticipant[] = room.participants.map(
-    (participant, index) => ({
+  // Every *active* participant has a seat at the one shared table, in join
+  // order. A removed participant's chair disappears from the room the same
+  // way it disappears from the roster; their historical contributions remain
+  // reachable through activity/positions/alignments, never through a live seat.
+  const participants: VisualParticipant[] = room.participants
+    .filter((participant) => participant.status === "active")
+    .map((participant, index) => ({
       id: participant.id,
       name: participant.name,
       role: participant.role,
@@ -196,11 +216,13 @@ export function createRoomVisualizationState(
       isClaimed: participant.isClaimed,
       isSelf: participant.id === room.selfParticipantId,
       seatIndex: index,
-      requiredForApproval: participant.requiredForApproval,
-      vote: votesByParticipant.get(participant.id) ?? null,
+      meetingRole: participant.meetingRole,
+      decisionRole: participant.decisionRole,
+      alignment: alignmentByParticipant.get(participant.id)?.choice ?? null,
+      alignmentComment: alignmentByParticipant.get(participant.id)?.comment ?? null,
+      isRequiredApprover: requiredApproverIds.has(participant.id),
       hasApprovedCurrentDecision: approvedParticipantIds.has(participant.id),
-    }),
-  );
+    }));
 
   const proposals: VisualProposal[] = room.proposals.map((proposal) => ({
     id: proposal.id,
@@ -210,7 +232,7 @@ export function createRoomVisualizationState(
   }));
 
   const requiredApprovers = participants.filter(
-    (participant) => participant.requiredForApproval,
+    (participant) => participant.isRequiredApprover,
   );
 
   return {
@@ -249,9 +271,11 @@ export function createRoomVisualizationState(
         createdAt: event.createdAt,
       })),
 
+    decisionPolicy: room.decisionPolicy,
+
     consensus: {
-      voteProgress: room.activeProposalId
-        ? ratio(votesByParticipant.size, participants.length)
+      alignmentProgress: room.activeProposalId
+        ? ratio(alignmentByParticipant.size, participants.length)
         : 0,
       approvalProgress: ratio(
         requiredApprovers.filter(

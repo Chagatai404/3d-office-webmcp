@@ -5,24 +5,28 @@ import {
   actionResultSchema,
   decisionRecordSchema,
   finalDecisionPreviewSchema,
-  regeneratedRoomInvitationSchema,
+  joinRequestSchema,
   roomStateSchema,
   type ActionResult,
   type AddPositionInput,
-  type CastVoteInput,
+  type ExpressAlignmentInput,
   type ClaimSeatInput,
   type DecisionRecord,
   type FinalDecisionPreview,
-  type ManageRoomInvitationInput,
+  type ManageJoinRequestInput,
+  type JoinRequest,
   type ProposeTradeoffInput,
   type RaiseObjectionInput,
-  type RegeneratedRoomInvitation,
+  type RemoveParticipantInput,
   type ResolveObjectionInput,
   type RoomClient,
   type RoomPhase,
   type RoomState,
+  type SetDecisionPolicyInput,
+  type SetParticipantDecisionRoleInput,
   type StartDemoScenarioInput,
   type SubmitProposalInput,
+  type TransferOwnershipInput,
 } from "@/contracts/room";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { ensureAnonymousAccessToken } from "@/lib/supabase/session";
@@ -94,8 +98,8 @@ export class ApiRoomClient implements RoomClient {
     return this.mutate(roomId, "tradeoffs", input);
   }
 
-  castMyVote(roomId: string, input: CastVoteInput): Promise<ActionResult> {
-    return this.mutate(roomId, "votes", input);
+  expressMyAlignment(roomId: string, input: ExpressAlignmentInput): Promise<ActionResult> {
+    return this.mutate(roomId, "alignments", input);
   }
 
   previewFinalDecision(roomId: string): Promise<ActionResult<FinalDecisionPreview>> {
@@ -155,23 +159,43 @@ export class ApiRoomClient implements RoomClient {
     return this.mutate(roomId, "phase", { phase });
   }
 
-  regenerateInvitation(
-    roomId: string,
-    input: ManageRoomInvitationInput,
-  ): Promise<ActionResult<RegeneratedRoomInvitation>> {
-    return this.mutateWithData(
-      roomId,
-      "invitations/regenerate",
-      input,
-      regeneratedRoomInvitationSchema,
-    );
+  listJoinRequests(roomId: string): Promise<ActionResult<JoinRequest[]>> {
+    return this.readAction(roomId, "join-requests", z.array(joinRequestSchema));
   }
 
-  revokeInvitation(
+  admitJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
+    return this.mutateWithData(roomId, "join-requests/admit", input, joinRequestSchema);
+  }
+
+  rejectJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
+    return this.mutateWithData(roomId, "join-requests/reject", input, joinRequestSchema);
+  }
+
+  lockMeeting(roomId: string): Promise<ActionResult> {
+    return this.mutate(roomId, "lock", {});
+  }
+
+  unlockMeeting(roomId: string): Promise<ActionResult> {
+    return this.mutate(roomId, "unlock", {});
+  }
+
+  removeParticipant(roomId: string, input: RemoveParticipantInput): Promise<ActionResult> {
+    return this.mutate(roomId, "participants/remove", input);
+  }
+
+  transferOwnership(roomId: string, input: TransferOwnershipInput): Promise<ActionResult> {
+    return this.mutate(roomId, "ownership", input);
+  }
+
+  setDecisionPolicy(roomId: string, input: SetDecisionPolicyInput): Promise<ActionResult> {
+    return this.mutate(roomId, "decision-policy", input);
+  }
+
+  setParticipantDecisionRole(
     roomId: string,
-    input: ManageRoomInvitationInput,
+    input: SetParticipantDecisionRoleInput,
   ): Promise<ActionResult> {
-    return this.mutate(roomId, "invitations/revoke", input);
+    return this.mutate(roomId, "decision-role", input);
   }
 
   private async ensureAnonymousSession(): Promise<string> {

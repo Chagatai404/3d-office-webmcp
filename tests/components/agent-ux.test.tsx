@@ -107,7 +107,7 @@ describe("browser-agent UX", () => {
       dispatchEvent: () => true,
       registerTool: async () => undefined,
       getTools: async () => [],
-      executeTool: async () => null,
+      executeTool: async () => "",
     };
 
     await mount(<PositionsPanel />);

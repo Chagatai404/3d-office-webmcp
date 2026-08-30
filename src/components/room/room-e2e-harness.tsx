@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import type { ActionResult, DemoHumanRole, RoomPhase } from "@/contracts/room";
+import { useEffect, useState } from "react";
+import type { ActionResult, DemoHumanRole, JoinRequest, RoomPhase } from "@/contracts/room";
+import {
+  subscribeToUiConfirmation,
+  type ConfirmationRequest,
+} from "@/webmcp/confirmation-bridge";
 import { useRoom } from "./room-provider";
 
 /**
@@ -18,15 +22,52 @@ export function RoomE2EHarness() {
   const [confirmedDecisionHash, setConfirmedDecisionHash] = useState<string | null>(null);
   const [status, setStatus] = useState("Connected");
   const [soloRole, setSoloRole] = useState<DemoHumanRole>("product");
+  const [webMcpConfirmation, setWebMcpConfirmation] = useState<ConfirmationRequest | null>(null);
+
+  useEffect(
+    () => subscribeToUiConfirmation((request) => setWebMcpConfirmation(request)),
+    [],
+  );
 
   const decisionHash = room.finalDecisionPreview?.decisionHash ?? null;
 
   /**
    * The demo room is the only room the demo-only endpoints accept, so it is
    * also the only room whose controls are offered here. A created room gets
-   * the production controls instead: readiness and the organizer phase route.
+   * the production controls instead: readiness and the owner phase route.
    */
   const isDemoRoom = room.id === "demo";
+  const isOwner = self?.id === room.ownerParticipantId && self?.meetingRole === "owner";
+
+  const [waitingRequests, setWaitingRequests] = useState<JoinRequest[]>([]);
+  const [waitingBusyId, setWaitingBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOwner) return;
+    let active = true;
+    const refresh = async () => {
+      const result = await actions.listJoinRequests();
+      if (active && result.ok) setWaitingRequests(result.data);
+    };
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 500);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [actions, isOwner]);
+
+  async function resolveWaitingRequest(request: JoinRequest, decision: "admit" | "reject") {
+    setWaitingBusyId(request.id);
+    const result = decision === "admit"
+      ? await actions.admitJoinRequest({ joinRequestId: request.id })
+      : await actions.rejectJoinRequest({ joinRequestId: request.id });
+    setWaitingBusyId(null);
+    if (result.ok) {
+      const refreshed = await actions.listJoinRequests();
+      if (refreshed.ok) setWaitingRequests(refreshed.data);
+    }
+  }
 
   const nextPhase: RoomPhase | null = room.phase === "input"
     ? "proposals"
@@ -50,6 +91,14 @@ export function RoomE2EHarness() {
     }
   }
 
+  async function confirmWebMcpParticipantAction() {
+    if (!webMcpConfirmation || webMcpConfirmation.kind !== "participants") return;
+    const result = webMcpConfirmation.action === "remove"
+      ? await run(actions.removeParticipant({ participantId: webMcpConfirmation.participantId }))
+      : await run(actions.transferOwnership({ participantId: webMcpConfirmation.participantId }));
+    if (result.ok) setWebMcpConfirmation(null);
+  }
+
   return (
     <main className="shell room-shell" data-testid="e2e-room-harness">
       <p data-testid="connection-status">{status === "Saving…" ? "Saving…" : "Connected"}</p>
@@ -58,6 +107,22 @@ export function RoomE2EHarness() {
       <p data-testid="room-id">{room.id}</p>
       <p>Room · <span data-testid="room-phase">{room.phase}</span></p>
       <p>Version <span data-testid="room-version">{room.version}</span></p>
+
+      {webMcpConfirmation?.kind === "participants" ? (
+        <section role="alertdialog" data-testid="webmcp-participant-confirmation">
+          <p>
+            Confirm {webMcpConfirmation.action === "remove" ? "participant removal" : "ownership transfer"}?
+          </p>
+          <button type="button" onClick={() => setWebMcpConfirmation(null)}>Cancel</button>
+          <button type="button" data-testid="confirm-webmcp-participant-action" onClick={() => void confirmWebMcpParticipantAction()}>
+            Confirm
+          </button>
+        </section>
+      ) : null}
+
+      {webMcpConfirmation?.kind === "decision" ? (
+        <p role="status" data-testid="webmcp-decision-confirmation">Final decision requires visible human confirmation.</p>
+      ) : null}
 
       {isDemoRoom ? (
         <section data-testid="demo-controls">
@@ -99,13 +164,21 @@ export function RoomE2EHarness() {
       ) : null}
 
       <section aria-label="Participant seats">
-        {room.participants.map((participant) => (
+        {/* A removed participant's chair disappears from the live roster the
+            same way it disappears from the 3D room; their historical rows
+            (positions, alignments, activity) stay inspectable through the
+            other testids below regardless of status. */}
+        {room.participants.filter((participant) => participant.status === "active").map((participant) => (
           <article key={participant.id}>
             <strong>{participant.role}</strong>
             <span>{participant.name}</span>
             <span data-testid={`participant-kind-${participant.id}`}>
-              {participant.kind === "simulation" ? "Simulated Participant" : "Human Participant"}
-              {participant.requiredForApproval ? " · Required approver" : ""}
+              {participant.kind === "expert"
+                ? "Security Expert · Advisory"
+                : participant.kind === "simulation"
+                  ? "Simulated Participant"
+                  : "Human Participant"}
+              {` · ${participant.meetingRole} · ${participant.decisionRole}`}
             </span>
             <span data-testid={`participant-status-${participant.id}`}>
               {participant.id === room.selfParticipantId
@@ -126,9 +199,113 @@ export function RoomE2EHarness() {
                 Claim seat
               </button>
             ) : null}
+            {isOwner && participant.id !== room.ownerParticipantId && participant.kind === "human" ? (
+              <>
+                <button
+                  type="button"
+                  data-testid={`remove-${participant.id}`}
+                  onClick={() => void run(actions.removeParticipant({ participantId: participant.id }))}
+                >
+                  Remove
+                </button>
+                <button
+                  type="button"
+                  data-testid={`transfer-owner-${participant.id}`}
+                  onClick={() => void run(actions.transferOwnership({ participantId: participant.id }))}
+                >
+                  Make owner
+                </button>
+                <button
+                  type="button"
+                  data-testid={`make-decision-maker-${participant.id}`}
+                  onClick={() => void run(actions.setParticipantDecisionRole({
+                    participantId: participant.id, decisionRole: "decision_maker",
+                  }))}
+                >
+                  Make decision maker
+                </button>
+                <button
+                  type="button"
+                  data-testid={`make-contributor-${participant.id}`}
+                  onClick={() => void run(actions.setParticipantDecisionRole({
+                    participantId: participant.id, decisionRole: "contributor",
+                  }))}
+                >
+                  Make contributor
+                </button>
+              </>
+            ) : null}
           </article>
         ))}
       </section>
+
+      {isOwner ? (
+        <section data-testid="decision-policy-controls">
+          <p data-testid="decision-policy">{room.decisionPolicy}</p>
+          <button
+            type="button"
+            data-testid="set-policy-owner-decides"
+            onClick={() => void run(actions.setDecisionPolicy({ decisionPolicy: "owner_decides" }))}
+          >
+            Responsible owner decides
+          </button>
+          <button
+            type="button"
+            data-testid="set-policy-consensus"
+            onClick={() => void run(actions.setDecisionPolicy({ decisionPolicy: "equal_authority_consensus" }))}
+          >
+            Equal decision-makers must agree
+          </button>
+        </section>
+      ) : (
+        <p data-testid="decision-policy">{room.decisionPolicy}</p>
+      )}
+
+      {isOwner ? (
+        <section data-testid="lock-controls">
+          <p data-testid="room-locked">{String(room.isLocked)}</p>
+          <button
+            type="button"
+            data-testid="lock-meeting"
+            onClick={() => void run(actions.lockMeeting())}
+          >
+            Lock meeting
+          </button>
+          <button
+            type="button"
+            data-testid="unlock-meeting"
+            onClick={() => void run(actions.unlockMeeting())}
+          >
+            Unlock meeting
+          </button>
+        </section>
+      ) : null}
+
+      {isOwner ? (
+        <section data-testid="waiting-room">
+          {waitingRequests.map((request) => (
+            <article key={request.id} data-testid={`join-request-${request.id}`}>
+              <span>{request.displayName} · {request.role} · {request.status}</span>
+              <button
+                type="button"
+                data-testid={`admit-${request.id}`}
+                disabled={waitingBusyId === request.id}
+                onClick={() => void resolveWaitingRequest(request, "admit")}
+              >
+                Admit
+              </button>
+              <button
+                type="button"
+                data-testid={`reject-${request.id}`}
+                disabled={waitingBusyId === request.id}
+                onClick={() => void resolveWaitingRequest(request, "reject")}
+              >
+                Reject
+              </button>
+            </article>
+          ))}
+        </section>
+      ) : null}
 
       {self && room.phase === "deliberation" && room.activeProposalId ? (
         <form
@@ -228,7 +405,7 @@ export function RoomE2EHarness() {
       {/*
         A created room progresses through the production route only. The button
         is offered to every seated participant on purpose: the server, not this
-        harness, is what refuses a non-organizer.
+        harness, is what refuses a non-owner.
       */}
       {self && !isDemoRoom && room.phase === "input" ? (
         <button
@@ -277,8 +454,8 @@ export function RoomE2EHarness() {
         <ul data-testid="tradeoffs">
           {room.tradeoffs.map((tradeoff) => <li key={tradeoff.id}>{tradeoff.description}: {tradeoff.expectedEffect}</li>)}
         </ul>
-        <ul data-testid="votes">
-          {room.votes.map((vote) => <li key={`${vote.proposalId}:${vote.participantId}`}>{vote.participantId}: {vote.choice}</li>)}
+        <ul data-testid="alignments">
+          {room.alignments.map((alignment) => <li key={`${alignment.proposalId}:${alignment.participantId}`}>{alignment.participantId}: {alignment.choice}</li>)}
         </ul>
         <ul data-testid="approvals">
           {room.approvals.map((approval) => <li key={approval.participantId}>{approval.participantId}: {approval.decisionHash}</li>)}

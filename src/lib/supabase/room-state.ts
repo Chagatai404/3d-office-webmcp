@@ -9,9 +9,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const roomRowSchema = z.object({
   id: z.string(), title: z.string(), brief: z.string(), demo_mode: z.string().nullable(), phase: z.string(),
-  version: z.number(), active_proposal_id: z.string().nullable(),
+  version: z.number(), owner_participant_id: z.string(), decision_policy: z.string(),
+  active_proposal_id: z.string().nullable(),
   finalized_at: z.string().nullable(), decision_candidate: z.unknown().nullable(),
-  decision_hash: z.string().nullable(),
+  decision_hash: z.string().nullable(), is_locked: z.boolean(),
 });
 
 function requireRows<T>(result: { data: T | null; error: { message: string } | null }): T {
@@ -27,24 +28,25 @@ export async function loadRoomState(
 ): Promise<RoomState | null> {
   const roomResult = await client
     .from("rooms")
-    .select("id,title,brief,demo_mode,phase,version,active_proposal_id,finalized_at,decision_candidate,decision_hash")
+    .select("id,title,brief,demo_mode,phase,version,owner_participant_id,decision_policy,active_proposal_id,finalized_at,decision_candidate,decision_hash,is_locked")
     .eq("id", roomId)
     .maybeSingle();
   if (roomResult.error) throw new Error(roomResult.error.message);
   if (!roomResult.data) return null;
   const room = roomRowSchema.parse(roomResult.data);
 
-  const [participants, positions, constraints, proposals, conflicts, tradeoffs, votes, approvals, activity] =
+  const [participants, positions, constraints, proposals, conflicts, tradeoffs, alignments, approvals, activity, expertFindings] =
     await Promise.all([
-      client.from("participants").select("id,user_id,name,role,kind,required_for_approval,ready_at,created_at").eq("room_id", roomId).order("seat_order"),
+      client.from("participants").select("id,user_id,name,role,kind,meeting_role,decision_role,required_for_approval,ready_at,status,removed_at,created_at").eq("room_id", roomId).order("seat_order"),
       client.from("positions").select("id,participant_id,summary,category,priority,created_at").eq("room_id", roomId).order("created_at"),
       client.from("constraints").select("id,participant_id,category,text,priority,created_at").eq("room_id", roomId).order("created_at"),
       client.from("proposals").select("id,participant_id,title,summary,rationale,expected_outcomes,referenced_constraint_ids,parent_proposal_id,status,created_at").eq("room_id", roomId).order("created_at"),
       client.from("conflicts").select("id,proposal_id,constraint_id,raised_by_actor_type,raised_by_actor_id,severity,reason,status,resolved_by_actor_type,resolved_by_actor_id,resolution_note,created_at,resolved_at").eq("room_id", roomId).order("created_at"),
       client.from("tradeoffs").select("id,conflict_ids,created_by_actor_type,created_by_actor_id,description,expected_effect,resulting_proposal_id,created_at").eq("room_id", roomId).order("created_at"),
-      client.from("votes").select("proposal_id,participant_id,choice,comment,updated_at").eq("room_id", roomId).order("updated_at"),
+      client.from("alignments").select("proposal_id,participant_id,choice,comment,updated_at").eq("room_id", roomId).order("updated_at"),
       client.from("approvals").select("participant_id,decision_hash,approved_at").eq("room_id", roomId).order("approved_at"),
       client.from("audit_events").select("id,actor_type,actor_id,origin,action,entity_type,entity_id,sanitized_input,result,previous_room_version,resulting_room_version,confirmation_required,created_at").eq("room_id", roomId).order("created_at"),
+      client.from("expert_findings").select("id,expert_participant_id,expert_key,proposal_id,category,title,summary,recommendation,status,resolution_rationale,created_at,resolved_at").eq("room_id", roomId).order("created_at"),
     ]);
 
   const participantRows = requireRows(participants) as Array<Record<string, unknown>>;
@@ -56,10 +58,14 @@ export async function loadRoomState(
   const matchingApprovals = room.decision_hash
     ? approvalValues.filter((approval) => approval.decisionHash === room.decision_hash)
     : [];
-  const requiredApprovalParticipantIds = participantRows
-    .filter((participant) => participant.kind === "human" && participant.required_for_approval === true)
-    .map((participant) => participant.id as string)
-    .sort();
+  // Required approver authority is policy-aware (owner_decides vs.
+  // equal_authority_consensus) and is computed server-side into the frozen
+  // candidate itself; it is never re-derived here from the deprecated,
+  // private `required_for_approval` column.
+  const frozenCandidate = room.decision_candidate as Record<string, unknown> | null;
+  const requiredApprovalParticipantIds = (
+    (frozenCandidate?.requiredApprovalParticipantIds as string[] | undefined) ?? []
+  ).slice().sort();
   const finalDecisionPreview = room.decision_candidate && room.decision_hash
     ? finalDecisionPreviewSchema.parse({
         ...(room.decision_candidate as Record<string, unknown>),
@@ -79,8 +85,18 @@ export async function loadRoomState(
     demoMode: room.demo_mode,
     phase: room.phase,
     version: room.version,
+    ownerParticipantId: room.owner_participant_id,
+    decisionPolicy: room.decision_policy,
+    isLocked: room.is_locked,
+    // A removed participant's row is never deleted (history must survive),
+    // but it is no longer this session's active seat: `selfParticipantId`
+    // stays null so every frontend "am I a member" check treats them the
+    // same as someone who never joined, even while their historical rows
+    // remain visible elsewhere in this same snapshot.
     selfParticipantId:
-      (participantRows.find((participant) => participant.user_id === authUserId)?.id as string | undefined) ?? null,
+      (participantRows.find(
+        (participant) => participant.user_id === authUserId && participant.status === "active",
+      )?.id as string | undefined) ?? null,
     activeProposalId: room.active_proposal_id,
     finalizedAt: room.finalized_at,
     finalDecisionPreview,
@@ -89,11 +105,17 @@ export async function loadRoomState(
       name: participant.name,
       role: participant.role,
       kind: participant.kind,
-      isClaimed: participant.kind === "simulation" || participant.user_id !== null,
+      meetingRole: participant.meeting_role,
+      decisionRole: participant.decision_role,
+      // A simulation or expert seat is never an "open" human seat waiting to
+      // be claimed -- both are always considered claimed regardless of the
+      // (always-null) `user_id` behind them.
+      isClaimed: participant.kind !== "human" || participant.user_id !== null,
       // `ready_at` is a server-set timestamp; the canonical DTO exposes only
       // whether the seat has declared its input complete.
       isReady: participant.ready_at !== null,
-      requiredForApproval: participant.required_for_approval,
+      status: participant.status,
+      removedAt: participant.removed_at,
       createdAt: participant.created_at,
     })),
     positions: (requireRows(positions) as Array<Record<string, unknown>>).map((row) => ({
@@ -126,7 +148,7 @@ export async function loadRoomState(
       description: row.description, expectedEffect: row.expected_effect,
       resultingProposalId: row.resulting_proposal_id, createdAt: row.created_at,
     })),
-    votes: (requireRows(votes) as Array<Record<string, unknown>>).map((row) => ({
+    alignments: (requireRows(alignments) as Array<Record<string, unknown>>).map((row) => ({
       proposalId: row.proposal_id, participantId: row.participant_id,
       choice: row.choice, comment: row.comment, updatedAt: row.updated_at,
     })),
@@ -138,6 +160,13 @@ export async function loadRoomState(
       previousRoomVersion: row.previous_room_version,
       resultingRoomVersion: row.resulting_room_version,
       confirmationRequired: row.confirmation_required, createdAt: row.created_at,
+    })),
+    expertFindings: (requireRows(expertFindings) as Array<Record<string, unknown>>).map((row) => ({
+      id: row.id, roomId: room.id, expertParticipantId: row.expert_participant_id,
+      expertKey: row.expert_key, proposalId: row.proposal_id, category: row.category,
+      title: row.title, summary: row.summary, recommendation: row.recommendation,
+      status: row.status, resolutionRationale: row.resolution_rationale,
+      createdAt: row.created_at, resolvedAt: row.resolved_at,
     })),
   });
 }

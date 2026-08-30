@@ -871,6 +871,8 @@
 }
 
 .joinPage {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-rows: auto 1fr auto;
   padding: 1.25rem 0 1.5rem;

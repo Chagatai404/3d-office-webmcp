@@ -56,6 +56,7 @@ import { usePrefersReducedMotion } from "./use-reduced-motion";
 const SURFACE_TONE: Record<PreMeetingPoseId, string> = {
   welcome: "#f6f4ee",
   create: "#ede9e0",
+  join: "#ede9e0",
   lobby: "#ede9e0",
 };
 

@@ -1,8 +1,8 @@
 import type {
   ActionOrigin,
   ActorType,
+  AlignmentChoice,
   RoomPhase,
-  VoteChoice,
 } from "@/contracts/room";
 
 /**
@@ -10,14 +10,21 @@ import type {
  *
  * Presentation only. Origin and actor labels must never imply that a browser
  * agent or a simulated participant holds authority a human did not grant.
+ *
+ * This is the single, centralized place the internal phase enum is mapped to
+ * user-facing language. The internal enum keeps its original values
+ * (`voting`, `approval`) for database/migration stability, but the product
+ * never says "Voting" or "Approval" to a person — it says "Alignment" and
+ * "Decision". No other component should scatter its own
+ * `phase === "voting" ? "Alignment" : ...` mapping; read it from here.
  */
 
 export const PHASE_LABEL: Record<RoomPhase, string> = {
   input: "Input",
   proposals: "Proposals",
   deliberation: "Deliberation",
-  voting: "Voting",
-  approval: "Approval",
+  voting: "Alignment",
+  approval: "Decision",
   finalized: "Finalized",
 };
 
@@ -25,8 +32,8 @@ export const PHASE_FOCUS: Record<RoomPhase, string> = {
   input: "Participants publish their positions and constraints.",
   proposals: "Candidate proposals are drafted and one becomes active.",
   deliberation: "Objections, conflicts, and trade-offs are worked through.",
-  voting: "Each participant evaluates the candidate for themselves.",
-  approval: "Each required human reviews and authorizes the exact final plan.",
+  voting: "Participants share how they feel about the candidate — support, concerns, or objections.",
+  approval: "The responsible decision authority reviews and confirms the exact final plan.",
   finalized: "The decision record is immutable and fully attributable.",
 };
 
@@ -71,11 +78,19 @@ export const ACTOR_TYPE_LABEL: Record<ActorType, string> = {
   system: "System",
 };
 
-export const VOTE_CHOICE_LABEL: Record<VoteChoice, string> = {
+export const ALIGNMENT_CHOICE_LABEL: Record<AlignmentChoice, string> = {
   support: "Support",
-  oppose: "Oppose",
-  abstain: "Abstain",
-  request_changes: "Request changes",
+  concern: "Concern",
+  strong_objection: "Strong objection",
+  needs_clarification: "Need clarification",
+};
+
+/** Short glyph paired with every alignment choice, colour is never the only cue. */
+export const ALIGNMENT_CHOICE_GLYPH: Record<AlignmentChoice, string> = {
+  support: "✓",
+  concern: "▲",
+  strong_objection: "✕",
+  needs_clarification: "?",
 };
 
 /** Turns `position.added` into `Position added` for the ledger. */
