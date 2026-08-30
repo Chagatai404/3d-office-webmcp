@@ -1,4 +1,9 @@
-insert into public.rooms (id, title, brief, demo_mode, phase, version, created_at)
+begin;
+
+insert into public.rooms (
+  id, title, brief, demo_mode, phase, version, owner_participant_id,
+  decision_policy, created_at
+)
 values (
   'demo',
   'Two-Week Onboarding Launch',
@@ -6,16 +11,19 @@ values (
   'multi_user',
   'input',
   0,
+  'demo-product',
+  'equal_authority_consensus',
   '2026-08-28T12:00:00Z'
 );
 
 insert into public.participants (
-  id, room_id, name, role, kind, required_for_approval, created_at
+  id, room_id, name, role, kind, meeting_role, decision_role,
+  required_for_approval, created_at
 ) values
-  ('demo-product', 'demo', 'Maya', 'Product Manager', 'human', false, '2026-08-28T12:00:00Z'),
-  ('demo-engineer', 'demo', 'Emre', 'Engineer', 'human', true, '2026-08-28T12:00:00Z'),
-  ('demo-designer', 'demo', 'Lina', 'Designer', 'human', true, '2026-08-28T12:00:00Z'),
-  ('demo-marketing', 'demo', 'Ari', 'Marketing Lead', 'human', false, '2026-08-28T12:00:00Z');
+  ('demo-product', 'demo', 'Maya', 'Product Manager', 'human', 'owner', 'decision_maker', false, '2026-08-28T12:00:00Z'),
+  ('demo-engineer', 'demo', 'Emre', 'Engineer', 'human', 'participant', 'decision_maker', true, '2026-08-28T12:00:00Z'),
+  ('demo-designer', 'demo', 'Lina', 'Designer', 'human', 'participant', 'decision_maker', true, '2026-08-28T12:00:00Z'),
+  ('demo-marketing', 'demo', 'Ari', 'Marketing Lead', 'human', 'participant', 'contributor', false, '2026-08-28T12:00:00Z');
 
 insert into public.positions (
   id, room_id, participant_id, summary, category, priority, created_at
@@ -66,12 +74,23 @@ insert into public.audit_events (
 
 -- A non-public room used only to prove cross-room IDs cannot be smuggled into
 -- demo mutations. It is intentionally invisible to unaffiliated sessions.
-insert into public.rooms (id, title, brief, demo_mode, phase, version, created_at)
-values ('authorization-fixture', 'Authorization fixture', 'Cross-room test data.', null, 'proposals', 0, '2026-08-28T12:00:00Z');
+insert into public.rooms (
+  id, title, brief, demo_mode, phase, version, owner_participant_id,
+  decision_policy, created_at
+)
+values (
+  'authorization-fixture', 'Authorization fixture', 'Cross-room test data.',
+  null, 'proposals', 0, 'authorization-participant', 'owner_decides',
+  '2026-08-28T12:00:00Z'
+);
 
 insert into public.participants (
-  id, room_id, name, role, kind, required_for_approval, created_at
-) values ('authorization-participant', 'authorization-fixture', 'Fixture', 'Fixture', 'simulation', false, '2026-08-28T12:00:00Z');
+  id, room_id, name, role, kind, meeting_role, decision_role,
+  required_for_approval, created_at
+) values (
+  'authorization-participant', 'authorization-fixture', 'Fixture', 'Fixture',
+  'simulation', 'owner', 'decision_maker', false, '2026-08-28T12:00:00Z'
+);
 
 insert into public.constraints (
   id, room_id, participant_id, category, text, priority, created_at
@@ -96,3 +115,5 @@ insert into public.conflicts (
     'authorization-constraint', 'system', null, 'blocking',
     'Cross-room conflict.', 'open', '2026-08-28T12:04:00Z', null
   );
+
+commit;

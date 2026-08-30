@@ -59,10 +59,10 @@ export function ParticipantPanel() {
               ) : (
                 <span className="tag">Human</span>
               )}
-              {participant.requiredForApproval ? (
-                <span className="tag">Approval required</span>
+              {participant.decisionRole === "decision_maker" ? (
+                <span className="tag">Decision maker</span>
               ) : (
-                <span className="tag tag-muted">Not an approver</span>
+                <span className="tag tag-muted">{participant.decisionRole}</span>
               )}
             </div>
 

@@ -1,6 +1,7 @@
 import type {
   ActionOrigin,
   ActorType,
+  DecisionRole,
   ProposalStatus,
   RoomPhase,
   RoomState,
@@ -80,7 +81,7 @@ export interface PlanParticipant {
   place: PlanPlace;
   /** Where the puck is drawn, in plan units. */
   at: PlanPoint;
-  requiredForApproval: boolean;
+  decisionRole: DecisionRole;
   vote: VoteChoice | null;
   hasApprovedCurrentDecision: boolean;
   positionCount: number;
@@ -289,7 +290,7 @@ export function createFloorPlanState(room: RoomState): FloorPlanState {
         initials: initialsOf(participant.name),
         place,
         at,
-        requiredForApproval: participant.requiredForApproval,
+        decisionRole: participant.decisionRole,
         vote: votesByParticipant.get(participant.id) ?? null,
         hasApprovedCurrentDecision: approvedParticipantIds.has(participant.id),
         positionCount: positionCounts.get(participant.id) ?? 0,
@@ -369,7 +370,7 @@ export function createFloorPlanState(room: RoomState): FloorPlanState {
   }));
 
   const requiredApprovers = participants.filter(
-    (person) => person.requiredForApproval,
+    (person) => person.decisionRole === "decision_maker",
   );
 
   return {

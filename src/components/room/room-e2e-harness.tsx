@@ -24,7 +24,7 @@ export function RoomE2EHarness() {
   /**
    * The demo room is the only room the demo-only endpoints accept, so it is
    * also the only room whose controls are offered here. A created room gets
-   * the production controls instead: readiness and the organizer phase route.
+   * the production controls instead: readiness and the owner phase route.
    */
   const isDemoRoom = room.id === "demo";
 
@@ -105,7 +105,7 @@ export function RoomE2EHarness() {
             <span>{participant.name}</span>
             <span data-testid={`participant-kind-${participant.id}`}>
               {participant.kind === "simulation" ? "Simulated Participant" : "Human Participant"}
-              {participant.requiredForApproval ? " · Required approver" : ""}
+              {` · ${participant.meetingRole} · ${participant.decisionRole}`}
             </span>
             <span data-testid={`participant-status-${participant.id}`}>
               {participant.id === room.selfParticipantId
@@ -228,7 +228,7 @@ export function RoomE2EHarness() {
       {/*
         A created room progresses through the production route only. The button
         is offered to every seated participant on purpose: the server, not this
-        harness, is what refuses a non-organizer.
+        harness, is what refuses a non-owner.
       */}
       {self && !isDemoRoom && room.phase === "input" ? (
         <button

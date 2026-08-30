@@ -91,7 +91,7 @@ export interface RoomActions {
   /** Claimed human marks their own published input ready. Input phase only. */
   markMyInputReady(): Promise<ActionResult>;
 
-  /** Organizer-only production phase advance. Kept separate from `advanceDemoPhase`. */
+  /** Owner-only production phase advance. Kept separate from `advanceDemoPhase`. */
   advanceRoomPhase(phase: RoomPhase): Promise<ActionResult>;
 }
 

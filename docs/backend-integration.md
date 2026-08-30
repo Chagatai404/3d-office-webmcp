@@ -8,37 +8,45 @@ is used to derive `selfParticipantId` and `isClaimed`, then discarded.
 
 The browser implementation is `ApiRoomClient` in
 `src/clients/api-room-client.ts`. It implements the canonical `RoomClient`
-interface. The implemented flow covers room loading, seat claiming,
+interface. The implemented flow covers room loading, legacy demo seat claiming,
 position and constraint creation, proposal submission, deliberation, voting,
 exact-decision preview, human approval, finalization, and snapshot
 subscriptions.
 
-## Room creation and organizer authority
+## Room creation and canonical authority
 
 `POST /api/rooms` creates a private, non-demo room. `CreateRoomInput` is a
-strict schema, so a request body cannot carry `organizerUserId`, `actorId`,
-`participantId`, `userId` or `origin`; the organizer is always
-`auth.uid()` inside the `public.create_room` transaction, stored on
-`rooms.organizer_user_id`, and checked later through
-`public.is_room_organizer(room_id)`.
+strict `{ title, brief, creatorName, creatorRole, decisionPolicy? }` schema. It
+cannot carry owner/participant/user IDs, meeting or decision roles, action
+origin, or a participant array. Missing policy defaults to `owner_decides` in
+trusted domain logic.
+
+`public.create_room` derives identity from `auth.uid()` and atomically creates
+the room plus exactly one claimed human participant. That participant receives
+`meeting_role = owner` and `decision_role = decision_maker`; its ID is stored as
+`rooms.owner_participant_id`. The room stores `decision_policy` as either
+`owner_decides` or `equal_authority_consensus` and returns only `roomId` plus
+`ownerParticipantId`. Normal production creation creates no placeholder seats
+and no invitation capabilities.
 
 Room ids are opaque and collision-retried (`rm_7P3KQ8M2`). The room id is not a
-security boundary — the invitation token is.
+security boundary. The bound owner participant makes `can_read_room` true for
+the creator without weakening RLS. `room.created` identifies that participant
+as the actor and records version 0 → 0.
 
-Organizer lifecycle semantics: the organizer takes the **first** listed seat.
-That keeps room membership (and therefore `can_read_room`) true for the creator
-without weakening any read policy, and gives the `room.created` audit event a
-real participant actor: `actor_type = participant`, `actor_id` = the organizer's
-seat, `origin = manual_ui` for UI creation. The room is created at version 0, so
-the event records `previousRoomVersion = resultingRoomVersion = 0`.
+The database protects owner integrity with a non-null room owner pointer, a
+deferrable foreign key, a partial unique index allowing at most one `owner`
+meeting role per room, and deferred cross-table triggers that require exactly
+one matching owner at transaction commit. Browser roles have no write grant on
+these tables.
 
-Every other listed seat gets one invitation capability in `room_invitations`,
-which stores only `public.hash_invite_token(raw)` — a SHA-256 hex digest that
-creation, preview and claim all share. The raw token is returned exactly once,
-inside the `CreatedRoom.participantInvites[].inviteUrl` values
-(`<base>/room/<roomId>/join?invite=<token>`), and never enters `RoomState`. The
-table has RLS enabled with no policy and no role grants: it is reachable only
-through `SECURITY DEFINER` functions.
+## Deprecated seat invitations
+
+The pre-Slice-1 invitation preview, claim, regenerate, and revoke contracts and
+routes remain temporarily isolated for backward compatibility and demo-era
+fixtures. Normal creation no longer calls them and cannot produce a
+predetermined seat. Slice 2 will replace them with general room admission and
+passcode capability behavior; do not extend the legacy seat model.
 
 Invitation preview and claim are pre-membership boundaries. They accept the raw
 capability in the POST body, not the URL path, and return only
@@ -57,14 +65,9 @@ revoked, bumps once, audits `invitation.revoked`, and is idempotent if repeated.
 Both operations derive organizer authority from `rooms.organizer_user_id`; the
 request body can only name the target participant seat.
 
-`RoomOnboardingClient` (`ApiRoomOnboardingClient`) is the browser surface for
-this pre-membership step; it is deliberately separate from `RoomClient`, carries
-no room version, and never touches room-runtime state.
-
-Seats render in the order the organizer listed them.
-`participants.seat_order` defaults from a monotonic sequence, because rows
-inserted in one transaction share `created_at` and claiming a seat rewrites its
-row.
+`RoomOnboardingClient` (`ApiRoomOnboardingClient`) remains the browser surface
+for creation and the deprecated preview/claim endpoints. It is separate from
+`RoomClient` and carries no room version.
 
 ## Authentication
 
@@ -74,9 +77,9 @@ validate that token with Supabase Auth and create a request-scoped authenticated
 Supabase client. They never accept an auth user ID or participant ID as actor
 authority.
 
-Postgres resolves `auth.uid()` to the claimed participant inside each mutation
-transaction. The `seatId` in `claimSeat` identifies the requested unclaimed
-seat; it does not become trusted actor evidence.
+Postgres resolves `auth.uid()` to the bound participant inside each mutation
+transaction. Legacy `claimSeat` remains demo/backward-compatibility behavior;
+its `seatId` never becomes trusted actor evidence.
 
 ## Concurrency and mutations
 
@@ -92,7 +95,7 @@ write. Once finalized, every room mutation returns `ALREADY_FINALIZED`.
 
 Readiness and production phase progression are regular room mutations. A
 claimed human can call `mark_my_input_ready` only during `input`, only for their
-own seat, and only after publishing a position. The organizer-only
+own seat, and only after publishing a position. The owner-only
 `advance_room_phase` route moves through `input → proposals → deliberation →
 voting → approval`, enforcing joined/position/ready prerequisites, an active
 proposal, no unresolved blocking conflict, and the shared voting rules.
@@ -104,6 +107,12 @@ participant, no `request_changes` vote, and a strict majority of required
 participants supporting the proposal. Demo and production phase functions share
 that decision logic.
 
+This voting/approval engine is intentionally retained compatibility code. It
+still reads the private `participants.required_for_approval` column and does not
+yet implement either canonical `decisionPolicy`. `requiredForApproval` is no
+longer present in `RoomState`; policy-aware Alignment and finalization are
+deferred to a later slice rather than simulated here.
+
 The approval candidate is stored as canonical JSON and hashed with SHA-256.
 Approvals are participant-scoped and bound to that exact hash. A changed hash
 returns `DECISION_CHANGED`; the final required approval atomically stores the
@@ -114,11 +123,11 @@ state.
 
 - `POST /api/rooms`
 - `GET /api/rooms/:roomId`
-- `POST /api/rooms/:roomId/claim-seat`
+- `POST /api/rooms/:roomId/claim-seat` (legacy/demo compatibility)
 - `POST /api/rooms/:roomId/ready`
 - `POST /api/rooms/:roomId/phase`
-- `POST /api/rooms/:roomId/invitations/regenerate`
-- `POST /api/rooms/:roomId/invitations/revoke`
+- `POST /api/rooms/:roomId/invitations/regenerate` (deprecated)
+- `POST /api/rooms/:roomId/invitations/revoke` (deprecated)
 - `POST /api/rooms/:roomId/positions`
 - `POST /api/rooms/:roomId/proposals`
 - `POST /api/rooms/:roomId/objections`
@@ -127,8 +136,8 @@ state.
 - `GET /api/rooms/:roomId/final-decision`
 - `POST /api/rooms/:roomId/approval`
 - `GET /api/rooms/:roomId/decision-record`
-- `POST /api/invitations/preview`
-- `POST /api/invitations/claim`
+- `POST /api/invitations/preview` (deprecated)
+- `POST /api/invitations/claim` (deprecated)
 
 Mutation routes require `Authorization: Bearer <access-token>` and
 `If-Match: <room-version>`. `POST /api/rooms` and the two `/api/invitations/*`
@@ -147,7 +156,7 @@ authenticated browser session, the literal `demo` room, and
 `ALLOW_DEMO_RESET=true`. After authenticating the caller, the route alone uses
 the server-only `SUPABASE_SERVICE_ROLE_KEY`; the reset RPC is revoked from
 browser roles. Solo mode also requires one canonical human role; that
-participant is the only human and required approver, while the other three
+participant is the only human decision-maker, while the other three
 participants are visibly marked as simulations. The reset is transactional and
 uses a narrowly scoped database trigger bypass so a finalized demo can be
 replayed without weakening the normal finalized-room guard.
@@ -235,8 +244,8 @@ Instantiate one `ApiRoomClient` per browser application session. `RoomProvider`
 exposes the canonical room snapshot and actions, including
 `startDemoScenario`. No component should import Supabase table types or call
 Supabase mutation APIs. Render mode and participant labels from
-`RoomState.demoMode`, `participant.kind`, and
-`participant.requiredForApproval`. Continue to feed 3D only with
+`RoomState.demoMode`, `participant.kind`, `participant.meetingRole`, and
+`participant.decisionRole`. Continue to feed 3D only with
 `createRoomVisualizationState(room)`; the projection includes participant kind
 and activity origin without giving the 3D layer any orchestration authority.
 

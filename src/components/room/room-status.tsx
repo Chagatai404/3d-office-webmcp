@@ -19,9 +19,10 @@ export function RoomStatusPanel() {
     null,
   );
 
-  const organizer = room.participants[0] ?? null;
-  const isOrganizer = Boolean(
-    room.demoMode === null && self && organizer && self.id === organizer.id,
+  const isOwner = Boolean(
+    room.demoMode === null &&
+      self?.id === room.ownerParticipantId &&
+      self.meetingRole === "owner",
   );
   const participantPositionIds = new Set(
     room.positions.map((position) => position.participantId),
@@ -91,29 +92,26 @@ export function RoomStatusPanel() {
 
       <p className="phase-focus">{PHASE_FOCUS[room.phase]}</p>
 
-      {isOrganizer ? (
+      {isOwner ? (
         <div className="organizer-panel" aria-labelledby="organizer-heading">
           <h3 className="panel-subheading" id="organizer-heading">
-            Organizer waiting room
+            Owner phase controls
           </h3>
 
           <ul className="waiting-list">
-            {room.participants.map((participant, index) => (
+            {room.participants.map((participant) => (
               <li key={participant.id} className="waiting-row">
                 <div className="participant-identity">
                   <span className="participant-name">
                     {participant.name}
-                    {index === 0 ? <span className="tag">Organizer</span> : null}
+                    {participant.id === room.ownerParticipantId ? (
+                      <span className="tag">Owner</span>
+                    ) : null}
                   </span>
                   <span className="participant-role">{participant.role}</span>
                 </div>
 
                 <div className="waiting-statuses">
-                  <StatusPill
-                    label="Invited"
-                    active={participant.kind === "human" && index !== 0}
-                    muted={participant.kind !== "human" || index === 0}
-                  />
                   <StatusPill
                     label="Joined"
                     active={participant.isClaimed}
@@ -128,7 +126,7 @@ export function RoomStatusPanel() {
             ))}
           </ul>
 
-          <div className="phase-control-group" aria-label="Organizer phase controls">
+          <div className="phase-control-group" aria-label="Owner phase controls">
             <PhaseAdvanceButton
               phase="proposals"
               label="Start proposals"
@@ -272,7 +270,7 @@ function proposalsDisabledReason(
 ): string | null {
   const required = participants.filter(
     (participant) =>
-      participant.kind === "human" && participant.requiredForApproval,
+      participant.kind === "human" && participant.decisionRole === "decision_maker",
   );
   const unjoined = required.filter((participant) => !participant.isClaimed);
   if (unjoined.length > 0) {
@@ -310,7 +308,8 @@ function approvalDisabledReason(room: {
   const missingVotes = room.participants.filter(
     (participant) =>
       participant.kind === "human" &&
-      participant.requiredForApproval &&
+      // TODO(Slice 3+): make phase readiness policy-aware with Alignment.
+      participant.decisionRole === "decision_maker" &&
       !room.votes.some(
         (vote) =>
           vote.participantId === participant.id &&

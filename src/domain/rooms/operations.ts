@@ -92,18 +92,13 @@ async function prepareMutation(
 
 export interface CreateRoomContext {
   actor: DomainActor;
-  /** Absolute origin used to build shareable invite links, e.g. `https://app.example`. */
-  inviteBaseUrl: string;
 }
 
 /**
- * Creates a private, non-demo room. Organizer identity comes from the
+ * Creates a private, non-demo room. Owner identity comes from the
  * authenticated session only: the input schema is strict, so a request body
- * cannot carry `organizerUserId`, `actorId`, `participantId`, `userId` or
- * `origin`, and the database sets `organizer_user_id` from `auth.uid()`.
- *
- * Raw invitation tokens leave the system exactly once, inside the returned
- * invite URLs; they are never persisted and never enter `RoomState`.
+ * cannot carry authority identifiers or roles, and the database binds the
+ * single owner participant to `auth.uid()` atomically.
  */
 export async function createRoom(
   repository: RoomRepository,
@@ -114,41 +109,28 @@ export async function createRoom(
   if (!parsed.success) {
     return failure("VALIDATION_ERROR", "Room creation input is invalid.", 0);
   }
-  const distinctNames = new Set(
-    parsed.data.participants.map((participant) => participant.name.trim()),
-  );
-  if (distinctNames.size !== parsed.data.participants.length) {
-    return failure(
-      "VALIDATION_ERROR",
-      "Participant names must be unique within a room.",
-      0,
-    );
-  }
   if (!context.actor.authUserId) {
     return failure("NOT_AUTHORIZED", "An authenticated session is required.", 0);
   }
 
-  const created = await repository.createRoom(parsed.data, context.actor);
+  const created = await repository.createRoom(
+    {
+      ...parsed.data,
+      decisionPolicy: parsed.data.decisionPolicy ?? "owner_decides",
+    },
+    context.actor,
+  );
   if (!created.ok) return created;
 
   return {
     ...created,
-    data: createdRoomSchema.parse({
-      roomId: created.data.roomId,
-      participantInvites: created.data.participantInvites.map((invite) => ({
-        participantId: invite.participantId,
-        role: invite.role,
-        inviteUrl: buildInviteUrl(
-          context.inviteBaseUrl,
-          created.data.roomId,
-          invite.inviteToken,
-        ),
-      })),
-    }),
+    data: createdRoomSchema.parse(created.data),
   };
 }
 
 /**
+ * @deprecated Predetermined-seat compatibility path. Slice 2 replaces it with
+ * general admission; normal creation no longer generates these tokens.
  * Resolves a raw invitation token into the narrow pre-membership preview.
  *
  * An unknown, expired, revoked or foreign-claimed token is not an error: it is
@@ -171,6 +153,7 @@ export async function previewRoomInvitation(
 }
 
 /**
+ * @deprecated Predetermined-seat compatibility path pending Slice 2.
  * Binds the authenticated session to the one seat its capability names. The
  * input carries no seat, participant or user field, so the claimed seat is
  * always the one the token was minted for; the database performs the whole
@@ -405,15 +388,15 @@ export async function markMyInputReady(
 }
 
 /**
- * Organizer-only production phase advance.
+ * Owner-only production phase advance.
  *
  * Deliberately not `advanceDemoRoomPhase`: that one is a demo-room developer
  * affordance authorized by any claimed seat, while this one is authorized by
- * the server-derived organizer of a real room and enforces the per-phase
+ * the server-derived owner membership of a real room and enforces the per-phase
  * prerequisites (readiness, an active proposal, no blocking conflict, the
  * existing voting rules).
  *
- * `approval` is not a source phase here, so an organizer can move a room into
+ * `approval` is not a source phase here, so an owner can move a room into
  * approval but never past it: finalization stays with the last required human
  * approval.
  */
@@ -451,6 +434,7 @@ export async function advanceRoomPhase(
 }
 
 /**
+ * @deprecated Predetermined-seat compatibility path pending Slice 2.
  * Organizer-only rotation for an unclaimed seat invitation.
  *
  * The participant id names the target seat, not the actor. Organizer authority
@@ -483,6 +467,7 @@ export async function regenerateRoomInvitation(
 }
 
 /**
+ * @deprecated Predetermined-seat compatibility path pending Slice 2.
  * Organizer-only revocation for an unclaimed seat invitation. A revoked link
  * stops preview/claim but never removes or changes the participant seat.
  */

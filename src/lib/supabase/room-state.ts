@@ -9,7 +9,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const roomRowSchema = z.object({
   id: z.string(), title: z.string(), brief: z.string(), demo_mode: z.string().nullable(), phase: z.string(),
-  version: z.number(), active_proposal_id: z.string().nullable(),
+  version: z.number(), owner_participant_id: z.string(), decision_policy: z.string(),
+  active_proposal_id: z.string().nullable(),
   finalized_at: z.string().nullable(), decision_candidate: z.unknown().nullable(),
   decision_hash: z.string().nullable(),
 });
@@ -27,7 +28,7 @@ export async function loadRoomState(
 ): Promise<RoomState | null> {
   const roomResult = await client
     .from("rooms")
-    .select("id,title,brief,demo_mode,phase,version,active_proposal_id,finalized_at,decision_candidate,decision_hash")
+    .select("id,title,brief,demo_mode,phase,version,owner_participant_id,decision_policy,active_proposal_id,finalized_at,decision_candidate,decision_hash")
     .eq("id", roomId)
     .maybeSingle();
   if (roomResult.error) throw new Error(roomResult.error.message);
@@ -36,7 +37,7 @@ export async function loadRoomState(
 
   const [participants, positions, constraints, proposals, conflicts, tradeoffs, votes, approvals, activity] =
     await Promise.all([
-      client.from("participants").select("id,user_id,name,role,kind,required_for_approval,ready_at,created_at").eq("room_id", roomId).order("seat_order"),
+      client.from("participants").select("id,user_id,name,role,kind,meeting_role,decision_role,required_for_approval,ready_at,created_at").eq("room_id", roomId).order("seat_order"),
       client.from("positions").select("id,participant_id,summary,category,priority,created_at").eq("room_id", roomId).order("created_at"),
       client.from("constraints").select("id,participant_id,category,text,priority,created_at").eq("room_id", roomId).order("created_at"),
       client.from("proposals").select("id,participant_id,title,summary,rationale,expected_outcomes,referenced_constraint_ids,parent_proposal_id,status,created_at").eq("room_id", roomId).order("created_at"),
@@ -79,6 +80,8 @@ export async function loadRoomState(
     demoMode: room.demo_mode,
     phase: room.phase,
     version: room.version,
+    ownerParticipantId: room.owner_participant_id,
+    decisionPolicy: room.decision_policy,
     selfParticipantId:
       (participantRows.find((participant) => participant.user_id === authUserId)?.id as string | undefined) ?? null,
     activeProposalId: room.active_proposal_id,
@@ -89,11 +92,12 @@ export async function loadRoomState(
       name: participant.name,
       role: participant.role,
       kind: participant.kind,
+      meetingRole: participant.meeting_role,
+      decisionRole: participant.decision_role,
       isClaimed: participant.kind === "simulation" || participant.user_id !== null,
       // `ready_at` is a server-set timestamp; the canonical DTO exposes only
       // whether the seat has declared its input complete.
       isReady: participant.ready_at !== null,
-      requiredForApproval: participant.required_for_approval,
       createdAt: participant.created_at,
     })),
     positions: (requireRows(positions) as Array<Record<string, unknown>>).map((row) => ({

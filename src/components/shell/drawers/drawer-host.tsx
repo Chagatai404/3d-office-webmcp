@@ -4,7 +4,6 @@ import { useShell } from "../shell-provider";
 import { ActivityDrawer } from "./activity-drawer";
 import { AgentsDrawer } from "./agents-drawer";
 import { HelpDrawer } from "./help-drawer";
-import { InviteDrawer } from "./invite-drawer";
 import { LeaveDrawer } from "./leave-drawer";
 import { ParticipantsDrawer } from "./participants-drawer";
 import { RoleDrawer } from "./role-drawer";
@@ -19,8 +18,6 @@ export function DrawerHost() {
       return <ParticipantsDrawer />;
     case "role":
       return <RoleDrawer />;
-    case "invite":
-      return <InviteDrawer />;
     case "activity":
       return <ActivityDrawer />;
     case "agents":

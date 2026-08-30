@@ -32,23 +32,13 @@ export interface MutationContext {
   humanConfirmed?: boolean;
 }
 
-export interface CreatedRoomInvitation {
-  participantId: string;
-  role: string;
-  /**
-   * Raw invitation capability. It exists only on this creation boundary: it is
-   * never persisted (only its hash is) and never reaches `RoomState`.
-   */
-  inviteToken: string;
-}
-
-/** Internal creation record. The public DTO adds invite URLs and drops tokens. */
+/** Internal creation record returned by the atomic database operation. */
 export interface CreatedRoomRecord {
   roomId: string;
-  participantInvites: CreatedRoomInvitation[];
+  ownerParticipantId: string;
 }
 
-/** Internal invite-management record. The public DTO adds the invite URL. */
+/** @deprecated Slice 2 replaces predetermined-seat invitation management. */
 export interface RegeneratedRoomInvitationRecord {
   participantId: string;
   role: string;

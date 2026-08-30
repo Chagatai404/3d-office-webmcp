@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   castVoteInputSchema,
+  decisionPolicySchema,
+  participantSchema,
   roomStateSchema,
   startDemoScenarioInputSchema,
 } from "@/contracts/room";
@@ -21,6 +23,27 @@ describe("canonical room contract", () => {
     unsafeRoom.participants[0]!.userId = "auth-user-id";
 
     expect(roomStateSchema.safeParse(unsafeRoom).success).toBe(false);
+  });
+
+  it("models participant authority explicitly without requiredForApproval", () => {
+    const participant = demoRoom.participants[0]!;
+    expect(participantSchema.parse(participant)).toMatchObject({
+      meetingRole: "owner",
+      decisionRole: "decision_maker",
+    });
+    expect("requiredForApproval" in participant).toBe(false);
+  });
+
+  it("requires an owner pointer and explicit decision policy", () => {
+    expect(demoRoom.ownerParticipantId).toBe("participant-product");
+    expect(decisionPolicySchema.parse(demoRoom.decisionPolicy)).toBe(
+      "equal_authority_consensus",
+    );
+    expect(decisionPolicySchema.safeParse("majority").success).toBe(false);
+
+    const withoutOwner = structuredClone(demoRoom) as Partial<typeof demoRoom>;
+    delete withoutOwner.ownerParticipantId;
+    expect(roomStateSchema.safeParse(withoutOwner).success).toBe(false);
   });
 
   it("rejects browser-supplied participant authority", () => {

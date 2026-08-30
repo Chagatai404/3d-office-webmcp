@@ -26,7 +26,6 @@ import type { WorkspaceId } from "@/visualization/scene/camera-poses";
 export type DrawerId =
   | "participants"
   | "role"
-  | "invite"
   | "activity"
   | "agents"
   | "settings"

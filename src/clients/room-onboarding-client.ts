@@ -9,7 +9,8 @@ import type {
 
 /**
  * Pre-membership onboarding surface: room creation and invitation
- * preview/claim. Kept separate from `RoomClient` because these operations
+ * preview/claim. The invitation methods are deprecated predetermined-seat
+ * compatibility APIs pending Slice 2. Kept separate from `RoomClient` because these operations
  * happen before a caller has an authenticated seat in a room.
  */
 export interface RoomOnboardingClient {

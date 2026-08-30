@@ -44,15 +44,32 @@ export const actionOriginSchema = z.enum([
 ]);
 export type ActionOrigin = z.infer<typeof actionOriginSchema>;
 
+export const meetingRoleSchema = z.enum(["owner", "cohost", "participant"]);
+export type MeetingRole = z.infer<typeof meetingRoleSchema>;
+
+export const decisionRoleSchema = z.enum([
+  "decision_maker",
+  "contributor",
+  "advisor",
+]);
+export type DecisionRole = z.infer<typeof decisionRoleSchema>;
+
+export const decisionPolicySchema = z.enum([
+  "owner_decides",
+  "equal_authority_consensus",
+]);
+export type DecisionPolicy = z.infer<typeof decisionPolicySchema>;
+
 export const participantSchema = z
   .object({
     id: idSchema,
     name: z.string().min(1),
     role: z.string().min(1),
     kind: z.enum(["human", "simulation"]),
+    meetingRole: meetingRoleSchema,
+    decisionRole: decisionRoleSchema,
     isClaimed: z.boolean(),
     isReady: z.boolean(),
-    requiredForApproval: z.boolean(),
     createdAt: timestampSchema,
   })
   .strict();
@@ -380,6 +397,8 @@ export const roomStateSchema = z
     demoMode: demoModeSchema.nullable(),
     phase: roomPhaseSchema,
     version: z.number().int().nonnegative(),
+    ownerParticipantId: idSchema,
+    decisionPolicy: decisionPolicySchema,
     selfParticipantId: idSchema.nullable(),
     activeProposalId: idSchema.nullable(),
     finalizedAt: timestampSchema.nullable(),
@@ -457,26 +476,21 @@ export const actionResultSchema = <T extends z.ZodType>(dataSchema: T) =>
  * a room, so their DTOs are kept separate from `RoomState`.
  */
 
-export const createRoomParticipantInputSchema = z
-  .object({
-    name: z.string().min(1),
-    role: z.string().min(1),
-    requiredForApproval: z.boolean(),
-  })
-  .strict();
-export type CreateRoomParticipantInput = z.infer<
-  typeof createRoomParticipantInputSchema
->;
-
 export const createRoomInputSchema = z
   .object({
-    title: z.string().min(1),
-    brief: z.string().min(1),
-    participants: z.array(createRoomParticipantInputSchema).min(2),
+    title: z.string().trim().min(1).max(160),
+    brief: z.string().trim().min(1).max(4_000),
+    creatorName: z.string().trim().min(1).max(120),
+    creatorRole: z.string().trim().min(1).max(120),
+    decisionPolicy: decisionPolicySchema.optional(),
   })
   .strict();
 export type CreateRoomInput = z.infer<typeof createRoomInputSchema>;
 
+/**
+ * @deprecated Slice 2 replaces predetermined-seat invitation APIs with a
+ * general room admission capability. Kept only for existing legacy routes.
+ */
 export const createdRoomParticipantInviteSchema = z
   .object({
     participantId: idSchema,
@@ -491,11 +505,16 @@ export type CreatedRoomParticipantInvite = z.infer<
 export const createdRoomSchema = z
   .object({
     roomId: idSchema,
-    participantInvites: z.array(createdRoomParticipantInviteSchema),
+    ownerParticipantId: idSchema,
   })
   .strict();
 export type CreatedRoom = z.infer<typeof createdRoomSchema>;
 
+/**
+ * @deprecated Legacy predetermined-seat invitation boundary. Slice 2 will
+ * replace preview/claim/manage DTOs with general admission contracts. Normal
+ * room creation does not produce these capabilities.
+ */
 const roomInvitePreviewParticipantSchema = z
   .object({
     id: idSchema,
@@ -624,19 +643,19 @@ export interface RoomClient {
   /** Claimed human marks their own published input ready. Input phase only. */
   markMyInputReady(roomId: string): Promise<ActionResult>;
 
-  /** Organizer-only production phase advance. Kept separate from `advanceDemoPhase`. */
+  /** Owner-only production phase advance. Kept separate from `advanceDemoPhase`. */
   advanceRoomPhase(
     roomId: string,
     phase: RoomPhase,
   ): Promise<ActionResult>;
 
-  /** Organizer-only rotation for an unclaimed participant invitation. */
+  /** @deprecated Predetermined-seat compatibility path pending Slice 2. */
   regenerateInvitation(
     roomId: string,
     input: ManageRoomInvitationInput,
   ): Promise<ActionResult<RegeneratedRoomInvitation>>;
 
-  /** Organizer-only revocation for an unclaimed participant invitation. */
+  /** @deprecated Predetermined-seat compatibility path pending Slice 2. */
   revokeInvitation(
     roomId: string,
     input: ManageRoomInvitationInput,

@@ -304,9 +304,9 @@ function OfficeRail({ view, index }: { view: FloorPlanState; index: number }) {
           </p>
         ) : null}
         <p className="rail-brief">
-          {person.requiredForApproval
-            ? "A required approver. Their approval is needed before this room can finalize."
-            : "Not a required approver for this decision."}
+          {person.decisionRole === "decision_maker"
+            ? "A decision-maker for this meeting."
+            : `Participates as a ${person.decisionRole.replace("_", " ")}.`}
         </p>
       </header>
 

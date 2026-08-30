@@ -147,13 +147,16 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext) {
           demoMode: room.demoMode,
           phase: room.phase,
           roomVersion: room.version,
+          ownerParticipantId: room.ownerParticipantId,
+          decisionPolicy: room.decisionPolicy,
           currentParticipant: self
               ? {
                   participantId: self.id,
                   name: self.name,
                   role: self.role,
                   kind: self.kind,
-                  requiredForApproval: self.requiredForApproval,
+                  meetingRole: self.meetingRole,
+                  decisionRole: self.decisionRole,
                 }
             : null,
           participantRoles: room.participants.map((participant) => ({
@@ -161,7 +164,8 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext) {
             name: participant.name,
             role: participant.role,
             kind: participant.kind,
-            requiredForApproval: participant.requiredForApproval,
+            meetingRole: participant.meetingRole,
+            decisionRole: participant.decisionRole,
           })),
           positions: room.positions.map((position) => ({
             participantId: position.participantId,

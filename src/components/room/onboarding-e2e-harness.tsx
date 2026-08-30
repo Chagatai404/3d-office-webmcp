@@ -115,15 +115,7 @@ export function OnboardingE2EHarness({
       {created ? (
         <section data-testid="created-room">
           <p data-testid="created-room-id">{created.roomId}</p>
-          <ul>
-            {created.participantInvites.map((invite, index) => (
-              <li key={invite.participantId}>
-                <span data-testid={`invite-role-${index}`}>{invite.role}</span>
-                <span data-testid={`invite-participant-${index}`}>{invite.participantId}</span>
-                <span data-testid={`invite-url-${index}`}>{invite.inviteUrl}</span>
-              </li>
-            ))}
-          </ul>
+          <p data-testid="created-owner-participant-id">{created.ownerParticipantId}</p>
         </section>
       ) : null}
 

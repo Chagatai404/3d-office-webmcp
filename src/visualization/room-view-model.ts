@@ -1,6 +1,7 @@
 import type {
   ActionOrigin,
   ActorType,
+  DecisionRole,
   ProposalStatus,
   RoomPhase,
   RoomState,
@@ -27,7 +28,7 @@ export interface VisualParticipant {
   isSelf: boolean;
   /** Deterministic seat around the table, stable for a given participant order. */
   seatIndex: number;
-  requiredForApproval: boolean;
+  decisionRole: DecisionRole;
   vote: VoteChoice | null;
   hasApprovedCurrentDecision: boolean;
 }
@@ -138,7 +139,7 @@ export function createPlaceholderVisualizationState(
       isClaimed: false,
       isSelf: false,
       seatIndex: index,
-      requiredForApproval: false,
+      decisionRole: "contributor",
       vote: null,
       hasApprovedCurrentDecision: false,
     }),
@@ -196,7 +197,7 @@ export function createRoomVisualizationState(
       isClaimed: participant.isClaimed,
       isSelf: participant.id === room.selfParticipantId,
       seatIndex: index,
-      requiredForApproval: participant.requiredForApproval,
+      decisionRole: participant.decisionRole,
       vote: votesByParticipant.get(participant.id) ?? null,
       hasApprovedCurrentDecision: approvedParticipantIds.has(participant.id),
     }),
@@ -209,8 +210,10 @@ export function createRoomVisualizationState(
     isActive: proposal.id === room.activeProposalId,
   }));
 
+  // TODO(Slice 3+): replace legacy approval progress with policy-aware
+  // alignment/finalization progress.
   const requiredApprovers = participants.filter(
-    (participant) => participant.requiredForApproval,
+    (participant) => participant.decisionRole === "decision_maker",
   );
 
   return {

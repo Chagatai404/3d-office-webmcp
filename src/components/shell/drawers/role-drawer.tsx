@@ -16,7 +16,7 @@ export function RoleDrawer() {
           <span className="drawer-role-seat-label">Your seat</span>
           <p className="drawer-role-seat-value">
             {self.role}
-            {self.requiredForApproval ? " · required for approval" : " · advisory"}
+            {` · ${self.meetingRole.replace("_", " ")} · ${self.decisionRole.replace("_", " ")}`}
           </p>
         </div>
       ) : (
@@ -29,9 +29,9 @@ export function RoleDrawer() {
         <li>✓ Raise objections and propose trade-offs</li>
         <li>✓ Cast one vote, changeable until the phase closes</li>
         <li>
-          {self?.requiredForApproval
-            ? "✓ Approve or reject the final plan, for yourself only"
-            : "○ Not a required approver for the final plan"}
+          {self?.decisionRole === "decision_maker"
+            ? "✓ Holds explicit decision authority"
+            : "○ Contributes without final decision authority"}
         </li>
         <li>✕ Nothing on anyone else&apos;s behalf, ever</li>
       </ul>

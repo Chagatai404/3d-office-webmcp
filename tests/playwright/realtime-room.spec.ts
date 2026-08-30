@@ -350,10 +350,14 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   await expect(page.getByTestId("demo-mode")).toHaveText("Mode: solo_judge");
   await expect(page.getByTestId("room-phase")).toHaveText("input");
   await expect(page.getByTestId("room-version")).toHaveText("3");
-  await expect(page.getByTestId("participant-kind-demo-product")).toContainText("Human Participant · Required approver");
-  await expect(page.getByTestId("participant-kind-demo-engineer")).toHaveText("Simulated Participant");
-  await expect(page.getByTestId("participant-kind-demo-designer")).toHaveText("Simulated Participant");
-  await expect(page.getByTestId("participant-kind-demo-marketing")).toHaveText("Simulated Participant");
+  await expect(page.getByTestId("participant-kind-demo-product"))
+    .toHaveText("Human Participant · owner · decision_maker");
+  await expect(page.getByTestId("participant-kind-demo-engineer"))
+    .toHaveText("Simulated Participant · participant · advisor");
+  await expect(page.getByTestId("participant-kind-demo-designer"))
+    .toHaveText("Simulated Participant · participant · advisor");
+  await expect(page.getByTestId("participant-kind-demo-marketing"))
+    .toHaveText("Simulated Participant · participant · advisor");
 
   await page.getByTestId("claim-demo-product").click();
   await expect(page.getByText("Your seat")).toBeVisible();

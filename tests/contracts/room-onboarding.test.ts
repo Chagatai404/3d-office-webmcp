@@ -16,22 +16,20 @@ import { demoRoom } from "@/fixtures/demo-room";
 const validInput: CreateRoomInput = {
   title: "Two-Week Onboarding Launch",
   brief: "Should we ship the onboarding update within two weeks?",
-  participants: [
-    { name: "Maya", role: "Product Manager", requiredForApproval: false },
-    { name: "Emre", role: "Engineer", requiredForApproval: true },
-  ],
+  creatorName: "Maya",
+  creatorRole: "Product Manager",
 };
 
 describe("room creation contract", () => {
-  it("accepts a minimal two-participant room", () => {
+  it("accepts one creator and no participant array", () => {
     expect(createRoomInputSchema.parse(validInput)).toEqual(validInput);
   });
 
-  it("requires at least two participants", () => {
+  it("rejects predetermined participant seats", () => {
     expect(
       createRoomInputSchema.safeParse({
         ...validInput,
-        participants: [validInput.participants[0]],
+        participants: [{ name: "Emre", role: "Engineer" }],
       }).success,
     ).toBe(false);
   });
@@ -42,6 +40,9 @@ describe("room creation contract", () => {
     "participantId",
     "userId",
     "origin",
+    "ownerParticipantId",
+    "meetingRole",
+    "decisionRole",
   ])("rejects browser-supplied %s authority", (field) => {
     expect(
       createRoomInputSchema.safeParse({ ...validInput, [field]: "smuggled" })
@@ -49,30 +50,16 @@ describe("room creation contract", () => {
     ).toBe(false);
   });
 
-  it.each(["id", "userId", "kind", "isClaimed"])(
-    "rejects %s on a requested participant seat",
-    (field) => {
-      expect(
-        createRoomInputSchema.safeParse({
-          ...validInput,
-          participants: [
-            { ...validInput.participants[0], [field]: "smuggled" },
-            validInput.participants[1],
-          ],
-        }).success,
-      ).toBe(false);
-    },
-  );
-
-  it("requires an explicit approval requirement per participant", () => {
+  it("accepts only supported decision policies", () => {
     expect(
       createRoomInputSchema.safeParse({
         ...validInput,
-        participants: [
-          { name: "Maya", role: "Product Manager" },
-          validInput.participants[1],
-        ],
+        decisionPolicy: "equal_authority_consensus",
       }).success,
+    ).toBe(true);
+    expect(
+      createRoomInputSchema.safeParse({ ...validInput, decisionPolicy: "majority" })
+        .success,
     ).toBe(false);
   });
 });
@@ -80,32 +67,23 @@ describe("room creation contract", () => {
 describe("created room DTO", () => {
   const createdRoom = {
     roomId: "rm_7P3KQ8M2",
-    participantInvites: [
-      {
-        participantId: "participant-engineer",
-        role: "Engineer",
-        inviteUrl:
-          "https://app.example/room/rm_7P3KQ8M2/join?invite=raw-capability",
-      },
-    ],
+    ownerParticipantId: "participant-owner",
   };
 
-  it("carries only the shareable invite URL", () => {
+  it("returns only the room and owner participant identities", () => {
     expect(createdRoomSchema.parse(createdRoom)).toEqual(createdRoom);
   });
 
-  it("rejects a raw invite token on the DTO", () => {
+  it("rejects legacy seat invitations on the creation result", () => {
     expect(
       createdRoomSchema.safeParse({
         ...createdRoom,
-        participantInvites: [
-          { ...createdRoom.participantInvites[0], inviteToken: "raw" },
-        ],
+        participantInvites: [],
       }).success,
     ).toBe(false);
   });
 
-  it("builds one invite URL per predetermined seat", () => {
+  it("keeps the deprecated URL helper isolated for legacy invitation routes", () => {
     expect(buildInviteUrl("https://app.example/", "rm_7P3KQ8M2", "raw token")).toBe(
       "https://app.example/room/rm_7P3KQ8M2/join?invite=raw%20token",
     );

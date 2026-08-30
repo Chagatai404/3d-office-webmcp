@@ -142,12 +142,6 @@ export async function newParticipantContext(browser: Browser) {
   return { context, page };
 }
 
-export interface CreatedRoomInvite {
-  role: string;
-  participantId: string;
-  inviteUrl: string;
-}
-
 /**
  * Drives the onboarding harness the way an organizer drives the product's own
  * creation form: `ApiRoomOnboardingClient.createRoom()` over `POST /api/rooms`,
@@ -156,23 +150,17 @@ export interface CreatedRoomInvite {
 export async function createRoomThroughOnboarding(
   page: Page,
   input: CreateRoomInput,
-): Promise<{ roomId: string; invites: CreatedRoomInvite[] }> {
+): Promise<{ roomId: string; ownerParticipantId: string }> {
   await page.goto("/e2e/onboarding");
   await page.getByTestId("create-room-input").fill(JSON.stringify(input));
   await page.getByTestId("create-room").click();
   await expect(page.getByTestId("created-room")).toBeVisible();
 
   const roomId = (await page.getByTestId("created-room-id").innerText()).trim();
-  const invites: CreatedRoomInvite[] = [];
-  // One invitation per seat except the organizer's, which is already claimed.
-  for (let index = 0; index < input.participants.length - 1; index += 1) {
-    invites.push({
-      role: (await page.getByTestId(`invite-role-${index}`).innerText()).trim(),
-      participantId: (await page.getByTestId(`invite-participant-${index}`).innerText()).trim(),
-      inviteUrl: (await page.getByTestId(`invite-url-${index}`).innerText()).trim(),
-    });
-  }
-  return { roomId, invites };
+  const ownerParticipantId = (
+    await page.getByTestId("created-owner-participant-id").innerText()
+  ).trim();
+  return { roomId, ownerParticipantId };
 }
 
 /** The raw capability an invite link carries. */

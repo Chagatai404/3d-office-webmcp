@@ -1,16 +1,16 @@
 # Repository status
 
-Last reorganized: 2026-08-29.
+Last updated: 2026-08-30.
 
 ## Core platform
 
 The backend/core workstream is considered integrated in this snapshot:
 
 - canonical room contract;
-- runtime room creation;
-- anonymous auth + participant seat claiming;
-- role-specific invitations;
-- organizer authority;
+- creator-only runtime room creation;
+- explicit meeting roles, decision roles, owner pointer, and decision policy;
+- anonymous auth with the creator atomically bound as owner and decision-maker;
+- deprecated seat invitation endpoints retained only for compatibility;
 - phase transitions;
 - positions, proposals, objections, trade-offs, voting, and approval;
 - exact decision hash and immutable final record;
@@ -18,6 +18,17 @@ The backend/core workstream is considered integrated in this snapshot:
 - participant-scoped WebMCP tools;
 - solo-judge demo orchestration;
 - domain, WebMCP, and multi-browser coverage.
+
+Normal room creation now creates only the authenticated creator. The creator is
+the initial owner and decision-maker, and `owner_decides` is the default policy.
+Production participant admission will be implemented in the next slice. The
+seeded demo remains allowed to create explicit internal simulation fixtures and
+does not change production creation behavior.
+
+The full voting/alignment/finalization rewrite is not part of Slice 1. Legacy
+decision functions temporarily retain the private database
+`required_for_approval` compatibility field; it is no longer a canonical DTO
+authority primitive.
 
 See [`backend-integration.md`](backend-integration.md) and
 [`workstreams/core-platform-completed.md`](workstreams/core-platform-completed.md)

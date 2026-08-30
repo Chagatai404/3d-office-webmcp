@@ -56,6 +56,7 @@ describe.sequential("Supabase-backed room domain operations", () => {
   let designer: Awaited<ReturnType<typeof anonymousActor>>;
   let product: Awaited<ReturnType<typeof anonymousActor>>;
   let demoAdminRepository: SupabaseRoomRepository;
+  let demoAdminClient: ReturnType<typeof createClient>;
   let engineerConstraintId = "";
   let proposalId = "";
   let conflictId = "";
@@ -64,9 +65,10 @@ describe.sequential("Supabase-backed room domain operations", () => {
     if (!serviceRoleKey) {
       throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for guarded demo reset tests.");
     }
-    demoAdminRepository = new SupabaseRoomRepository(createClient(url, serviceRoleKey, {
+    demoAdminClient = createClient(url, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
-    }));
+    });
+    demoAdminRepository = new SupabaseRoomRepository(demoAdminClient);
     engineer = await anonymousActor();
     designer = await anonymousActor();
     product = await anonymousActor();
@@ -80,6 +82,28 @@ describe.sequential("Supabase-backed room domain operations", () => {
       context("", 0),
     );
     expect(result).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" }, roomVersion: 0 });
+  });
+
+  it("enforces one owner per room at the database boundary", async () => {
+    const duplicateOwner = await demoAdminClient.from("participants").insert({
+      id: "demo-duplicate-owner",
+      room_id: "demo",
+      name: "Duplicate owner",
+      role: "Fixture",
+      kind: "simulation",
+      meeting_role: "owner",
+      decision_role: "decision_maker",
+      required_for_approval: false,
+    } as never);
+    expect(duplicateOwner.error).toBeTruthy();
+
+    const owners = await demoAdminClient
+      .from("participants")
+      .select("id")
+      .eq("room_id", "demo")
+      .eq("meeting_role", "owner");
+    expect(owners.error).toBeNull();
+    expect(owners.data).toEqual([{ id: "demo-product" }]);
   });
 
   it("allows two anonymous sessions to claim different seats", async () => {
@@ -703,7 +727,7 @@ describe.sequential("Supabase-backed room domain operations", () => {
     expect(room).toMatchObject({ demoMode: "solo_judge", phase: "input", version: 3 });
     expect(room?.participants.filter((participant) => participant.kind === "human").map((participant) => participant.id)).toEqual(["demo-product"]);
     expect(room?.participants.filter((participant) => participant.kind === "simulation")).toHaveLength(3);
-    expect(room?.participants.filter((participant) => participant.requiredForApproval).map((participant) => participant.id)).toEqual(["demo-product"]);
+    expect(room?.participants.filter((participant) => participant.decisionRole === "decision_maker").map((participant) => participant.id)).toEqual(["demo-product"]);
     expect(room?.positions).toHaveLength(3);
     expect(room?.activity.filter((event) => event.action === "position.added" && event.origin === "simulation")).toHaveLength(3);
 
@@ -996,7 +1020,7 @@ describe.sequential("Supabase-backed room domain operations", () => {
     const multiRoom = await getMeetingContext(product.repository, product.userId, "demo");
     expect(multiRoom).toMatchObject({ demoMode: "multi_user", phase: "input", version: 0 });
     expect(multiRoom?.participants.every((participant) => participant.kind === "human")).toBe(true);
-    expect(multiRoom?.participants.filter((participant) => participant.requiredForApproval).map((participant) => participant.id).sort()).toEqual(["demo-designer", "demo-engineer"]);
+    expect(multiRoom?.participants.filter((participant) => participant.decisionRole === "decision_maker").map((participant) => participant.id).sort()).toEqual(["demo-designer", "demo-engineer", "demo-product"]);
     expect(multiRoom?.positions).toHaveLength(4);
   });
 });

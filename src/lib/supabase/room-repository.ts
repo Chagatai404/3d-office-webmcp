@@ -40,15 +40,7 @@ import { loadRoomState } from "./room-state";
 const createdRoomRecordSchema = z
   .object({
     roomId: z.string().min(1),
-    participantInvites: z.array(
-      z
-        .object({
-          participantId: z.string().min(1),
-          role: z.string().min(1),
-          inviteToken: z.string().min(1),
-        })
-        .strict(),
-    ),
+    ownerParticipantId: z.string().min(1),
   })
   .strict() satisfies z.ZodType<CreatedRoomRecord>;
 
@@ -71,7 +63,9 @@ export class SupabaseRoomRepository implements RoomRepository {
       {
         p_title: input.title,
         p_brief: input.brief,
-        p_participants: input.participants,
+        p_creator_name: input.creatorName,
+        p_creator_role: input.creatorRole,
+        p_decision_policy: input.decisionPolicy ?? "owner_decides",
         p_origin: actor.origin,
       },
       createdRoomRecordSchema,
