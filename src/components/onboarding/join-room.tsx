@@ -63,6 +63,10 @@ export function JoinRoom({ roomId: routeRoomId, inviteToken = null, client: supp
     return () => { active = false; };
   }, [client, inviteToken]);
 
+  // Depends only on the id/status pair, not the whole `joinRequest` object --
+  // every successful "still waiting" poll below produces a fresh object
+  // reference, and depending on that would tear down and recreate this
+  // interval on every tick instead of ticking steadily every 2s.
   useEffect(() => {
     if (!joinRequest || joinRequest.status !== "waiting") return;
     let active = true;
@@ -71,12 +75,22 @@ export function JoinRoom({ roomId: routeRoomId, inviteToken = null, client: supp
         const result = await client.getMyJoinRequest(joinRequest.id);
         if (!active || !result.ok) return;
         setJoinRequest(result.data);
-        if (result.data.status === "admitted") router.push(`/room/${encodeURIComponent(result.data.roomId)}`);
       } catch { /* transient polling failures retain the safe waiting state */ }
     };
     const interval = window.setInterval(() => void check(), 2000);
     return () => { active = false; window.clearInterval(interval); };
-  }, [client, joinRequest, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- id/status is the intentional, minimal dependency; see the comment above.
+  }, [client, joinRequest?.id, joinRequest?.status]);
+
+  // Handles every path that can produce an admitted `joinRequest` -- the poll
+  // above, but also `adopt()` finding a request that was already admitted by
+  // the time this page (re)mounted -- so the "Opening the meeting..." state
+  // always actually navigates instead of sometimes sitting there forever.
+  useEffect(() => {
+    if (joinRequest?.status === "admitted") {
+      router.push(`/room/${encodeURIComponent(joinRequest.roomId)}`);
+    }
+  }, [joinRequest, router]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

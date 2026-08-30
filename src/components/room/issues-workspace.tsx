@@ -109,7 +109,7 @@ export function IssuesWorkspace() {
         onSubmit={handleObjectionSubmit}
       >
         <h3 className="panel-subheading">Objections</h3>
-        <ConflictList room={room} conflicts={room.conflicts} />
+        <ConflictList room={room} conflicts={openConflicts} />
         <fieldset disabled={!self || room.phase !== "deliberation" || !activeProposal || objectionPending}>
           <label htmlFor={`${fieldId}-objection-constraint`}>Related constraint</label>
           <select id={`${fieldId}-objection-constraint`} name="constraintId">

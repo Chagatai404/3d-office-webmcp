@@ -73,9 +73,6 @@ export function OnboardingE2EHarness({
         const result = await client.getMyJoinRequest(joinRequest.id);
         if (!active || !result.ok) return;
         setJoinRequest(result.data);
-        if (result.data.status === "admitted") {
-          router.push(`/room/${encodeURIComponent(result.data.roomId)}`);
-        }
       } catch {
         /* transient polling failures retain the safe waiting state */
       }
@@ -85,7 +82,14 @@ export function OnboardingE2EHarness({
       active = false;
       window.clearInterval(interval);
     };
-  }, [client, joinRequest, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- id/status is the intentional, minimal dependency; see join-room.tsx's counterpart.
+  }, [client, joinRequest?.id, joinRequest?.status]);
+
+  useEffect(() => {
+    if (joinRequest?.status === "admitted") {
+      router.push(`/room/${encodeURIComponent(joinRequest.roomId)}`);
+    }
+  }, [joinRequest, router]);
 
   async function previewInvite() {
     setStatus("Working…");

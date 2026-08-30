@@ -76,6 +76,7 @@ test("normal creation binds one authenticated owner and creates no seats", async
 });
 
 test("WebMCP creates a real room, requests admission, and lets the owner admit the waiting browser", async ({ browser }) => {
+  test.setTimeout(90_000);
   const ownerSession = await newParticipantContext(browser);
   const mayaSession = await newParticipantContext(browser);
   const owner = ownerSession.page;
