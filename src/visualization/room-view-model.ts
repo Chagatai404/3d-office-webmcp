@@ -2,6 +2,7 @@ import type {
   ActionOrigin,
   ActorType,
   DecisionRole,
+  MeetingRole,
   ProposalStatus,
   RoomPhase,
   RoomState,
@@ -28,6 +29,7 @@ export interface VisualParticipant {
   isSelf: boolean;
   /** Deterministic seat around the table, stable for a given participant order. */
   seatIndex: number;
+  meetingRole: MeetingRole;
   decisionRole: DecisionRole;
   vote: VoteChoice | null;
   hasApprovedCurrentDecision: boolean;
@@ -139,6 +141,7 @@ export function createPlaceholderVisualizationState(
       isClaimed: false,
       isSelf: false,
       seatIndex: index,
+      meetingRole: "participant",
       decisionRole: "contributor",
       vote: null,
       hasApprovedCurrentDecision: false,
@@ -187,9 +190,13 @@ export function createRoomVisualizationState(
     room.participants.map((participant) => [participant.id, participant.name]),
   );
 
-  // Every participant has a seat at the one shared table, in join order.
-  const participants: VisualParticipant[] = room.participants.map(
-    (participant, index) => ({
+  // Every *active* participant has a seat at the one shared table, in join
+  // order. A removed participant's chair disappears from the room the same
+  // way it disappears from the roster; their historical contributions remain
+  // reachable through activity/positions/votes, never through a live seat.
+  const participants: VisualParticipant[] = room.participants
+    .filter((participant) => participant.status === "active")
+    .map((participant, index) => ({
       id: participant.id,
       name: participant.name,
       role: participant.role,
@@ -197,11 +204,11 @@ export function createRoomVisualizationState(
       isClaimed: participant.isClaimed,
       isSelf: participant.id === room.selfParticipantId,
       seatIndex: index,
+      meetingRole: participant.meetingRole,
       decisionRole: participant.decisionRole,
       vote: votesByParticipant.get(participant.id) ?? null,
       hasApprovedCurrentDecision: approvedParticipantIds.has(participant.id),
-    }),
-  );
+    }));
 
   const proposals: VisualProposal[] = room.proposals.map((proposal) => ({
     id: proposal.id,

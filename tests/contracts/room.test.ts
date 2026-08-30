@@ -3,8 +3,10 @@ import {
   castVoteInputSchema,
   decisionPolicySchema,
   participantSchema,
+  removeParticipantInputSchema,
   roomStateSchema,
   startDemoScenarioInputSchema,
+  transferOwnershipInputSchema,
 } from "@/contracts/room";
 import { demoRoom } from "@/fixtures/demo-room";
 import { createRoomVisualizationState } from "@/visualization/room-view-model";
@@ -66,6 +68,37 @@ describe("canonical room contract", () => {
       mode: "solo_judge",
       humanRole: "product",
       participantId: "demo-product",
+    }).success).toBe(false);
+  });
+
+  it("carries an explicit meeting lock flag and participant membership status", () => {
+    expect(demoRoom.isLocked).toBe(false);
+    for (const participant of demoRoom.participants) {
+      expect(participant.status).toBe("active");
+      expect(participant.removedAt).toBeNull();
+    }
+
+    const removed = { ...demoRoom.participants[0]!, status: "removed" as const, removedAt: "2026-08-30T00:00:00.000Z" };
+    expect(participantSchema.parse(removed)).toMatchObject({ status: "removed" });
+    expect(participantSchema.safeParse({ ...demoRoom.participants[0]!, status: "banned" }).success).toBe(false);
+  });
+
+  it("keeps remove/transfer input strict to the target id, rejecting spoofed authority fields", () => {
+    expect(removeParticipantInputSchema.parse({ participantId: "participant-engineering" })).toEqual({
+      participantId: "participant-engineering",
+    });
+    expect(removeParticipantInputSchema.safeParse({
+      participantId: "participant-engineering",
+      actorId: "participant-product",
+    }).success).toBe(false);
+    expect(removeParticipantInputSchema.safeParse({}).success).toBe(false);
+
+    expect(transferOwnershipInputSchema.parse({ participantId: "participant-engineering" })).toEqual({
+      participantId: "participant-engineering",
+    });
+    expect(transferOwnershipInputSchema.safeParse({
+      participantId: "participant-engineering",
+      meetingRole: "owner",
     }).success).toBe(false);
   });
 

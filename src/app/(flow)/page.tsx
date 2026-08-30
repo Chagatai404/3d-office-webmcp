@@ -32,6 +32,15 @@ export default function Home() {
     enter("/new", "create");
   }
 
+  function flyToJoin(event: MouseEvent<HTMLAnchorElement>) {
+    if (!enter) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (event.button !== 0) return;
+
+    event.preventDefault();
+    enter("/join", "join");
+  }
+
   return (
     <main className="flow-page welcome" data-leaving={leaving ? "" : undefined}>
       <div className="welcome-lead">
@@ -60,7 +69,11 @@ export default function Home() {
             >
               Create a meeting
             </Link>
-            <Link className="flow-btn flow-btn-primary" href="/join">
+            <Link
+              className="flow-btn flow-btn-primary"
+              href="/join"
+              onClick={flyToJoin}
+            >
               Join a meeting
             </Link>
             <Link className="flow-btn flow-btn-ghost" href="/room/demo">

@@ -35,6 +35,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
   version: 4,
   ownerParticipantId: "participant-product",
   decisionPolicy: "equal_authority_consensus",
+  isLocked: false,
   selfParticipantId: DEMO_SELF_PARTICIPANT_ID,
   activeProposalId: null,
   finalizedAt: null,
@@ -49,6 +50,8 @@ export const demoRoom: RoomState = roomStateSchema.parse({
       decisionRole: "decision_maker",
       isClaimed: false,
       isReady: false,
+      status: "active",
+      removedAt: null,
       createdAt: demoTimestamp(0),
     },
     {
@@ -60,6 +63,8 @@ export const demoRoom: RoomState = roomStateSchema.parse({
       decisionRole: "decision_maker",
       isClaimed: true,
       isReady: false,
+      status: "active",
+      removedAt: null,
       createdAt: demoTimestamp(0),
     },
     {
@@ -71,6 +76,8 @@ export const demoRoom: RoomState = roomStateSchema.parse({
       decisionRole: "advisor",
       isClaimed: true,
       isReady: false,
+      status: "active",
+      removedAt: null,
       createdAt: demoTimestamp(0),
     },
     {
@@ -82,6 +89,8 @@ export const demoRoom: RoomState = roomStateSchema.parse({
       decisionRole: "decision_maker",
       isClaimed: false,
       isReady: false,
+      status: "active",
+      removedAt: null,
       createdAt: demoTimestamp(0),
     },
   ],

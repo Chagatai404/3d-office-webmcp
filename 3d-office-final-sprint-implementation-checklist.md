@@ -302,72 +302,86 @@ and `tests/domain/join-requests.test.ts`.
 ## Owner permissions
 
 - [ ] Owner can:
-  - [ ] admit participant;
-  - [ ] reject participant;
-  - [ ] remove participant;
-  - [ ] lock/unlock meeting;
-  - [ ] regenerate passcode;
-  - [ ] revoke invite links;
-  - [ ] regenerate invite links;
-  - [ ] transfer ownership;
-  - [ ] change allowed meeting settings;
-  - [ ] control phase progression;
-  - [ ] request alignment;
-  - [ ] make/finalize decision under `owner_decides`;
-  - [ ] end meeting.
+  - [x] admit participant;
+  - [x] reject participant;
+  - [x] remove participant;
+  - [x] lock/unlock meeting;
+  - [ ] regenerate passcode; (out of scope for Gate 3, unchanged from Gate 2)
+  - [ ] revoke invite links; (out of scope for Gate 3, unchanged from Gate 2)
+  - [ ] regenerate invite links; (out of scope for Gate 3, unchanged from Gate 2)
+  - [x] transfer ownership;
+  - [ ] change allowed meeting settings; (no additional settings exist beyond lock this slice)
+  - [ ] control phase progression; (unchanged from Slice 2's `advanceRoomPhase`, not part of Gate 3)
+  - [ ] request alignment; (Alignment is Slice 4)
+  - [ ] make/finalize decision under `owner_decides`; (legacy engine unchanged this slice; Slice 4)
+  - [ ] end meeting. (not implemented; out of scope per brief Part O)
 
 ## Meeting lock
 
-- [ ] Add room lock state.
-- [ ] Locked rooms reject new join requests.
-- [ ] Existing admitted participants remain connected.
-- [ ] Owner can unlock before finalization if allowed.
-- [ ] Audit lock/unlock events.
+- [x] Add room lock state. (`rooms.is_locked`, canonical `RoomState.isLocked`)
+- [x] Locked rooms reject new join requests. (`MEETING_LOCKED`; existing waiting requests unaffected)
+- [x] Existing admitted participants remain connected.
+- [x] Owner can unlock before finalization if allowed. (`unlock_meeting`; rejected after finalization via the shared `ALREADY_FINALIZED` gate)
+- [x] Audit lock/unlock events. (`meeting.locked` / `meeting.unlocked`)
 
 ## Participant removal
 
-- [ ] Add owner-only remove operation.
-- [ ] Define behavior for removed participant data:
-  - [ ] preserve historical contributions;
-  - [ ] prevent future writes;
-  - [ ] remove active presence;
-  - [ ] mark participation status appropriately.
-- [ ] Prevent owner from accidentally removing themselves without transferring/ending.
-- [ ] Define cohost removal semantics if cohost ships.
-- [ ] Audit removal.
+- [x] Add owner-only remove operation. (`removeParticipant`)
+- [x] Define behavior for removed participant data:
+  - [x] preserve historical contributions; (participant row never deleted)
+  - [x] prevent future writes; (`status = 'active'` required by every mutation function)
+  - [x] remove active presence; (excluded from `RoomState`'s live 3D/roster projection)
+  - [x] mark participation status appropriately. (`status = 'removed'`, `removedAt`)
+- [x] Prevent owner from accidentally removing themselves without transferring/ending.
+- [ ] Define cohost removal semantics if cohost ships. (no co-host promotion flow exists; out of scope)
+- [x] Audit removal. (`participant.removed`)
 
 ## Ownership transfer
 
-- [ ] Add `transferOwnership(targetParticipantId)`.
-- [ ] Target must:
-  - [ ] be human;
-  - [ ] be admitted;
-  - [ ] belong to same room;
-  - [ ] not be removed;
-  - [ ] not be an expert/simulation.
-- [ ] Transfer must be atomic.
-- [ ] Lock room row during transfer.
-- [ ] Old owner loses owner-only authority immediately.
-- [ ] New owner gains owner authority immediately.
-- [ ] Update `ownerParticipantId`.
-- [ ] Update meeting roles transactionally.
-- [ ] Audit old owner + new owner.
-- [ ] Realtime-update all clients.
-- [ ] WebMCP tool registration must refresh after transfer.
+- [x] Add `transferOwnership(targetParticipantId)`.
+- [x] Target must:
+  - [x] be human;
+  - [x] be admitted; (i.e. an existing participant row)
+  - [x] belong to same room;
+  - [x] not be removed;
+  - [x] not be an expert/simulation. (no expert kind exists yet; simulation explicitly rejected)
+- [x] Transfer must be atomic.
+- [x] Lock room row during transfer.
+- [x] Old owner loses owner-only authority immediately.
+- [x] New owner gains owner authority immediately.
+- [x] Update `ownerParticipantId`.
+- [x] Update meeting roles transactionally.
+- [x] Audit old owner + new owner. (one `ownership.transferred` event recording both ids)
+- [x] Realtime-update all clients.
+- [x] WebMCP tool registration must refresh after transfer. (existing `selfParticipantId`/phase-driven registration wiring; no owner-gated tool exists yet to visibly demonstrate it -- see Part O scope)
 
 ## Optional co-host
 
-- [ ] If implemented, add promote/demote co-host actions.
+- [ ] If implemented, add promote/demote co-host actions. (not implemented this slice)
 - [ ] Explicitly define which owner actions co-host may perform.
 - [ ] Co-host must never be equivalent to final decision-maker unless separately assigned `decisionRole`.
 
 ### Acceptance criteria
 
-- [ ] Participant cannot call owner endpoints successfully.
-- [ ] WebMCP participant cannot discover owner-only tools when unauthorized.
-- [ ] Ownership transfer works while two browsers are connected.
-- [ ] Two simultaneous ownership transfers cannot create two owners.
-- [ ] Old owner UI and tool permissions update without refresh.
+- [x] Participant cannot call owner endpoints successfully.
+- [x] WebMCP participant cannot discover owner-only tools when unauthorized. (no owner-only WebMCP tool exists yet; removed/unclaimed sessions already lose every participant-mutation tool, verified)
+- [x] Ownership transfer works while two browsers are connected. (Playwright)
+- [x] Two simultaneous ownership transfers cannot create two owners. (domain test, concurrent `Promise.all`)
+- [x] Old owner UI and tool permissions update without refresh. (Playwright, live realtime handoff)
+
+**Gate 3 status note (2026-08-30):** Meeting lock, participant removal, and
+ownership transfer are implemented end-to-end -- contract, migration
+(`supabase/migrations/20260830120000_owner_lifecycle_and_meeting_lock.sql`),
+domain operations, RLS/security boundary (`status = 'active'` now required
+everywhere `can_read_room` or participant authority is derived), API routes,
+client, `RoomProvider`, owner UI (Participants drawer remove/make-owner,
+Settings drawer lock toggle), and the required Join-camera UX fix. Verified
+by `npm run check`, `npm run test:unit`, `npm run test:domain`,
+`npm run test:e2e`, and `npm run build` -- see the Slice 3 completion report
+for exact results. Out of scope by design: co-host, passcode/invite
+regeneration and revocation UI, end-meeting, and the Alignment/decision-policy
+rewrite (Slice 4). Per this repository's own convention, this agent does not
+self-certify the gate; a human reviewer should confirm before Slice 4 begins.
 
 ---
 
@@ -802,11 +816,11 @@ and `tests/domain/join-requests.test.ts`.
 
 ## Authentication
 
-- [ ] Every protected route validates bearer token.
-- [ ] Server resolves `auth.uid()`.
-- [ ] Never trust browser-supplied user ID.
-- [ ] Removed participants lose mutation authority.
-- [ ] Anonymous sessions cannot hijack existing participants.
+- [x] Every protected route validates bearer token.
+- [x] Server resolves `auth.uid()`.
+- [x] Never trust browser-supplied user ID.
+- [x] Removed participants lose mutation authority. (Gate 3: `status = 'active'` now required by `can_read_room` and every participant-authority-deriving function)
+- [ ] Anonymous sessions cannot hijack existing participants. (unchanged from earlier gates, not re-verified this pass)
 
 ## Authorization
 
@@ -831,8 +845,8 @@ and `tests/domain/join-requests.test.ts`.
 
 ## Sensitive operations
 
-- [ ] Ownership transfer requires explicit authority.
-- [ ] Participant removal requires explicit authority.
+- [x] Ownership transfer requires explicit authority.
+- [x] Participant removal requires explicit authority.
 - [ ] Final decision requires correct decision authority.
 - [ ] Consensus approval bound to exact decision hash.
 - [ ] Changed candidate invalidates previous approval.
@@ -891,13 +905,13 @@ Treat the following as untrusted content:
 
 - [ ] room creation with only creator;
 - [ ] owner assignment;
-- [ ] dynamic participant admission;
-- [ ] duplicate admission rejection;
-- [ ] join rejection;
-- [ ] room lock;
-- [ ] participant removal;
-- [ ] ownership transfer;
-- [ ] double-transfer race;
+- [x] dynamic participant admission;
+- [x] duplicate admission rejection;
+- [x] join rejection;
+- [x] room lock;
+- [x] participant removal;
+- [x] ownership transfer;
+- [x] double-transfer race;
 - [ ] decision policy validation;
 - [ ] owner-decides finalization;
 - [ ] consensus finalization;
@@ -914,24 +928,33 @@ Treat the following as untrusted content:
 - [ ] missing bearer token;
 - [ ] missing `If-Match` where required;
 - [ ] stale `If-Match`;
-- [ ] owner-only route from participant;
-- [ ] removed participant mutation;
-- [ ] invalid join credentials;
-- [ ] revoked invite;
-- [ ] passcode join;
-- [ ] invite join.
+- [x] owner-only route from participant;
+- [x] removed participant mutation;
+- [x] invalid join credentials;
+- [x] revoked invite;
+- [x] passcode join;
+- [x] invite join.
 
 ## WebMCP tests
 
-- [ ] correct phase tool set;
-- [ ] correct owner tool set;
-- [ ] correct participant tool set;
-- [ ] tool set updates after ownership transfer;
-- [ ] tool set updates after finalization;
-- [ ] no actor/participant identity input fields;
-- [ ] stale state recovery;
-- [ ] hidden owner actions rejected server-side;
-- [ ] prompt injection fixtures.
+- [x] correct phase tool set;
+- [ ] correct owner tool set; (no owner-only WebMCP tool exists yet -- Slice 4/5 scope)
+- [x] correct participant tool set;
+- [ ] tool set updates after ownership transfer; (nothing to demonstrate yet: no owner-gated tool exists; the registration wiring that would refresh it is unchanged and covered by the removal case below)
+- [x] tool set updates after finalization;
+- [x] no actor/participant identity input fields;
+- [x] stale state recovery;
+- [x] hidden owner actions rejected server-side;
+- [x] prompt injection fixtures.
+
+Gate 3 adds: a removed participant's `selfParticipantId` nulls out
+(`src/lib/supabase/room-state.ts`), so `hasClaimedSeat` flips to `false` and
+every participant-mutation WebMCP tool deregisters the moment their session
+next observes room state -- proven at the domain/RLS layer
+(`tests/domain/owner-lifecycle.test.ts`) and at the tool-registration layer
+(`tests/webmcp/participant-authority.test.ts`'s existing
+`selfParticipantId: null` coverage, which is exactly the state a removal
+produces).
 
 ## Playwright multi-browser
 
@@ -947,10 +970,15 @@ Treat the following as untrusted content:
 - [ ] Trade-off is created.
 - [ ] Alignment requested.
 - [ ] Both clients update.
-- [ ] A transfers ownership to B.
-- [ ] Tool/controls swap.
-- [ ] New owner finalizes according to policy.
+- [x] A transfers ownership to B.
+- [x] Tool/controls swap.
+- [ ] New owner finalizes according to policy. (Slice 4: policy-aware finalization)
 - [ ] Both receive same final record.
+
+Verified this pass by `tests/playwright/owner-lifecycle.spec.ts` (ownership
+transfer with live control handoff, participant removal with preserved
+history, and meeting lock refusing/re-allowing join requests) and
+`tests/playwright/join-camera-transition.spec.ts` (the Join camera fix).
 
 ## Multiple meetings
 
@@ -972,16 +1000,16 @@ Attempt all of the following manually.
 - [ ] Call another participant's endpoint.
 - [ ] Replay another browser's request.
 - [ ] Use stale auth token.
-- [ ] Attempt action after being removed.
+- [x] Attempt action after being removed. (`tests/domain/owner-lifecycle.test.ts`, `tests/playwright/owner-lifecycle.spec.ts`: read and mutation both refused)
 
 ## Owner abuse
 
-- [ ] Participant calls admit API directly.
-- [ ] Participant calls remove API directly.
-- [ ] Participant calls transfer API directly.
-- [ ] Participant calls lock API directly.
-- [ ] Old owner calls owner endpoint after transfer.
-- [ ] Two clients transfer ownership simultaneously.
+- [x] Participant calls admit API directly. (unchanged from Gate 2, `list_join_requests`/`resolve_join_request` still owner-gated)
+- [x] Participant calls remove API directly.
+- [x] Participant calls transfer API directly.
+- [x] Participant calls lock API directly.
+- [x] Old owner calls owner endpoint after transfer.
+- [x] Two clients transfer ownership simultaneously.
 
 ## Join abuse
 
@@ -1049,31 +1077,44 @@ Only after P0 path is stable.
 
 ## Frontend should receive from backend
 
-- [ ] `RoomState.ownerParticipantId`
-- [ ] participant `meetingRole`
-- [ ] participant `decisionRole`
-- [ ] room `decisionPolicy`
-- [ ] room lock state
-- [ ] admitted participant list
-- [ ] current user's participant identity
-- [ ] waiting-room count / join requests for owner
-- [ ] alignment state
-- [ ] attention items
+- [x] `RoomState.ownerParticipantId`
+- [x] participant `meetingRole`
+- [x] participant `decisionRole`
+- [x] room `decisionPolicy`
+- [x] room lock state (`RoomState.isLocked`, Gate 3)
+- [x] admitted participant list
+- [x] current user's participant identity
+- [x] waiting-room count / join requests for owner
+- [ ] alignment state (Slice 4)
+- [ ] attention items (Slice 4/6)
 - [ ] current candidate decision
 - [ ] final decision state
-- [ ] activity ledger
+- [x] activity ledger
 
 ## 3D behavior
 
-- [ ] Chair count derives from admitted human/simulated participants.
+- [x] Chair count derives from admitted human/simulated participants.
 - [ ] New chair can animate in after admission.
-- [ ] Removed participant chair updates appropriately.
-- [ ] Owner has subtle visual distinction.
-- [ ] Expert agents have distinct advisory visual treatment.
-- [ ] 3D never owns authority/state.
-- [ ] Camera/workspace state remains presentation-only.
-- [ ] One workspace visible at a time.
-- [ ] Constraints, proposals, issues, alignment, decision views use real canonical data.
+- [x] Removed participant chair updates appropriately. (Gate 3: `createRoomVisualizationState` now filters to `status === "active"`, so a removed participant's chair disappears from the 3D room the same way it disappears from the participants drawer roster.)
+- [ ] Owner has subtle visual distinction. (Gate 3 adds an "Owner" tag in the Participants drawer roster; no distinct 3D-scene treatment yet.)
+- [ ] Expert agents have distinct advisory visual treatment. (no expert kind exists yet)
+- [x] 3D never owns authority/state.
+- [x] Camera/workspace state remains presentation-only.
+- [x] One workspace visible at a time.
+- [ ] Constraints, proposals, issues, alignment, decision views use real canonical data. (alignment/decision views are Slice 4)
+
+**Gate 3 frontend/UX note (2026-08-30):** the pre-meeting Join Meeting camera
+transition bug is fixed this slice -- Welcome's "Join Meeting" link previously
+cut straight to `/join` with no `FlowStage` interception, and `poseForPath()`
+had no case for it, so it fell through to the `welcome` pose and left the
+small framed welcome card layered over the join form (a genuine CSS stacking
+bug: `.joinPage` never opted into the `position:relative; z-index:1` every
+other flow screen uses, so it painted *underneath* the fixed, positioned
+`.flow-stage`). Join now flies through the same continuous stage as Create,
+landing on a dedicated, deliberately mirrored `"join"` pose. See
+`docs/backend-integration.md`'s "Join Meeting camera transition fix" section
+for the full mechanism, and `tests/components/flow-stage.test.tsx` /
+`tests/playwright/join-camera-transition.spec.ts` for coverage.
 
 ## Frontend must not
 
@@ -1174,10 +1215,17 @@ not self-certify the gate; a human reviewer should confirm before Slice 3
 
 ## Gate 3 — Owner lifecycle green
 
-- [ ] remove;
-- [ ] lock;
-- [ ] transfer owner;
-- [ ] permissions refresh live.
+- [x] remove;
+- [x] lock;
+- [x] transfer owner;
+- [x] permissions refresh live.
+
+Implementation complete and verified this pass (`npm run check`,
+`npm run test:unit`, `npm run test:domain`, `npm run test:e2e`, and
+`npm run build` -- see the Slice 3 completion report for exact results). Per
+this repository's own convention, this agent does not self-certify the gate;
+a human reviewer should confirm before Slice 4 (Alignment / decision policy)
+begins.
 
 ## Gate 4 — Alignment / decision policy green
 

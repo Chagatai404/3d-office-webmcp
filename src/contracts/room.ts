@@ -60,6 +60,9 @@ export const decisionPolicySchema = z.enum([
 ]);
 export type DecisionPolicy = z.infer<typeof decisionPolicySchema>;
 
+export const participantStatusSchema = z.enum(["active", "removed"]);
+export type ParticipantStatus = z.infer<typeof participantStatusSchema>;
+
 export const joinRequestStatusSchema = z.enum([
   "waiting",
   "admitted",
@@ -91,6 +94,8 @@ export const participantSchema = z
     decisionRole: decisionRoleSchema,
     isClaimed: z.boolean(),
     isReady: z.boolean(),
+    status: participantStatusSchema,
+    removedAt: timestampSchema.nullable(),
     createdAt: timestampSchema,
   })
   .strict();
@@ -420,6 +425,7 @@ export const roomStateSchema = z
     version: z.number().int().nonnegative(),
     ownerParticipantId: idSchema,
     decisionPolicy: decisionPolicySchema,
+    isLocked: z.boolean(),
     selfParticipantId: idSchema.nullable(),
     activeProposalId: idSchema.nullable(),
     finalizedAt: timestampSchema.nullable(),
@@ -449,6 +455,7 @@ export const actionErrorCodeSchema = z.enum([
   "INVALID_JOIN_CREDENTIALS",
   "ALREADY_PARTICIPANT",
   "REQUEST_ALREADY_RESOLVED",
+  "MEETING_LOCKED",
 ]);
 export type ActionErrorCode = z.infer<typeof actionErrorCodeSchema>;
 
@@ -559,6 +566,22 @@ export const joinRequestResultSchema = z.object({
 }).strict();
 export type JoinRequestResult = z.infer<typeof joinRequestResultSchema>;
 
+/**
+ * Owner-only membership lifecycle inputs. `participantId` is always the
+ * *target*, never the caller's own authority: the acting owner is derived
+ * server-side from the authenticated session, exactly like every other
+ * owner-only operation in this contract.
+ */
+export const removeParticipantInputSchema = z.object({
+  participantId: idSchema,
+}).strict();
+export type RemoveParticipantInput = z.infer<typeof removeParticipantInputSchema>;
+
+export const transferOwnershipInputSchema = z.object({
+  participantId: idSchema,
+}).strict();
+export type TransferOwnershipInput = z.infer<typeof transferOwnershipInputSchema>;
+
 export interface RoomClient {
   getRoom(roomId: string): Promise<RoomState>;
 
@@ -634,4 +657,22 @@ export interface RoomClient {
     roomId: string,
     input: ManageJoinRequestInput,
   ): Promise<ActionResult<JoinRequest>>;
+
+  /** Owner-only. Existing participants keep normal access; new join requests are refused. */
+  lockMeeting(roomId: string): Promise<ActionResult>;
+
+  /** Owner-only. Allows new join requests again. */
+  unlockMeeting(roomId: string): Promise<ActionResult>;
+
+  /** Owner-only. Marks an active human participant removed; history is preserved. */
+  removeParticipant(
+    roomId: string,
+    input: RemoveParticipantInput,
+  ): Promise<ActionResult>;
+
+  /** Owner-only. Atomically moves meeting authority to another active human participant. */
+  transferOwnership(
+    roomId: string,
+    input: TransferOwnershipInput,
+  ): Promise<ActionResult>;
 }

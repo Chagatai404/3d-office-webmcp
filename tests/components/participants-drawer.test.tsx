@@ -20,6 +20,8 @@ class WaitingRoomFakeClient implements RoomClient {
   state: RoomState;
   requests: JoinRequest[];
   resolvedIds: string[] = [];
+  removedParticipantIds: string[] = [];
+  transferredToParticipantIds: string[] = [];
   private readonly listeners = new Set<Listener>();
 
   constructor(seed: RoomState, requests: JoinRequest[]) {
@@ -80,6 +82,42 @@ class WaitingRoomFakeClient implements RoomClient {
   advanceDemoPhase: RoomClient["advanceDemoPhase"] = async () => this.unavailable();
   markMyInputReady: RoomClient["markMyInputReady"] = async () => this.unavailable();
   advanceRoomPhase: RoomClient["advanceRoomPhase"] = async () => this.unavailable();
+
+  lockMeeting: RoomClient["lockMeeting"] = async () => this.unavailable();
+  unlockMeeting: RoomClient["unlockMeeting"] = async () => this.unavailable();
+
+  removeParticipant: RoomClient["removeParticipant"] = async (_roomId, input) => {
+    this.removedParticipantIds.push(input.participantId);
+    const target = this.state.participants.find((participant) => participant.id === input.participantId);
+    if (target) {
+      target.status = "removed";
+      target.removedAt = "2026-08-30T00:00:01.000Z";
+    }
+    this.state.version += 1;
+    this.publish();
+    return { ok: true, data: null, roomVersion: this.state.version, message: "Participant removed." };
+  };
+
+  transferOwnership: RoomClient["transferOwnership"] = async (_roomId, input) => {
+    this.transferredToParticipantIds.push(input.participantId);
+    const previousOwnerId = this.state.ownerParticipantId;
+    for (const participant of this.state.participants) {
+      if (participant.id === previousOwnerId) participant.meetingRole = "participant";
+      if (participant.id === input.participantId) {
+        participant.meetingRole = "owner";
+        participant.decisionRole = "decision_maker";
+      }
+    }
+    this.state.ownerParticipantId = input.participantId;
+    this.state.version += 1;
+    this.publish();
+    return { ok: true, data: null, roomVersion: this.state.version, message: "Ownership transferred." };
+  };
+
+  private publish() {
+    const snapshot = structuredClone(this.state);
+    for (const listener of this.listeners) listener(snapshot);
+  }
 }
 
 function seedRoom(selfParticipantId: string): RoomState {
@@ -185,5 +223,131 @@ describe("owner waiting room", () => {
 
     expect(client.resolvedIds).toEqual(["join-request-1"]);
     expect(container.textContent).toContain("No one is waiting.");
+  });
+});
+
+function buttonsNamed(name: string): HTMLButtonElement[] {
+  return [...container.querySelectorAll("button")].filter(
+    (button) => button.textContent === name,
+  );
+}
+
+describe("owner membership controls", () => {
+  it("shows Remove and Make owner for the owner, on every other active human participant only", async () => {
+    const client = new WaitingRoomFakeClient(seedRoom("participant-product"), []);
+    await mount(client);
+    await tick();
+
+    // demoRoom seats: product (owner, self here), engineering (human),
+    // design (simulation), marketing (human).
+    expect(buttonsNamed("Remove")).toHaveLength(2);
+    expect(buttonsNamed("Make owner")).toHaveLength(2);
+
+    // Never on the owner's own row.
+    const ownerRow = [...container.querySelectorAll(".participant-row")].find((row) =>
+      row.textContent?.includes("Maya Okonkwo"),
+    );
+    expect(ownerRow?.querySelector("button")).toBeNull();
+  });
+
+  it("hides membership controls entirely from a non-owner participant", async () => {
+    const client = new WaitingRoomFakeClient(seedRoom("participant-engineering"), []);
+    await mount(client);
+    await tick();
+
+    expect(buttonsNamed("Remove")).toHaveLength(0);
+    expect(buttonsNamed("Make owner")).toHaveLength(0);
+  });
+
+  it("requires explicit confirmation naming the participant before removing them", async () => {
+    const client = new WaitingRoomFakeClient(seedRoom("participant-product"), []);
+    await mount(client);
+    await tick();
+
+    const engineeringRow = [...container.querySelectorAll(".participant-row")].find((row) =>
+      row.textContent?.includes("Emre Yilmaz"),
+    );
+    const removeButton = [...(engineeringRow?.querySelectorAll("button") ?? [])].find(
+      (button) => button.textContent === "Remove",
+    );
+    if (!removeButton) throw new Error("Remove button missing for Emre.");
+    await act(async () => { removeButton.click(); });
+
+    expect(container.textContent).toContain("Remove Emre Yilmaz from this meeting?");
+    expect(client.removedParticipantIds).toEqual([]);
+
+    const confirmButtons = [...container.querySelectorAll<HTMLButtonElement>(".participant-confirm button")];
+    const confirm = confirmButtons.find((button) => button.textContent === "Remove");
+    if (!confirm) throw new Error("Confirmation Remove button missing.");
+    await act(async () => { confirm.click(); });
+    await tick();
+
+    expect(client.removedParticipantIds).toEqual(["participant-engineering"]);
+  });
+
+  it("cancels a pending removal without calling the action", async () => {
+    const client = new WaitingRoomFakeClient(seedRoom("participant-product"), []);
+    await mount(client);
+    await tick();
+
+    const removeButton = buttonsNamed("Remove")[0];
+    await act(async () => { removeButton!.click(); });
+    expect(container.querySelector(".participant-confirm")).not.toBeNull();
+
+    const cancel = [...container.querySelectorAll<HTMLButtonElement>(".participant-confirm button")].find(
+      (button) => button.textContent === "Cancel",
+    );
+    await act(async () => { cancel!.click(); });
+
+    expect(container.querySelector(".participant-confirm")).toBeNull();
+    expect(client.removedParticipantIds).toEqual([]);
+  });
+
+  it("requires explicit confirmation naming the participant and the authority loss before transferring ownership", async () => {
+    const client = new WaitingRoomFakeClient(seedRoom("participant-product"), []);
+    await mount(client);
+    await tick();
+
+    const marketingRow = [...container.querySelectorAll(".participant-row")].find((row) =>
+      row.textContent?.includes("Tomas Reyes"),
+    );
+    const makeOwnerButton = [...(marketingRow?.querySelectorAll("button") ?? [])].find(
+      (button) => button.textContent === "Make owner",
+    );
+    if (!makeOwnerButton) throw new Error("Make owner button missing for Tomas.");
+    await act(async () => { makeOwnerButton.click(); });
+
+    expect(container.textContent).toContain("Make Tomas Reyes the meeting owner?");
+    expect(container.textContent).toContain("You will lose owner-only controls.");
+    expect(client.transferredToParticipantIds).toEqual([]);
+
+    const confirm = [...container.querySelectorAll<HTMLButtonElement>(".participant-confirm button")].find(
+      (button) => button.textContent === "Confirm",
+    );
+    if (!confirm) throw new Error("Confirmation button missing.");
+    await act(async () => { confirm.click(); });
+    await tick();
+
+    expect(client.transferredToParticipantIds).toEqual(["participant-marketing"]);
+  });
+
+  it("updates controls live once the room reflects a new owner", async () => {
+    const client = new WaitingRoomFakeClient(seedRoom("participant-product"), []);
+    await mount(client);
+    await tick();
+    expect(buttonsNamed("Remove").length).toBeGreaterThan(0);
+
+    const makeOwnerButton = buttonsNamed("Make owner")[0];
+    await act(async () => { makeOwnerButton!.click(); });
+    const confirm = [...container.querySelectorAll<HTMLButtonElement>(".participant-confirm button")].find(
+      (button) => button.textContent === "Confirm",
+    );
+    await act(async () => { confirm!.click(); });
+    await tick();
+
+    // The old owner (self, in this mount) is no longer owner: no more
+    // membership controls are rendered for this session.
+    expect(buttonsNamed("Remove")).toHaveLength(0);
+    expect(buttonsNamed("Make owner")).toHaveLength(0);
   });
 });

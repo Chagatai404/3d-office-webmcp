@@ -205,6 +205,161 @@ returns `DECISION_CHANGED`; the final required approval atomically stores the
 last approval, immutable decision record, final audit event, and finalized room
 state.
 
+## Owner lifecycle: meeting lock, participant removal, ownership transfer (Slice 3)
+
+**Meeting lock.** `rooms.is_locked` is a plain boolean, persisted and part of
+canonical `RoomState`. `lock_meeting` / `unlock_meeting` (wrapping the shared
+`resolve_meeting_lock`) lock the room row, re-derive owner authority the same
+way every other owner-only action does (`meeting_role = 'owner'` bound
+through `rooms.owner_participant_id` to `auth.uid()`, plus the new
+`status = 'active'` requirement below), reject a finalized room, toggle the
+flag, bump `version` exactly once, and audit `meeting.locked` /
+`meeting.unlocked`. Toggling to the state it is already in succeeds without a
+version bump or audit row, the same idempotency convention `mark_my_input_ready`
+uses. Locking never touches `room_invites` or `rooms.passcode_hash`: the
+invite token and passcode keep their existing validity, they simply stop being
+*sufficient* while locked.
+
+`create_or_reuse_join_request` (shared by `request_join_by_passcode` and
+`request_join_by_invite`) now checks `rooms.is_locked` -- but only on the path
+that would create a *new* waiting row. A caller who already has one (a
+waiting requester whose page is still polling, or who resubmits the same
+form) gets that existing row back unchanged, locked or not: the owner keeps
+seeing it in the waiting room, and `admit_join_request` / `reject_join_request`
+are completely unaffected by the lock, so already-waiting requests stay
+manageable. A genuinely new request is refused with `MEETING_LOCKED`, a code
+distinct from `INVALID_JOIN_CREDENTIALS` on purpose: it is only reachable
+*after* the passcode or invite has already been validated, so returning it
+never discloses anything about a room a caller has no other route to.
+
+**Participant membership status.** `participants.status` (`active` |
+`removed`, default `active`) and `participants.removed_at` are new columns,
+backfilled to `active` for every pre-existing row by the column default
+itself. A participant row is *never deleted*: positions, constraints,
+proposals, conflicts, tradeoffs, votes, approvals, and audit events all keep
+referencing a valid, stable participant id regardless of status, which is
+exactly how removal preserves history while still fully revoking authority.
+
+This status is now the missing half of every authority check in the
+system. `can_read_room` -- the single function every room-scoped table's
+`SELECT` RLS policy calls -- now requires `status = 'active'` in addition to
+room membership, so a removed participant's row existing is no longer
+sufficient to read the room at all; the very next `getRoom()` from their
+session returns `404` the same way an unrelated room would, whether that
+request comes from a manual refetch or a realtime-triggered one. Every
+participant-authority-deriving mutation function (`add_participant_position`,
+`submit_participant_proposal`, `raise_participant_objection`,
+`resolve_participant_objection`, `propose_participant_tradeoff`,
+`cast_participant_vote`, `mark_my_input_ready`,
+`approve_participant_final_decision`) and `is_room_organizer` (and therefore
+`advance_room_phase`, `list_join_requests`, `resolve_join_request`) were
+redefined the same way: the `user_id = auth.uid()` lookup they already
+performed now also requires `status = 'active'`. A removed participant's
+authenticated session is unaffected by any of this -- it is the *row* that
+stops counting as membership, never the session itself.
+
+In practice, the domain layer's own pre-flight (`prepareMutation` /
+`requireOwnerRoom` in `src/domain/rooms/operations.ts`) usually short-circuits
+first: `getRoom()` already returns `null` for a removed caller, so most
+mutation attempts fail with `VALIDATION_ERROR: Room not found` before ever
+reaching the database's own (redundant, defense-in-depth) `status = 'active'`
+check.
+
+**Rejoining after removal.** `create_or_reuse_join_request` distinguishes a
+missing membership row from a `removed` one: a fresh request from a session
+with no participant row proceeds normally, one from a session whose row is
+`active` gets the existing `ALREADY_PARTICIPANT` refusal, and one from a
+session whose row is `removed` gets a distinct `NOT_AUTHORIZED` refusal ("This
+session was removed from the meeting and cannot rejoin"). This is a
+deliberate MVP simplification, not an oversight: `participants_one_seat_per_user_per_room`
+is a partial unique index on `(room_id, user_id)`, so a second active
+membership for the same auth user in the same room cannot be created without
+either reactivating the historical row (which would silently resurrect a
+removed participant's old authority and confuse provenance) or redesigning
+the membership model. Given the hackathon scope, the simpler, safer invariant
+wins: **removed participants cannot rejoin the same room.**
+
+**Participant removal.** `remove_participant` locks the room row, re-derives
+the caller's owner authority, locks the target participant row, and rejects a
+target that is the owner themselves, belongs to a different room, is not
+`human`, or is already `removed`. On success it sets `status = 'removed'`,
+`removed_at = now()`, and -- documented, minimal legacy-engine compatibility,
+not a redesign of Alignment -- also sets `required_for_approval = false` so a
+removed participant can never again be silently required for the legacy
+voting/approval engine's phase-entry checks. If the room happens to already
+be sitting in `approval` with a *frozen* decision candidate that had counted
+the removed participant as required, `remove_participant` recomputes that
+candidate and its hash right there (via the same `build_final_decision_candidate`
+/ `hash_decision_candidate` the phase-entry code already uses) and clears
+collected approvals against the now-stale hash, so the room can still reach
+finalization without anyone being stuck waiting on an approval only a removed
+participant could have given. Everything commits as one transaction: the
+status flip, the optional candidate recompute, exactly one `version` bump,
+and a `participant.removed` audit event.
+
+**Ownership transfer.** `transfer_ownership` locks the room row, the current
+owner's row (re-deriving authority from `auth.uid()`, not a caller-supplied
+id), and the target row, then rejects a target that is the current owner,
+belongs to a different room, or is not an `active` `human` participant. The
+three writes are ordered deliberately: `rooms.owner_participant_id` is updated
+to the new owner *before* either participant row changes. Gate 1's
+`derive_owner_participant_authority` trigger forces `meeting_role = 'owner'`
+back onto whichever participant currently matches that pointer on every
+`participants` update -- so demoting the old owner while the pointer still
+named them would have been silently undone by that same trigger. Flipping the
+pointer first makes the demotion stick, and the following promotion of the
+new owner is then exactly what the trigger would have done anyway. The
+now-deferred `rooms_owner_invariant` / `participants_owner_invariant`
+constraint triggers from Gate 1 still verify at commit that exactly one
+`owner` participant matches the pointer, so this remains provably correct
+under the same invariant Gate 1 established, not a new one. For this
+transitional slice the new owner gets `meetingRole = owner` and
+`decisionRole = decision_maker` (ownership must imply enough decision
+authority to act as owner under the still-default `owner_decides` policy);
+the old owner's `decisionRole` is deliberately left untouched (still
+`decision_maker` if it already was), since nothing in Gate 1-3 requires
+revoking it and doing so would erase authority history the later Alignment
+slice may still want. One version bump, one `ownership.transferred` audit
+event recording both participant ids.
+
+**Concurrency.** All three operations `select ... for update` the room row
+(and, for removal/transfer, the target participant row) before checking
+`expected_version`, so two simultaneous calls against the same room serialize
+on that lock: the second one observes the version the first one already
+committed and is refused with `STALE_ROOM_STATE` rather than racing. Two
+simultaneous `transfer_ownership` calls to two different targets can never
+both succeed -- Playwright and domain coverage exercise this directly.
+
+**Live authority handoff.** Nothing new was added to make this live: it falls
+out of the same realtime/version machinery Gate 2 built. A mutation bumps
+`rooms.version`; every session's `ApiRoomClient` realtime subscription
+(`can_read_room`-gated) sees that change and refetches; `RoomProvider`
+re-renders with the fresh `RoomState`; and `useRoomWebMcpTools`'s dependency
+on `room.selfParticipantId` means a removed participant's `hasClaimedSeat`
+flips to `false` the moment their own session next observes room state (their
+row still exists, but `loadRoomState` now only matches it to `selfParticipantId`
+when `status = 'active'`), deregistering every participant-mutation WebMCP
+tool. Ownership transfer changes `meetingRole`, not `selfParticipantId` or
+phase, so today's tool catalogue (which has no owner-gated tool yet -- see
+Part O) has nothing to visibly refresh; the registration hook's existing
+dependency wiring is what will make a future owner-only tool refresh
+correctly the same way, without needing new plumbing.
+
+**Owner UI.** `ParticipantPanel` (`src/components/room/participant-panel.tsx`)
+renders `Remove` / `Make owner` inline on every other *active* `human`
+participant's row, only when the viewer's own `meetingRole` is `owner`, and
+never on the owner's own row -- a non-owner never sees these controls at all,
+rather than seeing them disabled. Each action opens an inline confirmation
+naming the specific participant (`Remove Jane from this meeting?` /
+`Make Jane the meeting owner? You will lose owner-only controls.`) before
+calling the corresponding `RoomAction`. `SettingsDrawer` shows the room's
+lock state to everyone and a `Lock meeting` / `Unlock meeting` toggle to the
+owner only. The 3D visualization projection (`createRoomVisualizationState`)
+now filters to `status === "active"` participants, so a removed participant's
+chair disappears from both the drawer roster and the 3D room the same way;
+their historical positions, votes, and activity stay reachable through the
+canonical `RoomState` regardless of status.
+
 ## HTTP adapter
 
 - `POST /api/rooms`
@@ -212,6 +367,10 @@ state.
 - `POST /api/rooms/:roomId/claim-seat` (legacy/demo compatibility only; inert for production rooms)
 - `POST /api/rooms/:roomId/ready`
 - `POST /api/rooms/:roomId/phase`
+- `POST /api/rooms/:roomId/lock` (owner-only)
+- `POST /api/rooms/:roomId/unlock` (owner-only)
+- `POST /api/rooms/:roomId/participants/remove` (owner-only)
+- `POST /api/rooms/:roomId/ownership` (owner-only)
 - `GET /api/rooms/:roomId/join-requests` (owner-only)
 - `POST /api/rooms/:roomId/join-requests/admit` (owner-only)
 - `POST /api/rooms/:roomId/join-requests/reject` (owner-only)
@@ -351,3 +510,37 @@ set the two public Supabase environment variables, and leave both
 controlled demo environment. The shared `demo` room is a single global fixture,
 so starting a scenario intentionally replaces its current state for every
 connected demo browser.
+
+## Join Meeting camera transition fix (Slice 3)
+
+Before this slice, Welcome's "Join Meeting" link was a plain `<Link href="/join">`
+with no `FlowStage` interception, and `poseForPath()` had no case for `/join`
+at all, so it fell through to the `welcome` pose. That left the small
+welcome-framed 3D card (`.flow-stage-framed`, `position:fixed` at partial
+`inset`) sitting on top of the join form: `.flow-stage` is an explicitly
+positioned (`z-index: 0`) sibling of the page's `<main>`, and a page that
+does not also opt into its own stacking context (`.flow-content`, used by
+every other flow screen) paints *underneath* it, per normal CSS painting
+order for non-positioned in-flow content versus positioned descendants at the
+same stacking level. `join-room.tsx`'s `<main className={styles.joinPage}>`
+never did that.
+
+The fix: a fourth `PreMeetingPoseId`, `"join"`, deliberately mirrors `create`'s
+distance, height, and target (`position: [-1.0, 5.4, 12.8]`,
+`target: [0, 1.1, -1]`, versus create's `[1.0, 5.4, 12.8]`) rather than
+duplicating it exactly, so `PRE_MEETING_POSES` keeps its existing "every
+screen has its own vantage point" invariant while creating and joining still
+read as the same interior composition approached from two sides.
+`poseForPath()` now maps any path starting with `/join` to it, the welcome
+page's "Join a meeting" link gets the same click-intercepting `enter()` call
+`flyToCreate` already had, and `FlowStage` prefetches `/join` from welcome the
+same way it already prefetched `/new`. Separately, `.joinPage` in
+`onboarding.module.css` now sets `position: relative; z-index: 1`, matching
+the stacking treatment every other flow screen already used, so the join form
+renders and is clickable above the unframed stage instead of underneath the
+old framed card. Together these make Join behave exactly like Create: the
+camera flies to its own unframed interior pose, the frame opens out of the
+welcome card into the full window on the same curve, and the join form
+appears as that flight lands -- no hard cut, no duplicated `<Canvas>`, no
+orphaned framed card left over the form, and back navigation returns cleanly
+to the framed welcome shot with no flight left armed.

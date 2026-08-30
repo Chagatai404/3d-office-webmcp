@@ -33,6 +33,8 @@ const DEFAULT_RECOVERY: Record<ActionErrorCode, string> = {
     "This session is already a member of the room. Open it directly.",
   REQUEST_ALREADY_RESOLVED:
     "This join request was already resolved and cannot be resolved again.",
+  MEETING_LOCKED:
+    "This meeting is not accepting new participants right now.",
 };
 
 const ERROR_TITLE: Record<ActionErrorCode, string> = {
@@ -47,6 +49,7 @@ const ERROR_TITLE: Record<ActionErrorCode, string> = {
   INVALID_JOIN_CREDENTIALS: "That room access is invalid",
   ALREADY_PARTICIPANT: "Already a participant",
   REQUEST_ALREADY_RESOLVED: "Request already resolved",
+  MEETING_LOCKED: "Meeting locked",
 };
 
 export function ActionFeedback({

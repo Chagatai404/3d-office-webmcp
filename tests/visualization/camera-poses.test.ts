@@ -60,6 +60,14 @@ describe("pre-meeting poses", () => {
     expect(new Set(poses).size).toBe(poses.length);
   });
 
+  it("mirrors the join pose from create: same distance and target, opposite side of the table", () => {
+    const { create, join } = PRE_MEETING_POSES;
+    expect(join.target).toEqual(create.target);
+    expect(join.position[0]).toBe(-create.position[0]);
+    expect(join.position[1]).toBe(create.position[1]);
+    expect(join.position[2]).toBe(create.position[2]);
+  });
+
   it("keeps the onboarding poses out of the navigable workspace list", () => {
     for (const id of Object.keys(PRE_MEETING_POSES)) {
       expect(WORKSPACE_IDS).not.toContain(id);

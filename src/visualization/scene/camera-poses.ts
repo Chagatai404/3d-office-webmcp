@@ -55,13 +55,18 @@ export const CAMERA_POSES: Record<WorkspaceId, CameraPose> = {
  * outside, three-quarters on and above, so the first screen is the product
  * itself rather than a picture of it. `create` and `lobby` are transcribed
  * 1:1 from the imported design's extended `POSES` table (`meeting-stage.js`):
- * the camera has moved inside the composition, close to the table.
+ * the camera has moved inside the composition, close to the table. `join` is
+ * deliberately symmetrical with `create` -- the same distance, height and
+ * target, mirrored to the opposite side of the table -- so creating and
+ * joining read as the same unframed interior composition approached from two
+ * sides, never as two unrelated shots.
  */
-export type PreMeetingPoseId = "welcome" | "create" | "lobby";
+export type PreMeetingPoseId = "welcome" | "create" | "join" | "lobby";
 
 export const PRE_MEETING_POSES: Record<PreMeetingPoseId, CameraPose> = {
   welcome: { position: [13.9, 16.0, 22.3], target: [0, 1.45, 0] },
   create: { position: [1.0, 5.4, 12.8], target: [0, 1.1, -1] },
+  join: { position: [-1.0, 5.4, 12.8], target: [0, 1.1, -1] },
   lobby: { position: [1.4, 5.2, 12.2], target: [0, 1.0, 0] },
 };
 

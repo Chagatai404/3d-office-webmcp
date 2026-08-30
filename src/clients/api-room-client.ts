@@ -17,12 +17,14 @@ import {
   type JoinRequest,
   type ProposeTradeoffInput,
   type RaiseObjectionInput,
+  type RemoveParticipantInput,
   type ResolveObjectionInput,
   type RoomClient,
   type RoomPhase,
   type RoomState,
   type StartDemoScenarioInput,
   type SubmitProposalInput,
+  type TransferOwnershipInput,
 } from "@/contracts/room";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { ensureAnonymousAccessToken } from "@/lib/supabase/session";
@@ -165,6 +167,22 @@ export class ApiRoomClient implements RoomClient {
 
   rejectJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
     return this.mutateWithData(roomId, "join-requests/reject", input, joinRequestSchema);
+  }
+
+  lockMeeting(roomId: string): Promise<ActionResult> {
+    return this.mutate(roomId, "lock", {});
+  }
+
+  unlockMeeting(roomId: string): Promise<ActionResult> {
+    return this.mutate(roomId, "unlock", {});
+  }
+
+  removeParticipant(roomId: string, input: RemoveParticipantInput): Promise<ActionResult> {
+    return this.mutate(roomId, "participants/remove", input);
+  }
+
+  transferOwnership(roomId: string, input: TransferOwnershipInput): Promise<ActionResult> {
+    return this.mutate(roomId, "ownership", input);
   }
 
   private async ensureAnonymousSession(): Promise<string> {

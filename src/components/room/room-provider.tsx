@@ -22,11 +22,13 @@ import type {
   Participant,
   ProposeTradeoffInput,
   RaiseObjectionInput,
+  RemoveParticipantInput,
   ResolveObjectionInput,
   RoomPhase,
   RoomState,
   StartDemoScenarioInput,
   SubmitProposalInput,
+  TransferOwnershipInput,
 } from "@/contracts/room";
 
 import { getRoomClient } from "@/room-client/room-client";
@@ -99,6 +101,18 @@ export interface RoomActions {
   listJoinRequests(): Promise<ActionResult<JoinRequest[]>>;
   admitJoinRequest(input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>>;
   rejectJoinRequest(input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>>;
+
+  /** Owner-only. Existing participants keep normal access; new join requests are refused. */
+  lockMeeting(): Promise<ActionResult>;
+
+  /** Owner-only. Allows new join requests again. */
+  unlockMeeting(): Promise<ActionResult>;
+
+  /** Owner-only. Marks an active human participant removed; history is preserved. */
+  removeParticipant(input: RemoveParticipantInput): Promise<ActionResult>;
+
+  /** Owner-only. Atomically moves meeting authority to another active human participant. */
+  transferOwnership(input: TransferOwnershipInput): Promise<ActionResult>;
 }
 
 export interface RoomContextValue {
@@ -256,6 +270,11 @@ export function RoomProvider({
       listJoinRequests: () => client.listJoinRequests(roomId),
       admitJoinRequest: (input) => client.admitJoinRequest(roomId, input),
       rejectJoinRequest: (input) => client.rejectJoinRequest(roomId, input),
+
+      lockMeeting: () => client.lockMeeting(roomId),
+      unlockMeeting: () => client.unlockMeeting(roomId),
+      removeParticipant: (input) => client.removeParticipant(roomId, input),
+      transferOwnership: (input) => client.transferOwnership(roomId, input),
     }),
     [client, roomId],
   );

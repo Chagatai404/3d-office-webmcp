@@ -14,11 +14,13 @@ import {
   type ManageJoinRequestInput,
   type Participant,
   type Position,
+  type RemoveParticipantInput,
   type ResolveObjectionInput,
   type RoomClient,
   type RoomPhase,
   type RoomState,
   type StartDemoScenarioInput,
+  type TransferOwnershipInput,
 } from "@/contracts/room";
 
 /**
@@ -371,6 +373,24 @@ export class MockRoomClient implements RoomClient {
   rejectJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
     void input;
     return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Rejecting a join request"));
+  }
+
+  lockMeeting(roomId: string): Promise<ActionResult> {
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Locking the meeting"));
+  }
+
+  unlockMeeting(roomId: string): Promise<ActionResult> {
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Unlocking the meeting"));
+  }
+
+  removeParticipant(roomId: string, input: RemoveParticipantInput): Promise<ActionResult> {
+    void input;
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Removing a participant"));
+  }
+
+  transferOwnership(roomId: string, input: TransferOwnershipInput): Promise<ActionResult> {
+    void input;
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Transferring ownership"));
   }
 
   #snapshot(): RoomState {

@@ -13,6 +13,7 @@ import {
   type ClaimSeatInput,
   type CreateRoomInput,
   type ManageJoinRequestInput,
+  type RemoveParticipantInput,
   type RequestJoinByInviteInput,
   type RequestJoinByPasscodeInput,
   type RaiseObjectionInput,
@@ -21,6 +22,7 @@ import {
   type RoomPhase,
   type StartDemoScenarioInput,
   type SubmitProposalInput,
+  type TransferOwnershipInput,
 } from "@/contracts/room";
 import { settleSoloDemoScenario } from "@/demo/orchestrator";
 import type {
@@ -266,6 +268,32 @@ export class SupabaseRoomRepository implements RoomRepository {
       p_room_id: roomId,
       p_mode: input.mode,
       p_human_role: input.mode === "solo_judge" ? input.humanRole : null,
+    });
+  }
+
+  lockMeeting(roomId: string, context: MutationContext) {
+    return this.call("lock_meeting", {
+      p_room_id: roomId, p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  unlockMeeting(roomId: string, context: MutationContext) {
+    return this.call("unlock_meeting", {
+      p_room_id: roomId, p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  removeParticipant(roomId: string, input: RemoveParticipantInput, context: MutationContext) {
+    return this.call("remove_participant", {
+      p_room_id: roomId, p_participant_id: input.participantId,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  transferOwnership(roomId: string, input: TransferOwnershipInput, context: MutationContext) {
+    return this.call("transfer_ownership", {
+      p_room_id: roomId, p_participant_id: input.participantId,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
     });
   }
 

@@ -1,14 +1,49 @@
 "use client";
 
+import { useState } from "react";
+import type { ActionResult } from "@/contracts/room";
+import { ActionFeedback } from "@/components/room/action-feedback";
+import { useRoom } from "@/components/room/room-provider";
 import { useShell } from "../shell-provider";
 import { DrawerShell } from "./drawer-shell";
 
-/** Settings. Only one control ships wired-up so far: everything here is real. */
+/** Settings. Meeting access (lock) lives here alongside camera preferences. */
 export function SettingsDrawer() {
   const { forceReducedMotion, setForceReducedMotion } = useShell();
+  const { room, self, actions } = useRoom();
+  const isOwner = self?.meetingRole === "owner";
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<ActionResult<unknown> | null>(null);
+
+  async function toggleLock() {
+    if (busy) return;
+    setBusy(true);
+    const outcome = room.isLocked ? await actions.unlockMeeting() : await actions.lockMeeting();
+    setBusy(false);
+    setResult(outcome);
+  }
 
   return (
     <DrawerShell label="Settings" title="Settings">
+      <div className="drawer-row drawer-toggle-row">
+        <span>
+          Meeting access
+          <span className="drawer-toggle-hint">
+            {room.isLocked
+              ? "Locked — new join requests are refused."
+              : "Open — new join requests are allowed."}
+          </span>
+        </span>
+        {isOwner ? (
+          <button type="button" className="button-quiet" disabled={busy} onClick={() => void toggleLock()}>
+            {room.isLocked ? "Unlock meeting" : "Lock meeting"}
+          </button>
+        ) : (
+          <span className="tag tag-muted">{room.isLocked ? "Locked" : "Open"}</span>
+        )}
+      </div>
+      {isOwner ? <ActionFeedback result={result} /> : null}
+
       <label className="drawer-row drawer-toggle-row">
         <input
           type="checkbox"

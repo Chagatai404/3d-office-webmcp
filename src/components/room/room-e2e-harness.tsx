@@ -130,7 +130,11 @@ export function RoomE2EHarness() {
       ) : null}
 
       <section aria-label="Participant seats">
-        {room.participants.map((participant) => (
+        {/* A removed participant's chair disappears from the live roster the
+            same way it disappears from the 3D room; their historical rows
+            (positions, votes, activity) stay inspectable through the other
+            testids below regardless of status. */}
+        {room.participants.filter((participant) => participant.status === "active").map((participant) => (
           <article key={participant.id}>
             <strong>{participant.role}</strong>
             <span>{participant.name}</span>
@@ -157,9 +161,47 @@ export function RoomE2EHarness() {
                 Claim seat
               </button>
             ) : null}
+            {isOwner && participant.id !== room.ownerParticipantId && participant.kind === "human" ? (
+              <>
+                <button
+                  type="button"
+                  data-testid={`remove-${participant.id}`}
+                  onClick={() => void run(actions.removeParticipant({ participantId: participant.id }))}
+                >
+                  Remove
+                </button>
+                <button
+                  type="button"
+                  data-testid={`transfer-owner-${participant.id}`}
+                  onClick={() => void run(actions.transferOwnership({ participantId: participant.id }))}
+                >
+                  Make owner
+                </button>
+              </>
+            ) : null}
           </article>
         ))}
       </section>
+
+      {isOwner ? (
+        <section data-testid="lock-controls">
+          <p data-testid="room-locked">{String(room.isLocked)}</p>
+          <button
+            type="button"
+            data-testid="lock-meeting"
+            onClick={() => void run(actions.lockMeeting())}
+          >
+            Lock meeting
+          </button>
+          <button
+            type="button"
+            data-testid="unlock-meeting"
+            onClick={() => void run(actions.unlockMeeting())}
+          >
+            Unlock meeting
+          </button>
+        </section>
+      ) : null}
 
       {isOwner ? (
         <section data-testid="waiting-room">

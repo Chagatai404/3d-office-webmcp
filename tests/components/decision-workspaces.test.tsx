@@ -148,6 +148,18 @@ class FakeRoomClient implements RoomClient {
   rejectJoinRequest: RoomClient["rejectJoinRequest"] = async () => {
     throw new Error("Not used by this test.");
   };
+  lockMeeting: RoomClient["lockMeeting"] = async () => {
+    throw new Error("Not used by this test.");
+  };
+  unlockMeeting: RoomClient["unlockMeeting"] = async () => {
+    throw new Error("Not used by this test.");
+  };
+  removeParticipant: RoomClient["removeParticipant"] = async () => {
+    throw new Error("Not used by this test.");
+  };
+  transferOwnership: RoomClient["transferOwnership"] = async () => {
+    throw new Error("Not used by this test.");
+  };
 
   publish(apply: (draft: RoomState) => void) {
     const draft = this.snapshot();

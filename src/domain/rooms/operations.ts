@@ -6,6 +6,7 @@ import {
   createRoomInputSchema,
   createdRoomSchema,
   manageJoinRequestInputSchema,
+  removeParticipantInputSchema,
   requestJoinByInviteInputSchema,
   requestJoinByPasscodeInputSchema,
   raiseObjectionInputSchema,
@@ -14,6 +15,7 @@ import {
   roomPhaseSchema,
   startDemoScenarioInputSchema,
   submitProposalInputSchema,
+  transferOwnershipInputSchema,
   type ActionErrorCode,
   type ActionResult,
   type AddPositionInput,
@@ -27,6 +29,7 @@ import {
   type JoinRequest,
   type JoinRequestResult,
   type ManageJoinRequestInput,
+  type RemoveParticipantInput,
   type RequestJoinByInviteInput,
   type RequestJoinByPasscodeInput,
   type RaiseObjectionInput,
@@ -37,6 +40,7 @@ import {
   type RoomState,
   type StartDemoScenarioInput,
   type SubmitProposalInput,
+  type TransferOwnershipInput,
 } from "@/contracts/room";
 import { buildInviteUrl } from "./invitations";
 import type { DomainActor, MutationContext, RoomRepository } from "./repository";
@@ -213,6 +217,112 @@ export function admitJoinRequest(repository: RoomRepository, roomId: string, inp
 
 export function rejectJoinRequest(repository: RoomRepository, roomId: string, input: ManageJoinRequestInput, context: MutationContext) {
   return manageJoinRequest(repository, roomId, input, context, "reject");
+}
+
+const OWNER_LIFECYCLE_PHASES: RoomPhase[] = [
+  "input",
+  "proposals",
+  "deliberation",
+  "voting",
+  "approval",
+];
+
+/**
+ * Every owner-lifecycle operation (lock/unlock/remove/transfer) shares this
+ * gate: derive the room, reject stale/finalized state, then confirm the
+ * caller's own canonical seat is the current owner. This is a courtesy check
+ * only -- the database repeats the identical derivation from `auth.uid()`
+ * inside the same transaction that performs the mutation, so a spoofed or
+ * stale client cannot skip it.
+ */
+async function requireOwnerRoom(
+  repository: RoomRepository,
+  roomId: string,
+  context: MutationContext,
+): Promise<RoomState | ActionResult<never>> {
+  const room = await prepareMutation(repository, roomId, context, OWNER_LIFECYCLE_PHASES);
+  if ("ok" in room) return room;
+  const self = room.participants.find((participant) => participant.id === room.selfParticipantId);
+  if (!self || self.id !== room.ownerParticipantId || self.meetingRole !== "owner") {
+    return failure("NOT_AUTHORIZED", "Only the current room owner can perform this action.", room.version);
+  }
+  return room;
+}
+
+/** Owner-only. Existing participants keep normal access; new join requests are refused. */
+export async function lockMeeting(
+  repository: RoomRepository,
+  roomId: string,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  return repository.lockMeeting(roomId, context);
+}
+
+/** Owner-only. Allows new join requests again. */
+export async function unlockMeeting(
+  repository: RoomRepository,
+  roomId: string,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  return repository.unlockMeeting(roomId, context);
+}
+
+/**
+ * Owner-only. `input.participantId` is always the target of the removal, not
+ * caller authority -- the acting owner is derived from the authenticated
+ * session, never from a request field.
+ */
+export async function removeParticipant(
+  repository: RoomRepository,
+  roomId: string,
+  input: RemoveParticipantInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = removeParticipantInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Removal input is invalid.", context.expectedRoomVersion);
+  }
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  if (parsed.data.participantId === room.ownerParticipantId) {
+    return failure(
+      "NOT_AUTHORIZED",
+      "The current owner cannot remove themselves. Transfer ownership first.",
+      room.version,
+    );
+  }
+  return repository.removeParticipant(roomId, parsed.data, context);
+}
+
+/**
+ * Owner-only. Atomically moves meeting authority to another active human
+ * participant. `input.participantId` names the *new* owner; the current
+ * owner is derived from the authenticated session, never from the request.
+ */
+export async function transferOwnership(
+  repository: RoomRepository,
+  roomId: string,
+  input: TransferOwnershipInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = transferOwnershipInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Ownership transfer input is invalid.", context.expectedRoomVersion);
+  }
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  if (parsed.data.participantId === room.ownerParticipantId) {
+    return failure(
+      "VALIDATION_ERROR",
+      "The target is already the meeting owner.",
+      room.version,
+    );
+  }
+  return repository.transferOwnership(roomId, parsed.data, context);
 }
 
 export function getMeetingContext(

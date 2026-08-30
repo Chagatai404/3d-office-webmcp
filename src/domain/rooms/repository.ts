@@ -11,6 +11,7 @@ import type {
   JoinRequest,
   JoinRequestResult,
   ManageJoinRequestInput,
+  RemoveParticipantInput,
   RequestJoinByInviteInput,
   RequestJoinByPasscodeInput,
   RaiseObjectionInput,
@@ -21,6 +22,7 @@ import type {
   RoomState,
   StartDemoScenarioInput,
   SubmitProposalInput,
+  TransferOwnershipInput,
 } from "@/contracts/room";
 
 export interface DomainActor {
@@ -127,5 +129,17 @@ export interface RoomRepository {
     roomId: string,
     input: StartDemoScenarioInput,
     authUserId: string,
+  ): Promise<ActionResult>;
+  lockMeeting(roomId: string, context: MutationContext): Promise<ActionResult>;
+  unlockMeeting(roomId: string, context: MutationContext): Promise<ActionResult>;
+  removeParticipant(
+    roomId: string,
+    input: RemoveParticipantInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  transferOwnership(
+    roomId: string,
+    input: TransferOwnershipInput,
+    context: MutationContext,
   ): Promise<ActionResult>;
 }
