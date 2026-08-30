@@ -30,7 +30,8 @@ export type DrawerId =
   | "agents"
   | "settings"
   | "leave"
-  | "help";
+  | "help"
+  | "attention";
 
 export interface ShellContextValue {
   request: CameraRequest;

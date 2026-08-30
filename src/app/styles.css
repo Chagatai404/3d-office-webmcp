@@ -1397,6 +1397,27 @@ select {
   animation: msPulse 2.2s ease-out infinite;
 }
 
+.toolbar-attention {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.68rem 0.9rem;
+  border: 0;
+  border-radius: 0.9rem;
+  background: var(--surface-quiet);
+  box-shadow: 0 6px 20px rgba(46, 43, 39, 0.09);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.toolbar-attention-active {
+  background: var(--accent);
+  color: #fff;
+}
+
 .toolbar-help {
   display: grid;
   place-items: center;

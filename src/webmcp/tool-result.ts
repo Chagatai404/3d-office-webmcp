@@ -32,7 +32,28 @@ export async function executeToolSafely(
   getRoomVersion: () => number,
 ): Promise<string> {
   try {
-    return JSON.stringify(await execute());
+    const result = await execute();
+    if (
+      result &&
+      typeof result === "object" &&
+      "ok" in result &&
+      result.ok === false &&
+      "error" in result &&
+      result.error &&
+      typeof result.error === "object" &&
+      "code" in result.error &&
+      result.error.code === "STALE_ROOM_STATE"
+    ) {
+      return JSON.stringify({
+        ...result,
+        error: {
+          ...result.error,
+          recovery:
+            "Call get_meeting_context, reconsider the action against the latest roomVersion, and retry only if it is still appropriate.",
+        },
+      });
+    }
+    return JSON.stringify(result);
   } catch (error) {
     if (error instanceof ZodError) {
       return JSON.stringify({

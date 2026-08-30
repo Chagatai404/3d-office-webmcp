@@ -4,10 +4,11 @@ import type { RoomState } from "@/contracts/room";
 import {
   getFinalDecisionRecord,
   getMeetingContext,
+  listJoinRequests,
   previewFinalDecision,
 } from "@/domain/rooms/operations";
 import { getOpenIssues } from "@/domain/rooms/queries";
-import type { MutationContext } from "@/domain/rooms/repository";
+import type { DomainActor, MutationContext } from "@/domain/rooms/repository";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { SupabaseRoomRepository } from "@/lib/supabase/room-repository";
 
@@ -48,6 +49,16 @@ export class RoomWebMcpContext {
     );
   }
 
+  /**
+   * Owner-only in effect: the domain operation itself refuses a non-owner
+   * with `NOT_AUTHORIZED` before ever reaching the database, so tools that
+   * call this do not need a separate local owner check.
+   */
+  async listJoinRequests() {
+    const actor: DomainActor = { authUserId: await this.getActorUserId(), origin: "webmcp" };
+    return listJoinRequests(this.repository, this.roomId, actor);
+  }
+
   async mutationContext(): Promise<MutationContext> {
     const actorUserId = await this.getActorUserId();
     const observed = this.observedRoom();
@@ -70,7 +81,9 @@ export class RoomWebMcpContext {
    * reference from reaching the domain at all.
    */
   getObservedSelfParticipantId(): string | null {
-    return this.observedRoom()?.selfParticipantId ?? null;
+    const room = this.observedRoom();
+    const self = room?.participants.find((participant) => participant.id === room.selfParticipantId);
+    return self?.status === "active" && self.isClaimed ? self.id : null;
   }
 
   private async getActorUserId(): Promise<string> {

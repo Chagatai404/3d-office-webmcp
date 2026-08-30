@@ -2,17 +2,18 @@
 
 import { useRoom } from "@/components/room/room-provider";
 import {
-  getRoomWebMcpToolNames,
-  PARTICIPANT_MUTATION_TOOL_NAMES,
-} from "@/webmcp/tool-definitions";
+  deriveRoomCapabilityContext,
+  getAvailableWebMcpToolNames,
+  MUTATION_TOOL_NAMES,
+} from "@/webmcp/capability-context";
 import { DrawerShell } from "./drawer-shell";
 
 /** Agents & tools: exactly which WebMCP tools are registered right now, and why. */
 export function AgentsDrawer() {
   const { room, self } = useRoom();
-  const registered = getRoomWebMcpToolNames(room.phase, { hasClaimedSeat: self !== null });
-  const readOnly = registered.filter((name) => !PARTICIPANT_MUTATION_TOOL_NAMES.has(name));
-  const mutating = registered.filter((name) => PARTICIPANT_MUTATION_TOOL_NAMES.has(name));
+  const registered = getAvailableWebMcpToolNames(deriveRoomCapabilityContext(room));
+  const readOnly = registered.filter((name) => !MUTATION_TOOL_NAMES.has(name));
+  const mutating = registered.filter((name) => MUTATION_TOOL_NAMES.has(name));
 
   return (
     <DrawerShell label="Agents and tools" title="Agents & tools" dark>

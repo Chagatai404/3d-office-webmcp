@@ -1,6 +1,6 @@
 # Repository status
 
-Last updated: 2026-08-30 (Slice 4 / Gate 4).
+Last updated: 2026-08-30 (Slice 5 / Gate 5 implementation).
 
 ## Core platform
 
@@ -26,7 +26,7 @@ The backend/core workstream is considered integrated in this snapshot:
 - exact decision hash and immutable final record;
 - realtime invalidation/refetch for admitted participants; bounded polling for
   a waiting outsider's own join-request status (never a widened room-read);
-- participant-scoped WebMCP tools;
+- route-, authority-, policy-, and phase-scoped WebMCP tools;
 - solo-judge demo orchestration;
 - domain, contract, component, and multi-browser coverage.
 
@@ -184,11 +184,43 @@ See `backend-integration.md`'s "Alignment and policy-aware finalization
 (Slice 4)" section for the full design, and the Slice 4 completion report for
 exact verification commands and results.
 
-## Next implementation slice
+## Goal-oriented WebMCP and attention (Slice 5)
 
-Slice 5 (the broader goal-oriented WebMCP tool catalog, the Security Expert
-advisory actor, and the full `/room/demo` scenario redesign) has not been
-started.
+Slice 5 adds the complete browser-agent workflow without adding a background
+agent service:
+
+- landing/create/join tools create real rooms and waiting join requests using
+  the same onboarding domain operations as the visible forms;
+- a centralized capability matrix derives registration from route, active
+  membership, meeting role, decision role, phase, decision policy, lock state,
+  frozen-candidate state, and required-approver state;
+- registration is torn down with an `AbortController` and recomputed live when
+  any capability input changes;
+- the room catalog uses goal language (`share_my_context`, `suggest_option`,
+  `raise_concern`, `respond_to_concern`, `resolve_my_concern`, and alignment /
+  decision reads) rather than exposing database terminology;
+- owner tools cover waiting-room management, lock state, phase progression,
+  decision policy/roles, removal preparation, and ownership-transfer
+  preparation;
+- final decision confirmation, removal, and ownership transfer cannot be
+  completed by WebMCP. The tool validates and focuses the existing visible
+  confirmation UI, then returns `HUMAN_CONFIRMATION_REQUIRED`;
+- canonical `AttentionItem` values are derived from current room state and the
+  owner-authorized waiting list. The meeting toolbar exposes the same list as
+  a compact **Needs you** drawer;
+- participant-authored strings are returned separately as
+  `untrustedRoomContent` where applicable and output annotations mark tools
+  that can surface untrusted text;
+- deterministic WebMCP tests cover the catalog, schemas, authority,
+  registration, attention derivation, prompt injection, confirmation, and
+  onboarding. Playwright covers dynamic registration and stale captured tool
+  references against the real server boundary.
+
+See [`webmcp-demo.md`](webmcp-demo.md) for the current Chrome flags, inspector
+workflow, required natural-language prompts, and two-person demonstration.
+
+The Security Expert and the full startup-feature `/room/demo` redesign remain
+separate later slices and were not started here.
 
 ## Verification note
 

@@ -561,19 +561,77 @@ participants are visibly marked as simulations. The reset is transactional and
 uses a narrowly scoped database trigger bypass so a finalized demo can be
 replayed without weakening the normal finalized-room guard.
 
-WebMCP exposes phase-scoped alignment (`express_my_alignment`, `get_alignment`),
-preview, approval-request, and finalized record tools. `approve_final_decision`
-never records an approval directly: it
-returns `HUMAN_CONFIRMATION_REQUIRED`. The visible room UI displays the exact
-candidate and hash, requires an explicit confirmation checkbox, and then sends
-the approval through `ApiRoomClient`.
+## Goal-oriented WebMCP capability system (Slice 5)
 
-WebMCP authority is the browser session's claimed participant, not a separate
-agent account. Read-only tools may be available before a seat is claimed if the
-session can already read the room, but participant mutation tools are hidden and
-guarded until `selfParticipantId` is non-null. Tool schemas contain no actor,
-participant, user, origin, role, or confirmation fields; the WebMCP context
-builds `origin = webmcp` and never forwards `humanConfirmed`.
+`src/webmcp/capability-context.ts` is the single registration policy. Its pure
+capability projection combines route, active/claimed membership, meeting role,
+decision role, phase, decision policy, lock state, frozen-candidate state, and
+whether the authenticated participant is a missing required approver. React
+does not duplicate those rules. `useRoomWebMcpTools` serializes that projection
+as its lifecycle signature, aborts all registrations from the previous
+signature, and registers only the newly available definitions. Admission,
+removal, ownership transfer, role/policy changes, lock changes, phase changes,
+and finalization therefore update discovery without a refresh.
+
+Registration is not authorization. `RoomWebMcpContext` derives the actor's
+`authUserId` from the current Supabase browser session and sets only
+`origin = webmcp`; no tool accepts a caller authority ID or `humanConfirmed`.
+Every mutation calls the same domain operation and database function used by
+the visible UI, where participant/owner authority, active status, room scope,
+phase, decision policy, and optimistic room version are checked again. A stale
+captured tool consequently fails even after its registration has disappeared.
+`STALE_ROOM_STATE` results direct the agent to re-read `get_meeting_context`;
+consequential writes are never silently replayed.
+
+The current catalog is split by intent:
+
+- pre-room: `create_meeting`, `join_meeting`, `get_my_join_status`;
+- compact reads: `get_meeting_context`, `get_current_decision`,
+  `get_my_attention_items`, `get_open_issues`, `get_alignment`, and finalized
+  `get_decision_record`;
+- participant goals: `share_my_context`, `suggest_option`, `raise_concern`,
+  `respond_to_concern`, `resolve_my_concern`, `express_my_alignment`;
+- owner goals: waiting-room management, lock/unlock, responsible phase
+  progression, decision-policy and decision-role configuration, participant
+  removal preparation, and ownership-transfer preparation;
+- final authority: `request_final_decision_confirmation` only for a current
+  missing required approver.
+
+The retired WebMCP-facing names `add_my_position`, `submit_proposal`,
+`raise_objection`, `cast_my_vote`, and `approve_final_decision` are not
+registered. Internal domain terminology remains where it is part of the
+canonical persistence model.
+
+Read tools put participant-authored prose under `untrustedRoomContent` where a
+trusted/untrusted split is useful, and every tool that may surface participant
+text carries `untrustedContentHint`. Text can inform an agent's summary, but it
+never affects actor resolution or capability selection.
+
+`AttentionItem` is canonical and JSON-safe but derived, not persisted. The
+pure `computeAttentionItems` projection emits deterministic IDs for missing
+input, owner admission requests, the current participant's blocking concern,
+missing alignment, missing owner/consensus approval, and a conservative owner
+progression opportunity. The WebMCP attention tool and the toolbar's **Needs
+you** drawer call the same projection; attention is never an authority source.
+
+Sensitive actions prepare visible UI instead of mutating authority. Removal
+and ownership transfer validate the target, arm the existing Participants
+confirmation, and return `HUMAN_CONFIRMATION_REQUIRED`. Final decision
+confirmation asks the domain to validate the exact hash without
+`humanConfirmed`, opens the Decision workspace, and returns the same refusal.
+Only the human's visible confirmation calls the manual-UI operation with the
+confirmation bit.
+
+Onboarding tools use the real room repository and anonymous authenticated
+session. `create_meeting` returns the room ID, generic invite URL, and one-time
+plaintext passcode (never a hash), then routes into the room. `join_meeting`
+supports passcode or invite-token credentials, creates only a waiting
+`JoinRequest`, stores only its request/room IDs in session storage for UI
+handoff, and never creates or admits a participant. `get_my_join_status` reads
+only that browser session's request.
+
+See `docs/webmcp-demo.md` for Chrome 149+ flags, the Application-panel WebMCP
+inspector, Model Context Tool Inspector usage, and the required prompt script.
 
 ## Post-hackathon delegation design
 

@@ -461,47 +461,52 @@ terminology end to end).
 
 ## AttentionItem domain model
 
-- [ ] Add canonical `AttentionItem`.
-- [ ] Support at minimum:
-  - [ ] `input_required`
-  - [ ] `conflict_requires_human`
-  - [ ] `owner_decision_required`
-  - [ ] `admission_request`
-  - [ ] `consensus_approval_required`
+**Status (2026-08-30, Slice 5): implemented as a derived projection.** The
+field shape intentionally does not include persistence lifecycle fields
+(`createdAt`, `resolvedAt`, mutable status) because attention is recomputed
+from canonical room state and is never an authority/workflow table.
+
+- [x] Add canonical `AttentionItem`.
+- [x] Support at minimum:
+  - [x] `input_required`
+  - [x] `conflict_requires_human`
+  - [x] `owner_decision_required`
+  - [x] `admission_request`
+  - [x] `consensus_approval_required`
 - [ ] Each attention item should include:
-  - [ ] unique ID;
+  - [x] unique ID;
   - [ ] room ID;
   - [ ] target participant / role;
   - [ ] reason;
-  - [ ] linked entity;
+  - [x] linked entity;
   - [ ] status;
   - [ ] createdAt;
   - [ ] resolvedAt.
-- [ ] Attention items must be derived or created consistently through domain operations.
-- [ ] Do not duplicate the same unresolved attention item repeatedly.
-- [ ] Resolve items automatically when the underlying condition is satisfied.
+- [x] Attention items must be derived or created consistently through domain operations. (`computeAttentionItems`, pure projection)
+- [x] Do not duplicate the same unresolved attention item repeatedly. (deterministic IDs, covered by tests)
+- [x] Resolve items automatically when the underlying condition is satisfied. (items disappear on the next projection)
 
 ## WebMCP
 
-- [ ] Add `get_my_attention_items`.
-- [ ] Tool must return only items relevant to the authenticated participant.
-- [ ] Owner receives owner-specific authority items.
-- [ ] Regular participants do not receive owner-only actions.
+- [x] Add `get_my_attention_items`.
+- [x] Tool must return only items relevant to the authenticated participant.
+- [x] Owner receives owner-specific authority items.
+- [x] Regular participants do not receive owner-only actions.
 
 ## UI
 
-- [ ] Add compact "Needs you" indicator.
+- [x] Add compact "Needs you" indicator.
 - [ ] Avoid permanent large text forms.
-- [ ] Clicking attention item moves UI/camera to the relevant workspace.
-- [ ] Human-facing prompts should be concise.
+- [x] Clicking attention item moves UI/camera to the relevant workspace.
+- [x] Human-facing prompts should be concise.
 - [ ] Keep detailed structured fields behind agent/domain operations.
-- [ ] Provide manual fallback controls for critical actions.
+- [x] Provide manual fallback controls for critical actions.
 
 ### Acceptance criteria
 
-- [ ] A participant can understand what needs their attention in one place.
-- [ ] Agent can ask the app for pending human-required tasks.
-- [ ] User is not forced to inspect every meeting workspace manually.
+- [x] A participant can understand what needs their attention in one place.
+- [x] Agent can ask the app for pending human-required tasks.
+- [x] User is not forced to inspect every meeting workspace manually.
 
 ---
 
@@ -511,93 +516,93 @@ terminology end to end).
 
 ## General rules
 
-- [ ] WebMCP authority must come from current authenticated browser session.
-- [ ] Tool input schemas must not accept trusted identity fields.
+- [x] WebMCP authority must come from current authenticated browser session.
+- [x] Tool input schemas must not accept trusted identity fields. (target object IDs remain valid and are never caller identity)
 - [ ] Tool availability must depend on:
-  - [ ] room phase;
-  - [ ] meeting role;
-  - [ ] decision role;
-  - [ ] participant admission state;
-  - [ ] finalization state.
-- [ ] Hidden/invalid actions must also be rejected server-side.
+  - [x] room phase;
+  - [x] meeting role;
+  - [x] decision role;
+  - [x] participant admission state;
+  - [x] finalization state.
+- [x] Hidden/invalid actions must also be rejected server-side.
 - [ ] Dynamic registration must update when:
-  - [ ] phase changes;
-  - [ ] ownership transfers;
-  - [ ] participant is admitted/removed;
-  - [ ] decision role changes;
-  - [ ] room finalizes.
+  - [x] phase changes;
+  - [x] ownership transfers;
+  - [x] participant is admitted/removed;
+  - [x] decision role changes;
+  - [x] room finalizes.
 
 ## Landing / onboarding tools
 
-- [ ] Evaluate exposing:
-  - [ ] `create_meeting`
-  - [ ] `join_meeting`
-- [ ] If browser agent can access landing page actions, use strict minimal schemas.
-- [ ] Creation tool must not specify caller identity.
+- [x] Evaluate exposing:
+  - [x] `create_meeting`
+  - [x] `join_meeting`
+- [x] If browser agent can access landing page actions, use strict minimal schemas.
+- [x] Creation tool must not specify caller identity.
 
 ## Participant tools
 
-- [ ] `get_meeting_context`
-- [ ] `get_current_decision`
-- [ ] `get_my_attention_items`
-- [ ] `share_my_context`
-- [ ] `suggest_option`
-- [ ] `raise_concern`
-- [ ] `respond_to_concern`
-- [ ] `get_alignment`
-- [ ] `express_my_alignment`
+- [x] `get_meeting_context`
+- [x] `get_current_decision`
+- [x] `get_my_attention_items`
+- [x] `share_my_context`
+- [x] `suggest_option`
+- [x] `raise_concern`
+- [x] `respond_to_concern`
+- [x] `get_alignment`
+- [x] `express_my_alignment`
 
 ## Owner-only tools
 
-- [ ] `get_waiting_participants`
-- [ ] `admit_participant`
-- [ ] `reject_participant`
-- [ ] `remove_participant`
-- [ ] `lock_meeting`
-- [ ] `unlock_meeting`
-- [ ] `transfer_ownership`
-- [ ] `advance_discussion`
-- [ ] `request_team_alignment`
-- [ ] `make_final_decision`
+- [x] `get_waiting_participants`
+- [x] `admit_participant`
+- [x] `reject_participant`
+- [x] `remove_participant` (prepares visible confirmation)
+- [x] `lock_meeting`
+- [x] `unlock_meeting`
+- [x] `transfer_ownership` (prepares visible confirmation)
+- [x] `advance_discussion`
+- [x] `request_team_alignment`
+- [x] `make_final_decision` (implemented as `review_final_decision` + `request_final_decision_confirmation`)
 
 ## Finalized tools
 
-- [ ] `preview_decision_record`
-- [ ] `get_decision_record`
+- [x] `preview_decision_record` (covered by focused `get_current_decision` during Decision review)
+- [x] `get_decision_record`
 
 ## Sensitive action confirmation
 
-- [ ] WebMCP must not directly record final human approval if explicit human confirmation is required.
-- [ ] Keep visible UI confirmation for irreversible authority actions.
+- [x] WebMCP must not directly record final human approval if explicit human confirmation is required.
+- [x] Keep visible UI confirmation for irreversible authority actions.
 - [ ] Consider human confirmation for:
-  - [ ] final decision;
-  - [ ] ownership transfer;
-  - [ ] participant removal;
+  - [x] final decision;
+  - [x] ownership transfer;
+  - [x] participant removal;
   - [ ] ending meeting.
-- [ ] WebMCP may prepare/request the action.
-- [ ] Manual confirmation records the sensitive operation.
+- [x] WebMCP may prepare/request the action.
+- [x] Manual confirmation records the sensitive operation.
 
 ## Tool quality
 
 - [ ] Each tool has:
-  - [ ] one clear responsibility;
-  - [ ] action-oriented name;
-  - [ ] concise description;
-  - [ ] strict schema;
-  - [ ] structured result;
-  - [ ] recovery instructions;
+  - [x] one clear responsibility;
+  - [x] action-oriented name;
+  - [x] concise description;
+  - [x] strict schema;
+  - [x] structured result;
+  - [x] recovery instructions;
   - [ ] bounded output size;
-  - [ ] visible UI effect where relevant.
-- [ ] Read-only tools are marked read-only where supported.
-- [ ] Participant content is treated as untrusted text.
+  - [x] visible UI effect where relevant.
+- [x] Read-only tools are marked read-only where supported.
+- [x] Participant content is treated as untrusted text.
 
 ### Acceptance criteria
 
-- [ ] Agent can complete the core meeting workflow through prompts.
-- [ ] Agent cannot impersonate another participant.
-- [ ] Participant cannot discover/call owner-only WebMCP tools.
-- [ ] Ownership transfer changes tool set in the same live session.
-- [ ] Stale room version returns structured recovery guidance.
+- [x] Agent can complete the core meeting workflow through prompts. (deterministic tool path + inspector script; live model selection remains a manual eval)
+- [x] Agent cannot impersonate another participant.
+- [x] Participant cannot discover/call owner-only WebMCP tools.
+- [x] Ownership transfer changes tool set in the same live session.
+- [x] Stale room version returns structured recovery guidance.
 
 ---
 
@@ -951,9 +956,9 @@ Treat the following as untrusted content:
 ## WebMCP tests
 
 - [x] correct phase tool set;
-- [ ] correct owner tool set; (no owner-only WebMCP tool exists yet -- Slice 4/5 scope)
+- [x] correct owner tool set;
 - [x] correct participant tool set;
-- [ ] tool set updates after ownership transfer; (nothing to demonstrate yet: no owner-gated tool exists; the registration wiring that would refresh it is unchanged and covered by the removal case below)
+- [x] tool set updates after ownership transfer;
 - [x] tool set updates after finalization;
 - [x] no actor/participant identity input fields;
 - [x] stale state recovery;
@@ -1263,10 +1268,15 @@ broader goal-oriented WebMCP catalog, the Security Expert, and the
 
 ## Gate 5 — WebMCP green
 
-- [ ] agent can operate core workflow;
-- [ ] dynamic tool permissions correct;
-- [ ] no impersonation vectors;
-- [ ] prompt-injection evals pass.
+- [x] agent can operate core workflow;
+- [x] dynamic tool permissions correct;
+- [x] no impersonation vectors;
+- [x] prompt-injection evals pass.
+
+**Gate 5 status note (2026-08-30):** The implementation and automated gate
+checks are complete (`npm run test:all`, `npm run check`, and `npm run build`).
+The documented two-browser Chrome Model Context Tool Inspector walkthrough is
+the remaining human verification, so this agent does not self-certify the gate.
 
 ## Gate 6 — Demo green
 

@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import type { ActionResult, DemoHumanRole, JoinRequest, RoomPhase } from "@/contracts/room";
+import {
+  subscribeToUiConfirmation,
+  type ConfirmationRequest,
+} from "@/webmcp/confirmation-bridge";
 import { useRoom } from "./room-provider";
 
 /**
@@ -18,6 +22,12 @@ export function RoomE2EHarness() {
   const [confirmedDecisionHash, setConfirmedDecisionHash] = useState<string | null>(null);
   const [status, setStatus] = useState("Connected");
   const [soloRole, setSoloRole] = useState<DemoHumanRole>("product");
+  const [webMcpConfirmation, setWebMcpConfirmation] = useState<ConfirmationRequest | null>(null);
+
+  useEffect(
+    () => subscribeToUiConfirmation((request) => setWebMcpConfirmation(request)),
+    [],
+  );
 
   const decisionHash = room.finalDecisionPreview?.decisionHash ?? null;
 
@@ -81,6 +91,14 @@ export function RoomE2EHarness() {
     }
   }
 
+  async function confirmWebMcpParticipantAction() {
+    if (!webMcpConfirmation || webMcpConfirmation.kind !== "participants") return;
+    const result = webMcpConfirmation.action === "remove"
+      ? await run(actions.removeParticipant({ participantId: webMcpConfirmation.participantId }))
+      : await run(actions.transferOwnership({ participantId: webMcpConfirmation.participantId }));
+    if (result.ok) setWebMcpConfirmation(null);
+  }
+
   return (
     <main className="shell room-shell" data-testid="e2e-room-harness">
       <p data-testid="connection-status">{status === "Saving…" ? "Saving…" : "Connected"}</p>
@@ -89,6 +107,22 @@ export function RoomE2EHarness() {
       <p data-testid="room-id">{room.id}</p>
       <p>Room · <span data-testid="room-phase">{room.phase}</span></p>
       <p>Version <span data-testid="room-version">{room.version}</span></p>
+
+      {webMcpConfirmation?.kind === "participants" ? (
+        <section role="alertdialog" data-testid="webmcp-participant-confirmation">
+          <p>
+            Confirm {webMcpConfirmation.action === "remove" ? "participant removal" : "ownership transfer"}?
+          </p>
+          <button type="button" onClick={() => setWebMcpConfirmation(null)}>Cancel</button>
+          <button type="button" data-testid="confirm-webmcp-participant-action" onClick={() => void confirmWebMcpParticipantAction()}>
+            Confirm
+          </button>
+        </section>
+      ) : null}
+
+      {webMcpConfirmation?.kind === "decision" ? (
+        <p role="status" data-testid="webmcp-decision-confirmation">Final decision requires visible human confirmation.</p>
+      ) : null}
 
       {isDemoRoom ? (
         <section data-testid="demo-controls">

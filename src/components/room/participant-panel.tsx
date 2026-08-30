@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ActionResult, AssignableDecisionRole } from "@/contracts/room";
+import {
+  consumeArmedParticipantsRequest,
+  getArmedParticipantsRequestSnapshot,
+  subscribeToArmedParticipantsRequest,
+} from "@/webmcp/confirmation-bridge";
 import { ActionFeedback } from "./action-feedback";
 import { useRoom } from "./room-provider";
 import { ALIGNMENT_CHOICE_LABEL } from "./room-labels";
@@ -43,6 +48,31 @@ export function ParticipantPanel() {
   ).length;
 
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
+
+  // A `transfer_ownership`/`remove_participant` WebMCP call never performs
+  // the mutation itself; it validates the target and arms this exact
+  // alertdialog through the confirmation bridge, so the agent can prepare
+  // the action but only the human's own click below can confirm it.
+  useEffect(() => {
+    function consumeRequest() {
+      const request = getArmedParticipantsRequestSnapshot();
+      if (!request || !isOwner) return;
+      const target = participants.find(
+        (participant) => participant.id === request.participantId && !participant.isSelf,
+      );
+      if (target) {
+        setResult(null);
+        setPending({ type: request.action, participant: target });
+      }
+      consumeArmedParticipantsRequest();
+    }
+    const initial = window.setTimeout(consumeRequest, 0);
+    const unsubscribe = subscribeToArmedParticipantsRequest(consumeRequest);
+    return () => {
+      window.clearTimeout(initial);
+      unsubscribe();
+    };
+  }, [isOwner, participants]);
 
   async function confirmPending() {
     if (!pending || busy) return;

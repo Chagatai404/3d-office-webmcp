@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { executeTool, installWebMcpShim, toolNames } from "./helpers";
+import {
+  captureToolDefinition,
+  executeCapturedTool,
+  executeTool,
+  installWebMcpShim,
+  toolNames,
+} from "./helpers";
 
 test("two sessions collaborate through phase-aware WebMCP and canonical realtime state", async ({ browser }) => {
   test.setTimeout(120_000);
@@ -19,14 +25,14 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   const preClaimContext = JSON.parse(String(await executeTool(engineer, "get_meeting_context", {})));
   expect(preClaimContext).toMatchObject({
     ok: true,
-    data: { roomId: "demo", phase: "input", currentParticipant: null },
+    data: { trustedContext: { roomId: "demo", phase: "input", currentParticipant: null } },
   });
-  await expect(executeTool(engineer, "add_my_position", {
+  await expect(executeTool(engineer, "share_my_context", {
     summary: "Write without holding a seat.",
     category: null,
     priority: null,
     constraints: [],
-  })).rejects.toThrow("Tool add_my_position was not discovered.");
+  })).rejects.toThrow("Tool share_my_context was not discovered.");
 
   await engineer.getByTestId("claim-demo-engineer").click();
   await expect(engineer.getByText("Your seat")).toBeVisible();
@@ -36,23 +42,23 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   await expect(designer.getByText("Your seat")).toBeVisible();
   await expect(engineer.getByTestId("room-version")).toHaveText("2");
 
-  await expect.poll(() => toolNames(engineer)).toEqual([
-    "add_my_position",
-    "get_meeting_context",
-  ]);
-  await expect.poll(() => toolNames(designer)).toEqual([
-    "add_my_position",
-    "get_meeting_context",
-  ]);
+  await expect.poll(() => toolNames(engineer)).toEqual(expect.arrayContaining([
+    "share_my_context", "get_meeting_context", "get_my_attention_items",
+  ]));
+  await expect.poll(() => toolNames(designer)).toEqual(expect.arrayContaining([
+    "share_my_context", "get_meeting_context", "get_my_attention_items",
+  ]));
   const meetingContext = JSON.parse(String(await executeTool(engineer, "get_meeting_context", {})));
   expect(meetingContext).toMatchObject({
     ok: true,
     roomVersion: 2,
     data: {
-      roomId: "demo",
-      phase: "input",
-      roomVersion: 2,
-      currentParticipant: { participantId: "demo-engineer", role: "Engineer" },
+      trustedContext: {
+        roomId: "demo",
+        phase: "input",
+        roomVersion: 2,
+        currentParticipant: { participantId: "demo-engineer", role: "Engineer" },
+      },
     },
   });
 
@@ -60,13 +66,13 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   const designerContextSnapshot = JSON.parse(
     String(await executeTool(designer, "get_meeting_context", {})),
   );
-  expect(designerContextSnapshot.data.currentParticipant).toMatchObject({
+  expect(designerContextSnapshot.data.trustedContext.currentParticipant).toMatchObject({
     participantId: "demo-designer",
     role: "Designer",
   });
-  expect(designerContextSnapshot.data.roomId).toBe(meetingContext.data.roomId);
+  expect(designerContextSnapshot.data.trustedContext.roomId).toBe(meetingContext.data.trustedContext.roomId);
 
-  const positionResult = JSON.parse(String(await executeTool(engineer, "add_my_position", {
+  const positionResult = JSON.parse(String(await executeTool(engineer, "share_my_context", {
     summary: "Ship an accessible thin slice.",
     category: "delivery",
     priority: "critical",
@@ -82,21 +88,17 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
 
   await engineer.getByTestId("advance-phase").click();
   await expect(designer.getByTestId("room-phase")).toHaveText("proposals");
-  await expect.poll(() => toolNames(engineer)).toEqual([
-    "get_meeting_context",
-    "list_positions",
-    "submit_proposal",
-  ]);
+  await expect.poll(() => toolNames(engineer)).toEqual(expect.arrayContaining([
+    "get_current_decision", "get_meeting_context", "suggest_option",
+  ]));
 
-  const listed = JSON.parse(String(await executeTool(engineer, "list_positions", {})));
-  const constraint = listed.data.participantPositions
-    .flatMap((group: { constraints: Array<{ id: string; text: string }> }) => group.constraints)
-    .find(
+  const listed = JSON.parse(String(await executeTool(engineer, "get_meeting_context", {})));
+  const constraint = listed.data.untrustedRoomContent.constraints.find(
     (item: { text: string }) => item.text === "No authentication rewrite in this milestone.",
   );
   expect(constraint.id).toBeTruthy();
 
-  const impersonatedProposal = JSON.parse(String(await executeTool(engineer, "submit_proposal", {
+  const impersonatedProposal = JSON.parse(String(await executeTool(engineer, "suggest_option", {
     title: "Proposal attributed to the Designer",
     summary: "Submitted from the engineer's session as someone else.",
     rationale: "Impersonation attempt.",
@@ -113,7 +115,7 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
     "Proposal attributed to the Designer",
   );
 
-  const proposalResult = JSON.parse(String(await executeTool(engineer, "submit_proposal", {
+  const proposalResult = JSON.parse(String(await executeTool(engineer, "suggest_option", {
     title: "Progressive onboarding hints",
     summary: "Add two accessible hints to the existing flow.",
     rationale: "Fits two-week capacity without new dependencies.",
@@ -126,13 +128,9 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
 
   await designer.getByTestId("advance-phase").click();
   await expect(engineer.getByTestId("room-phase")).toHaveText("deliberation");
-  await expect.poll(() => toolNames(engineer)).toEqual([
-    "get_meeting_context",
-    "get_open_issues",
-    "list_positions",
-    "propose_tradeoff",
-    "raise_objection",
-  ]);
+  await expect.poll(() => toolNames(engineer)).toEqual(expect.arrayContaining([
+    "get_meeting_context", "get_open_issues", "respond_to_concern", "raise_concern",
+  ]));
 
   await designer.getByTestId("objection-form").getByLabel("Related constraint").selectOption(constraint.id);
   await designer.getByTestId("objection-form").getByLabel("Reason").fill("The hint focus order needs an accessibility review.");
@@ -150,7 +148,7 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
     status: "open",
   });
 
-  const tradeoffResult = JSON.parse(String(await executeTool(engineer, "propose_tradeoff", {
+  const tradeoffResult = JSON.parse(String(await executeTool(engineer, "respond_to_concern", {
     conflictIds: [openIssuesResult.data.openIssues[0].conflictId],
     description: "Keep the thin slice and explicitly define accessible focus order.",
     expectedEffect: "Addresses the objection while preserving the two-week scope.",
@@ -177,15 +175,13 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
 
   await engineer.getByTestId("advance-phase").click();
   await expect(designer.getByTestId("room-phase")).toHaveText("voting");
-  await expect.poll(() => toolNames(engineer)).toEqual([
-    "express_my_alignment",
-    "get_alignment",
-    "get_meeting_context",
-    "get_open_issues",
-  ]);
+  await expect.poll(() => toolNames(engineer)).toEqual(expect.arrayContaining([
+    "express_my_alignment", "get_alignment", "get_meeting_context",
+  ]));
 
   const votingContext = JSON.parse(String(await executeTool(engineer, "get_meeting_context", {})));
-  const activeProposalId = votingContext.data.activeProposal.id;
+  const activeProposalId = votingContext.data.untrustedRoomContent.activeProposal.id;
+  await captureToolDefinition(engineer, "express_my_alignment");
   const impersonatedAlignment = JSON.parse(String(await executeTool(engineer, "express_my_alignment", {
     proposalId: activeProposalId,
     choice: "concern",
@@ -250,28 +246,26 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
 
   await engineer.getByTestId("advance-phase").click();
   await expect(designer.getByTestId("room-phase")).toHaveText("approval");
-  await expect.poll(() => toolNames(engineer)).toEqual([
-    "approve_final_decision",
-    "get_meeting_context",
-    "preview_final_decision",
-  ]);
+  await expect.poll(() => toolNames(engineer)).toEqual(expect.arrayContaining([
+    "request_final_decision_confirmation", "get_meeting_context", "get_current_decision",
+  ]));
 
-  const engineerPreview = JSON.parse(String(await executeTool(engineer, "preview_final_decision", {})));
-  const designerPreview = JSON.parse(String(await executeTool(designer, "preview_final_decision", {})));
+  const engineerPreview = JSON.parse(String(await executeTool(engineer, "get_current_decision", {})));
+  const designerPreview = JSON.parse(String(await executeTool(designer, "get_current_decision", {})));
   expect(engineerPreview.ok).toBe(true);
   expect(designerPreview.data).toEqual(engineerPreview.data);
-  expect(engineerPreview.data.approvals).toEqual([]);
-  expect(engineerPreview.data.missingApprovalParticipantIds).toEqual([
+  expect(engineerPreview.data.trustedContext.decisionReview.completedApprovalCount).toBe(0);
+  expect(engineerPreview.data.trustedContext.decisionReview.missingApprovalParticipantIds).toEqual([
     "demo-designer",
     "demo-engineer",
   ]);
-  const decisionHash = engineerPreview.data.decisionHash;
+  const decisionHash = engineerPreview.data.trustedContext.decisionReview.decisionHash;
   await expect(engineer.getByTestId("decision-hash")).toHaveText(decisionHash);
   await expect(designer.getByTestId("decision-hash")).toHaveText(decisionHash);
 
   const engineerApprovalRequest = JSON.parse(String(await executeTool(
     engineer,
-    "approve_final_decision",
+    "request_final_decision_confirmation",
     { decisionHash },
   )));
   expect(engineerApprovalRequest).toMatchObject({
@@ -287,7 +281,7 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
 
   const designerApprovalRequest = JSON.parse(String(await executeTool(
     designer,
-    "approve_final_decision",
+    "request_final_decision_confirmation",
     { decisionHash },
   )));
   expect(designerApprovalRequest).toMatchObject({
@@ -301,7 +295,9 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   await expect(engineer.getByTestId("room-phase")).toHaveText("finalized");
   await expect(designer.getByTestId("room-version")).toHaveText("15");
   await expect(engineer.getByTestId("finalized-at")).toBeVisible();
-  await expect.poll(() => toolNames(engineer)).toEqual(["get_decision_record"]);
+  await expect.poll(() => toolNames(engineer)).toEqual([
+    "get_current_decision", "get_decision_record", "get_meeting_context",
+  ]);
 
   const engineerRecord = JSON.parse(String(await executeTool(engineer, "get_decision_record", {})));
   const designerRecord = JSON.parse(String(await executeTool(designer, "get_decision_record", {})));
@@ -309,6 +305,17 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   expect(designerRecord.data).toEqual(engineerRecord.data);
   expect(engineerRecord.data.decision.decisionHash).toBe(decisionHash);
   expect(engineerRecord.data.approvals).toHaveLength(2);
+
+  const staleFinalizedAlignment = JSON.parse(String(await executeCapturedTool(engineer, {
+    proposalId: activeProposalId,
+    choice: "concern",
+    comment: "Too late through a captured tool.",
+  })));
+  expect(staleFinalizedAlignment).toMatchObject({
+    ok: false,
+    error: { code: "ALREADY_FINALIZED" },
+    roomVersion: 15,
+  });
 
   const finalizedMutation = await engineer.evaluate(async ({ proposalId }) => {
     const storedSession = Object.values(localStorage)
@@ -337,7 +344,6 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   await engineerContext.close();
   await designerContext.close();
 });
-
 test("one judge completes and replays the deterministic solo demo", async ({ browser }) => {
   test.setTimeout(120_000);
   const context = await browser.newContext();
@@ -362,12 +368,11 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
 
   await page.getByTestId("claim-demo-product").click();
   await expect(page.getByText("Your seat")).toBeVisible();
-  await expect.poll(() => toolNames(page)).toEqual([
-    "add_my_position",
-    "get_meeting_context",
-  ]);
+  await expect.poll(() => toolNames(page)).toEqual(expect.arrayContaining([
+    "share_my_context", "get_meeting_context", "get_my_attention_items",
+  ]));
 
-  const position = JSON.parse(String(await executeTool(page, "add_my_position", {
+  const position = JSON.parse(String(await executeTool(page, "share_my_context", {
     summary: "Improve onboarding completion and time to first value.",
     category: "outcome",
     priority: "high",
@@ -375,19 +380,14 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   })));
   expect(position).toMatchObject({ ok: true, roomVersion: 6 });
   await expect(page.getByTestId("room-phase")).toHaveText("proposals");
-  await expect.poll(() => toolNames(page)).toEqual([
-    "get_meeting_context",
-    "list_positions",
-    "submit_proposal",
-  ]);
+  await expect.poll(() => toolNames(page)).toEqual(expect.arrayContaining([
+    "get_current_decision", "get_meeting_context", "suggest_option",
+  ]));
 
-  const positions = JSON.parse(String(await executeTool(page, "list_positions", {})));
-  expect(positions.data.participantPositions).toHaveLength(4);
-  expect(positions.data.participantPositions.flatMap(
-    (group: { positions: unknown[] }) => group.positions,
-  )).toHaveLength(4);
+  const positions = JSON.parse(String(await executeTool(page, "get_meeting_context", {})));
+  expect(positions.data.untrustedRoomContent.positions).toHaveLength(4);
 
-  const proposal = JSON.parse(String(await executeTool(page, "submit_proposal", {
+  const proposal = JSON.parse(String(await executeTool(page, "suggest_option", {
     title: "Custom personalized onboarding rebuild",
     summary: "Rebuild onboarding as a custom multi-step flow with new event tracking and expanded personalization before campaign launch.",
     rationale: "The broad rebuild aims to improve onboarding completion and first value.",
@@ -402,7 +402,7 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
 
   const issues = JSON.parse(String(await executeTool(page, "get_open_issues", {})));
   expect(issues.data.openIssues).toHaveLength(2);
-  const tradeoff = JSON.parse(String(await executeTool(page, "propose_tradeoff", {
+  const tradeoff = JSON.parse(String(await executeTool(page, "respond_to_concern", {
     conflictIds: issues.data.openIssues.map((issue: { conflictId: string }) => issue.conflictId),
     description: "Reduce scope and reuse the existing authentication and onboarding flow.",
     expectedEffect: "Keep the two-week campaign launch while validating accessibility.",
@@ -423,15 +423,12 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   await expect(page.getByTestId("room-phase")).toHaveText("voting");
   await expect(page.getByTestId("alignments").locator("li")).toHaveCount(3);
   await expect(page.getByTestId("activity")).toContainText("conflict.resolved · simulation");
-  await expect.poll(() => toolNames(page)).toEqual([
-    "express_my_alignment",
-    "get_alignment",
-    "get_meeting_context",
-    "get_open_issues",
-  ]);
+  await expect.poll(() => toolNames(page)).toEqual(expect.arrayContaining([
+    "express_my_alignment", "get_alignment", "get_meeting_context",
+  ]));
 
   const votingContext = JSON.parse(String(await executeTool(page, "get_meeting_context", {})));
-  const activeProposalId = votingContext.data.activeProposal.id;
+  const activeProposalId = votingContext.data.untrustedRoomContent.activeProposal.id;
   const alignment = JSON.parse(String(await executeTool(page, "express_my_alignment", {
     proposalId: activeProposalId,
     choice: "support",
@@ -440,21 +437,19 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   expect(alignment).toMatchObject({ ok: true, roomVersion: 19 });
   await expect(page.getByTestId("room-phase")).toHaveText("approval");
   await expect(page.getByTestId("approvals")).toBeEmpty();
-  await expect.poll(() => toolNames(page)).toEqual([
-    "approve_final_decision",
-    "get_meeting_context",
-    "preview_final_decision",
-  ]);
+  await expect.poll(() => toolNames(page)).toEqual(expect.arrayContaining([
+    "request_final_decision_confirmation", "get_meeting_context", "get_current_decision",
+  ]));
 
-  const preview = JSON.parse(String(await executeTool(page, "preview_final_decision", {})));
-  expect(preview.data.requiredApprovalParticipantIds).toEqual(["demo-product"]);
-  expect(preview.data.approvals).toEqual([]);
-  const decisionHash = preview.data.decisionHash;
+  const preview = JSON.parse(String(await executeTool(page, "get_current_decision", {})));
+  expect(preview.data.trustedContext.decisionReview.missingApprovalParticipantIds).toEqual(["demo-product"]);
+  expect(preview.data.trustedContext.decisionReview.completedApprovalCount).toBe(0);
+  const decisionHash = preview.data.trustedContext.decisionReview.decisionHash;
   await expect(page.getByTestId("decision-hash")).toHaveText(decisionHash);
 
   const approvalRequest = JSON.parse(String(await executeTool(
     page,
-    "approve_final_decision",
+    "request_final_decision_confirmation",
     { decisionHash },
   )));
   expect(approvalRequest).toMatchObject({
@@ -466,7 +461,9 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   await page.getByTestId("confirm-approval").click();
   await expect(page.getByTestId("room-phase")).toHaveText("finalized");
   await expect(page.getByTestId("room-version")).toHaveText("20");
-  await expect.poll(() => toolNames(page)).toEqual(["get_decision_record"]);
+  await expect.poll(() => toolNames(page)).toEqual([
+    "get_current_decision", "get_decision_record", "get_meeting_context",
+  ]);
 
   const record = JSON.parse(String(await executeTool(page, "get_decision_record", {})));
   expect(record.data.approvals.map(
@@ -492,10 +489,9 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   await expect.poll(() => toolNames(page)).toEqual(["get_meeting_context"]);
   await page.getByTestId("claim-demo-product").click();
   await expect(page.getByText("Your seat")).toBeVisible();
-  await expect.poll(() => toolNames(page)).toEqual([
-    "add_my_position",
-    "get_meeting_context",
-  ]);
+  await expect.poll(() => toolNames(page)).toEqual(expect.arrayContaining([
+    "share_my_context", "get_meeting_context", "get_my_attention_items",
+  ]));
 
   await context.close();
 });

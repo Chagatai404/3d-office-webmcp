@@ -219,6 +219,41 @@ export const approvalSchema = z
   .strict();
 export type Approval = z.infer<typeof approvalSchema>;
 
+/**
+ * AttentionItem is a derived projection of canonical room state, never a
+ * second source of authority. It is computed fresh on every read
+ * (`src/domain/rooms/attention.ts`) and never persisted: nothing here
+ * gates a mutation, and nothing here can be stale in a way that matters,
+ * because it is recomputed from the same `RoomState` every time.
+ */
+export const attentionItemTypeSchema = z.enum([
+  "input_required",
+  "admission_request",
+  "conflict_requires_human",
+  "alignment_required",
+  "owner_decision_required",
+  "consensus_approval_required",
+  "owner_progress_required",
+]);
+export type AttentionItemType = z.infer<typeof attentionItemTypeSchema>;
+
+export const attentionPrioritySchema = z.enum(["normal", "high", "critical"]);
+export type AttentionPriority = z.infer<typeof attentionPrioritySchema>;
+
+export const attentionItemSchema = z
+  .object({
+    id: idSchema,
+    type: attentionItemTypeSchema,
+    priority: attentionPrioritySchema,
+    title: z.string().min(1),
+    summary: z.string().min(1),
+    phase: roomPhaseSchema,
+    relatedEntityId: idSchema.nullable(),
+    requiresHumanConfirmation: z.boolean(),
+  })
+  .strict();
+export type AttentionItem = z.infer<typeof attentionItemSchema>;
+
 export type JsonValue =
   | null
   | boolean

@@ -5,6 +5,7 @@ import { useRoom } from "@/components/room/room-provider";
 import { PHASE_LABEL } from "@/components/room/room-labels";
 import { MOVING_LABEL } from "@/visualization/scene/camera-poses";
 import { useShell } from "./shell-provider";
+import { useAttentionItems } from "./use-attention-items";
 
 /**
  * Layer 1: persistent meeting chrome.
@@ -18,6 +19,7 @@ import { useShell } from "./shell-provider";
 export function MeetingToolbar() {
   const { room } = useRoom();
   const { activeWorkspace, moving, openDrawer } = useShell();
+  const attentionItems = useAttentionItems();
 
   const agentsUsed = useMemo(() => {
     const actorIds = new Set(
@@ -38,6 +40,13 @@ export function MeetingToolbar() {
       </span>
 
       <span className="toolbar-side">
+        <button
+          type="button"
+          className={attentionItems.length > 0 ? "toolbar-attention toolbar-attention-active" : "toolbar-attention"}
+          onClick={() => openDrawer("attention")}
+        >
+          {attentionItems.length > 0 ? `Needs you · ${attentionItems.length}` : "All caught up"}
+        </button>
         <span className="toolbar-agents">
           <span className="toolbar-agents-dot" aria-hidden="true" />
           {agentsUsed === 0

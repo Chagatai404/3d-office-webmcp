@@ -3,6 +3,7 @@
 import { useShell } from "../shell-provider";
 import { ActivityDrawer } from "./activity-drawer";
 import { AgentsDrawer } from "./agents-drawer";
+import { AttentionDrawer } from "./attention-drawer";
 import { HelpDrawer } from "./help-drawer";
 import { LeaveDrawer } from "./leave-drawer";
 import { ParticipantsDrawer } from "./participants-drawer";
@@ -28,6 +29,8 @@ export function DrawerHost() {
       return <LeaveDrawer />;
     case "help":
       return <HelpDrawer />;
+    case "attention":
+      return <AttentionDrawer />;
     case null:
       return null;
   }

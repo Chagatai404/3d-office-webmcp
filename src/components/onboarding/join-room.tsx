@@ -7,10 +7,17 @@ import { ApiRoomOnboardingClient } from "@/clients/api-room-onboarding-client";
 import type { RoomOnboardingClient } from "@/clients/room-onboarding-client";
 import type { JoinRequest, RoomInvitePreview } from "@/contracts/room";
 import styles from "@/components/onboarding/onboarding.module.css";
+import {
+  JOIN_REQUEST_CREATED_EVENT,
+  readPendingJoinRequest,
+  savePendingJoinRequest,
+} from "@/webmcp/join-request-store";
+import { useOnboardingWebMcpTools } from "@/webmcp/register-tools";
 
 type Props = { roomId?: string; inviteToken?: string | null; client?: RoomOnboardingClient };
 
 export function JoinRoom({ roomId: routeRoomId, inviteToken = null, client: suppliedClient }: Props) {
+  useOnboardingWebMcpTools("join");
   const router = useRouter();
   const [client] = useState(() => suppliedClient ?? new ApiRoomOnboardingClient());
   const [roomId, setRoomId] = useState(routeRoomId ?? "");
@@ -22,6 +29,26 @@ export function JoinRoom({ roomId: routeRoomId, inviteToken = null, client: supp
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const submitting = useRef(false);
+
+  // Resumes a join request `join_meeting` (a WebMCP tool) created for this
+  // browser session, whether it happened before this page mounted (read on
+  // mount) or while it is already open (the `webmcp:join-request-created`
+  // event `savePendingJoinRequest` dispatches).
+  useEffect(() => {
+    async function adopt(pendingRequest: { joinRequestId: string; roomId: string }) {
+      const result = await client.getMyJoinRequest(pendingRequest.joinRequestId);
+      if (result.ok) setJoinRequest(result.data);
+    }
+    const initial = readPendingJoinRequest();
+    if (initial) void adopt(initial);
+
+    function onCreated(event: Event) {
+      const detail = (event as CustomEvent<{ joinRequestId: string; roomId: string }>).detail;
+      if (detail) void adopt(detail);
+    }
+    window.addEventListener(JOIN_REQUEST_CREATED_EVENT, onCreated);
+    return () => window.removeEventListener(JOIN_REQUEST_CREATED_EVENT, onCreated);
+  }, [client]);
 
   useEffect(() => {
     if (!inviteToken) return;
@@ -66,7 +93,13 @@ export function JoinRoom({ roomId: routeRoomId, inviteToken = null, client: supp
         ? await client.requestJoinByInvite({ inviteToken, displayName: displayName.trim(), role: role.trim() })
         : await client.requestJoinByPasscode({ roomId: roomId.trim(), passcode, displayName: displayName.trim(), role: role.trim() });
       if (!result.ok) setError(result.error.message);
-      else setJoinRequest(result.data.joinRequest);
+      else {
+        setJoinRequest(result.data.joinRequest);
+        savePendingJoinRequest({
+          joinRequestId: result.data.joinRequest.id,
+          roomId: result.data.roomId,
+        }, false);
+      }
     } catch {
       setError("We couldn’t submit your join request.");
     } finally {

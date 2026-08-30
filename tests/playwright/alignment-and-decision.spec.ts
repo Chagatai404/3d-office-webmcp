@@ -3,9 +3,11 @@ import type { CreateRoomInput } from "@/contracts/room";
 import {
   admitFromWaitingRoom,
   callTool,
+  captureToolDefinition,
   createRoomThroughOnboarding,
   expectEnteredRoom,
   expectJoinRequestStatus,
+  executeCapturedTool,
   newParticipantContext,
   requestJoinByPasscode,
 } from "./helpers";
@@ -63,7 +65,7 @@ test("owner-decides: alignment informs but never decides, and the record preserv
   const bobSession = await joinByPasscode(browser, owner, roomId, passcode, "Bob", "Engineer");
   const bob = bobSession.page;
 
-  await callTool(owner, "add_my_position", {
+  await callTool(owner, "share_my_context", {
     summary: "Ship a reduced onboarding scope on time.",
     category: "outcome",
     priority: "high",
@@ -74,12 +76,17 @@ test("owner-decides: alignment informs but never decides, and the record preserv
   // realtime before a version-guarded harness action, exactly as a human
   // would (see owner-lifecycle.spec.ts's removal test for the same pattern).
   await expect(owner.getByTestId("positions")).toContainText("Ship a reduced onboarding scope on time.");
+  await captureToolDefinition(owner, "share_my_context");
   await owner.getByTestId("mark-ready").click();
   await expect(owner.getByTestId("last-action")).toHaveText("Input marked ready.");
   await owner.getByTestId("advance-room-phase").click();
   await expect(owner.getByTestId("room-phase")).toHaveText("proposals");
+  const staleInputTool = JSON.parse(String(await executeCapturedTool(owner, {
+    summary: "Too late for Input.", category: null, priority: null, constraints: [],
+  })));
+  expect(staleInputTool).toMatchObject({ ok: false, error: { code: "WRONG_PHASE" } });
 
-  const proposal = await callTool(owner, "submit_proposal", {
+  const proposal = await callTool(owner, "suggest_option", {
     title: "Reduced scope onboarding",
     summary: "Ship the smallest complete onboarding scope.",
     rationale: "Fits the deadline without an authentication rewrite.",
@@ -96,7 +103,7 @@ test("owner-decides: alignment informs but never decides, and the record preserv
   await expect(bob.getByTestId("room-phase")).toHaveText("voting");
 
   const meetingContext = await callTool(bob, "get_meeting_context", {});
-  const activeProposalId = meetingContext.data.activeProposal.id;
+  const activeProposalId = meetingContext.data.untrustedRoomContent.activeProposal.id;
 
   await callTool(bob, "express_my_alignment", {
     proposalId: activeProposalId,
@@ -144,7 +151,6 @@ test("owner-decides: alignment informs but never decides, and the record preserv
   await ownerSession.context.close();
   await bobSession.context.close();
 });
-
 test("equal_authority_consensus: freezing requires every active decision-maker's own separate approval", async ({ browser }) => {
   const ownerSession = await newParticipantContext(browser);
   const owner = ownerSession.page;
@@ -163,7 +169,7 @@ test("equal_authority_consensus: freezing requires every active decision-maker's
   await expect(owner.getByTestId("decision-policy")).toHaveText("equal_authority_consensus");
   await expect(bob.getByTestId("decision-policy")).toHaveText("equal_authority_consensus");
 
-  await callTool(owner, "add_my_position", {
+  await callTool(owner, "share_my_context", {
     summary: "Ship a reduced onboarding scope on time.",
     category: "outcome",
     priority: "high",
@@ -178,7 +184,7 @@ test("equal_authority_consensus: freezing requires every active decision-maker's
   await expect(owner.getByTestId("last-action")).toHaveText("Input marked ready.");
   await owner.getByTestId("advance-room-phase").click();
   await expect(owner.getByTestId("room-phase")).toHaveText("proposals");
-  const proposal = await callTool(owner, "submit_proposal", {
+  const proposal = await callTool(owner, "suggest_option", {
     title: "Reduced scope onboarding",
     summary: "Ship the smallest complete onboarding scope.",
     rationale: "Fits the deadline without an authentication rewrite.",
@@ -193,7 +199,7 @@ test("equal_authority_consensus: freezing requires every active decision-maker's
   await expect(owner.getByTestId("room-phase")).toHaveText("voting");
 
   const meetingContext = await callTool(bob, "get_meeting_context", {});
-  const activeProposalId = meetingContext.data.activeProposal.id;
+  const activeProposalId = meetingContext.data.untrustedRoomContent.activeProposal.id;
   await callTool(owner, "express_my_alignment", { proposalId: activeProposalId, choice: "support", comment: null });
   // Bob's tab must observe the owner's alignment via realtime before Bob's
   // own version-guarded WebMCP call can carry a non-stale version.

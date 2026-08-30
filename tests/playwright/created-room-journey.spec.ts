@@ -28,7 +28,7 @@ test("normal creation binds one authenticated owner and creates no seats", async
   expect(ownerParticipantId).toBeTruthy();
   // Exactly one generic, reusable invite capability -- never a per-seat list.
   expect(passcode).toMatch(/^[0-9A-Z]{6,}$/);
-  expect(inviteUrl).toMatch(new RegExp(`^http://127\\.0\\.0\\.1:3000/room/${roomId}/join\\?invite=.+`));
+  expect(inviteUrl).toMatch(new RegExp(`^http://127\\.0\\.0\\.1:\\d+/room/${roomId}/join\\?invite=.+`));
 
   await creator.goto(`/room/${roomId}`);
   await expect(creator.getByTestId("connection-status")).toHaveText("Connected");
@@ -47,22 +47,23 @@ test("normal creation binds one authenticated owner and creates no seats", async
 
   await expect.poll(() => toolNames(creator)).toContain("get_meeting_context");
   const orientation = await callTool(creator, "get_meeting_context");
-  expect(orientation.data).toMatchObject({
-    roomId,
-    phase: "input",
-    roomVersion: 0,
-    ownerParticipantId,
-    decisionPolicy: "owner_decides",
-    currentParticipant: {
-      participantId: ownerParticipantId,
-      name: "Maya",
-      role: "Product Manager",
-      kind: "human",
-      meetingRole: "owner",
-      decisionRole: "decision_maker",
+  expect(orientation.data.trustedContext).toMatchObject({
+      roomId,
+      phase: "input",
+      roomVersion: 0,
+      ownerParticipantId,
+      decisionPolicy: "owner_decides",
+      currentParticipant: {
+        participantId: ownerParticipantId,
+        name: "Maya",
+        role: "Product Manager",
+        kind: "human",
+        meetingRole: "owner",
+        decisionRole: "decision_maker",
+      },
     },
-  });
-  expect(orientation.data.participantRoles).toHaveLength(1);
+  );
+  expect(orientation.data.trustedContext.participantRoles).toHaveLength(1);
   expect(JSON.stringify(orientation)).not.toContain("userId");
   expect(JSON.stringify(orientation)).not.toContain("requiredForApproval");
 
@@ -72,4 +73,54 @@ test("normal creation binds one authenticated owner and creates no seats", async
 
   await creatorSession.context.close();
   await outsiderSession.context.close();
+});
+
+test("WebMCP creates a real room, requests admission, and lets the owner admit the waiting browser", async ({ browser }) => {
+  const ownerSession = await newParticipantContext(browser);
+  const mayaSession = await newParticipantContext(browser);
+  const owner = ownerSession.page;
+  const maya = mayaSession.page;
+
+  await owner.goto("/");
+  await expect.poll(() => toolNames(owner)).toEqual(["create_meeting", "join_meeting"]);
+  const created = await callTool(owner, "create_meeting", {
+    title: "Ship AI-assisted onboarding?",
+    brief: "Decide whether the reduced scope can ship next release.",
+    creatorName: "Ata",
+    creatorRole: "Founder",
+    decisionPolicy: "owner_decides",
+  });
+  expect(created).toMatchObject({ ok: true, data: { roomId: expect.any(String), passcode: expect.any(String) } });
+  const { roomId, passcode } = created.data;
+  await expect(owner).toHaveURL(`/room/${roomId}`);
+  await expect(owner.getByTestId("connection-status")).toHaveText("Connected");
+
+  await maya.goto("/join");
+  await expect.poll(() => toolNames(maya)).toContain("join_meeting");
+  const requested = await callTool(maya, "join_meeting", {
+    method: "passcode",
+    roomId,
+    passcode,
+    displayName: "Maya",
+    role: "Engineer",
+  });
+  expect(requested).toMatchObject({ ok: true, data: { joinRequest: { status: "waiting" } } });
+  await expect.poll(() => toolNames(maya)).toContain("get_my_join_status");
+  expect(await callTool(maya, "get_my_join_status")).toMatchObject({
+    ok: true,
+    data: { status: "waiting", roomId },
+  });
+
+  await expect.poll(() => toolNames(owner)).toContain("get_waiting_participants");
+  const waiting = await callTool(owner, "get_waiting_participants");
+  const mayaRequest = waiting.data.find((request: { displayName: string }) => request.displayName === "Maya");
+  expect(mayaRequest).toBeTruthy();
+  expect(await callTool(owner, "admit_participant", { joinRequestId: mayaRequest.id })).toMatchObject({ ok: true });
+
+  await expect(maya).toHaveURL(`/room/${roomId}`);
+  await expect(maya.getByTestId("connection-status")).toHaveText("Connected");
+  await expect.poll(() => toolNames(maya)).toContain("share_my_context");
+
+  await ownerSession.context.close();
+  await mayaSession.context.close();
 });

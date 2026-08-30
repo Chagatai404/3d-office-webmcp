@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ApiRoomOnboardingClient } from "@/clients/api-room-onboarding-client";
 import type { RoomOnboardingClient } from "@/clients/room-onboarding-client";
 import type { CreateRoomInput, CreatedRoom } from "@/contracts/room";
+import { useOnboardingWebMcpTools } from "@/webmcp/register-tools";
 
 const CREATOR_ROLES = [
   "Founder",
@@ -42,6 +43,7 @@ function validate(
 }
 
 export function CreateRoomForm({ client: suppliedClient }: CreateRoomFormProps) {
+  useOnboardingWebMcpTools("create");
   const [client] = useState<RoomOnboardingClient>(
     () => suppliedClient ?? new ApiRoomOnboardingClient(),
   );

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { MouseEvent } from "react";
 import { useFlowStage } from "@/components/onboarding/flow-stage";
+import { useOnboardingWebMcpTools } from "@/webmcp/register-tools";
 
 /**
  * Welcome — arriving inside the product, not in front of it.
@@ -19,6 +20,7 @@ import { useFlowStage } from "@/components/onboarding/flow-stage";
  * revealed by that move rather than replacing the page.
  */
 export default function Home() {
+  useOnboardingWebMcpTools("landing");
   const { enter, leaving } = useFlowStage();
 
   function flyToCreate(event: MouseEvent<HTMLAnchorElement>) {

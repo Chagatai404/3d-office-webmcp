@@ -49,12 +49,12 @@ export async function installWebMcpShim(context: BrowserContext) {
 
       async executeTool(
         tool: WebMcpRegisteredTool,
-        inputJson: string,
+        input: Record<string, unknown> = {},
         options?: { signal?: AbortSignal },
       ) {
         const definition = this.tools.get(tool.name);
         if (!definition) throw new Error(`Tool ${tool.name} is unavailable.`);
-        return definition.execute(JSON.parse(inputJson), {
+        return definition.execute(input, {
           signal: options?.signal ?? new AbortController().signal,
         });
       }
@@ -78,8 +78,26 @@ export async function executeTool(page: Page, name: string, input: unknown) {
     const modelContext = document.modelContext!;
     const tool = (await modelContext.getTools()).find((candidate) => candidate.name === toolName);
     if (!tool) throw new Error(`Tool ${toolName} was not discovered.`);
-    return modelContext.executeTool(tool, JSON.stringify(toolInput));
+    return modelContext.executeTool(tool, toolInput as Record<string, unknown>);
   }, { toolName: name, toolInput: input });
+}
+
+/** Capture the page-owned definition so a test can exercise a stale reference after unregistration. */
+export async function captureToolDefinition(page: Page, name: string) {
+  await page.evaluate((toolName) => {
+    const host = document.modelContext as unknown as { tools: Map<string, WebMcpToolDefinition> };
+    const definition = host.tools.get(toolName);
+    if (!definition) throw new Error(`Tool ${toolName} was not registered.`);
+    (globalThis as unknown as { __capturedWebMcpTool: WebMcpToolDefinition }).__capturedWebMcpTool = definition;
+  }, name);
+}
+
+export async function executeCapturedTool(page: Page, input: Record<string, unknown> = {}) {
+  return page.evaluate(async (toolInput) => {
+    const definition = (globalThis as unknown as { __capturedWebMcpTool?: WebMcpToolDefinition }).__capturedWebMcpTool;
+    if (!definition) throw new Error("No WebMCP tool definition has been captured.");
+    return definition.execute(toolInput, { signal: new AbortController().signal });
+  }, input);
 }
 
 /** A tool result, already parsed out of its JSON transport envelope. */

@@ -88,6 +88,7 @@ async function submit() {
 }
 
 beforeEach(() => {
+  window.sessionStorage.clear();
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   navigation.push.mockReset();
   container = document.createElement("div");
