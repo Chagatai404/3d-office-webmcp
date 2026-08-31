@@ -317,8 +317,8 @@ human reviews and confirms visibly
 
 ### A1 exit gate
 
-- [ ] A real browser agent can discover how to share input, mark ready, propose, deliberate, align, review, and request final approval from WebMCP alone. (Structurally true; requires the manual Chrome WebMCP inspector pass in `docs/webmcp-demo.md` to confirm.)
-- [ ] No DOM inspection is necessary to discover those actions. (Same -- pending the manual pass above.)
+- [x] A real browser agent can discover how to share input, mark ready, propose, deliberate, align, review, and request final approval from WebMCP alone. (Manual Chrome WebMCP inspector pass completed: `document.modelContext` driven directly against a real Chrome 151 session with the WebMCP-testing flag enabled, exercising `get_meeting_context` -> `share_my_context`/`mark_my_input_ready` -> `advance_discussion` -> `suggest_option` -> `raise_concern`/`respond_to_concern` -> `request_team_alignment` -> `get_my_attention_items` -> `review_final_decision` -> `approve_final_decision`, end to end, twice, against two separate rooms. Found and reported two real gotchas in the Chrome API surface itself along the way -- see the new note in `docs/webmcp-demo.md`'s Chrome setup section.)
+- [x] No DOM inspection is necessary to discover those actions. (Confirmed by the same pass -- every action above was selected purely from `getTools()` output and room-state reads, never DOM inspection.)
 
 ---
 
@@ -391,7 +391,7 @@ What should I do next?
 ### A2 exit gate
 
 - [x] An agent can always answer "what are we waiting for?" using one WebMCP read. (`get_coordination_status`, available in every phase incl. before a seat is claimed.)
-- [ ] An agent never needs to navigate the 3D scene to determine whether the meeting advanced. (Structurally true; pending the same manual Chrome WebMCP inspector pass noted under A1.)
+- [x] An agent never needs to navigate the 3D scene to determine whether the meeting advanced. (Confirmed by the same manual Chrome WebMCP inspector pass noted under A1 -- every phase/state transition was observed via `get_coordination_status`/`get_meeting_context` reads alone.)
 
 ---
 

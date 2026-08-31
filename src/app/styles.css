@@ -1685,6 +1685,44 @@ select {
   background: #fff;
 }
 
+.toolbar-spectator-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 0.9rem;
+  background: var(--surface-quiet);
+  box-shadow: 0 6px 20px rgba(46, 43, 39, 0.09);
+  font-size: 0.78rem;
+  color: var(--ink-soft, inherit);
+}
+
+.toolbar-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.toolbar-spectator-dismiss {
+  border: 0;
+  background: none;
+  padding: 0 0 0 0.3rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.toolbar-spectator-dismiss:hover {
+  opacity: 1;
+}
+
 .moving-toast {
   position: absolute;
   left: 50%;

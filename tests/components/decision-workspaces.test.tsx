@@ -670,6 +670,46 @@ describe("decision workspace", () => {
     expect(container.textContent).toContain("Trade-offs");
     expect(container.textContent).toContain("Provenance");
   });
+
+  /*
+   * Regression: `isOwner` used to be gated on `room.demoMode === null`, which
+   * made it permanently false for every demo room (demoMode is never null
+   * there) -- the confirm checkbox and "Make final decision" button never
+   * rendered for the demo room's owner, at any phase. This asserts the owner
+   * confirmation control renders and works under `owner_decides` with a
+   * non-null demoMode, exactly the state the demo room is always in.
+   */
+  it("still lets the owner make the final decision when the room is a demo room (demoMode !== null)", async () => {
+    const room = roomInPhase("approval");
+    room.demoMode = "solo_judge";
+    room.decisionPolicy = "owner_decides";
+    room.selfParticipantId = room.ownerParticipantId;
+    room.finalDecisionPreview = {
+      ...finalPreview(),
+      decisionPolicy: "owner_decides",
+      requiredApprovalParticipantIds: [room.ownerParticipantId],
+      approvals: [],
+      missingApprovalParticipantIds: [room.ownerParticipantId],
+    };
+    const client = new FakeRoomClient(room);
+    await mount(client, <DecisionWorkspace />);
+
+    await click(buttonNamed("Refresh exact server preview"));
+
+    const approvalButton = buttonNamed("Make final decision");
+    const checkbox = byTestId<HTMLElement>("approval-panel").querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    )!;
+    expect(approvalButton.disabled).toBe(true);
+
+    await click(checkbox);
+    expect(approvalButton.disabled).toBe(false);
+
+    await click(approvalButton);
+    expect(client.approveFinalDecisionCalls).toEqual([
+      { decisionHash: room.finalDecisionPreview!.decisionHash },
+    ]);
+  });
 });
 
 /**

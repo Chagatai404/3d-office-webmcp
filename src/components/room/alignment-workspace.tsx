@@ -64,7 +64,7 @@ export function AlignmentWorkspace() {
   );
 
   const isOwner = Boolean(
-    room.demoMode === null && self?.id === room.ownerParticipantId && self.meetingRole === "owner",
+    self?.id === room.ownerParticipantId && self.meetingRole === "owner",
   );
 
   return (

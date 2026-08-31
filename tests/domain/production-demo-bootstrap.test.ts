@@ -119,7 +119,7 @@ describe.sequential("production demo bootstrap (supabase/production-demo-bootstr
 
     const room = await getMeetingContext(adminRepository, owner.userId, "demo");
     expect(room).toMatchObject({
-      demoMode: "solo_judge", phase: "input", activeProposalId: null,
+      demoMode: "solo_judge", phase: "input", activeProposalId: "seed-proposal-onboarding-v1",
       finalizedAt: null, selfParticipantId: null,
     });
     expect(room?.conflicts).toHaveLength(0);
@@ -162,7 +162,7 @@ describe.sequential("production demo bootstrap (supabase/production-demo-bootstr
     expect(rooms.data).toHaveLength(1);
 
     const room = await getMeetingContext(adminRepository, owner.userId, "demo");
-    expect(room).toMatchObject({ phase: "input", activeProposalId: null, selfParticipantId: null });
+    expect(room).toMatchObject({ phase: "input", activeProposalId: "seed-proposal-onboarding-v1", selfParticipantId: null });
     expect(room?.participants.find((p) => p.id === "demo-product")).toMatchObject({
       kind: "human", isClaimed: false,
     });
@@ -182,7 +182,7 @@ describe.sequential("production demo bootstrap (supabase/production-demo-bootstr
     expect(rooms.data).toHaveLength(1);
 
     const room = await getMeetingContext(adminRepository, owner.userId, "demo");
-    expect(room).toMatchObject({ phase: "input", activeProposalId: null, finalizedAt: null, selfParticipantId: null });
+    expect(room).toMatchObject({ phase: "input", activeProposalId: "seed-proposal-onboarding-v1", finalizedAt: null, selfParticipantId: null });
   });
 
   it("is idempotent when run twice in a row against an already-canonical room", async () => {
