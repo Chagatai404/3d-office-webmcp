@@ -11,10 +11,12 @@ import {
   type AddPositionInput,
   type ExpressAlignmentInput,
   type ClaimSeatInput,
+  type AdmitJoinRequestInput,
+  type ConfigureParticipantInput,
   type DecisionRecord,
   type FinalDecisionPreview,
-  type ManageJoinRequestInput,
   type JoinRequest,
+  type ManageJoinRequestInput,
   type ProposeTradeoffInput,
   type RaiseObjectionInput,
   type RemoveParticipantInput,
@@ -183,7 +185,7 @@ export class ApiRoomClient implements RoomClient {
     return this.readAction(roomId, "join-requests", z.array(joinRequestSchema));
   }
 
-  admitJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
+  admitJoinRequest(roomId: string, input: AdmitJoinRequestInput): Promise<ActionResult<JoinRequest>> {
     return this.mutateWithData(roomId, "join-requests/admit", input, joinRequestSchema);
   }
 
@@ -224,6 +226,13 @@ export class ApiRoomClient implements RoomClient {
     input: SetParticipantDecisionRoleInput,
   ): Promise<ActionResult> {
     return this.mutate(roomId, "decision-role", input);
+  }
+
+  configureParticipant(
+    roomId: string,
+    input: ConfigureParticipantInput,
+  ): Promise<ActionResult> {
+    return this.mutate(roomId, "participants/configure", input);
   }
 
   private async ensureAnonymousSession(): Promise<string> {

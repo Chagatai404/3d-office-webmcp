@@ -30,7 +30,8 @@ If using Chrome DevTools for Agents, enable remote debugging in `chrome://inspec
 - On `/join`, `join_meeting` is present; after this browser creates a request, `get_my_join_status` appears.
 - Before admission, room participant mutation tools are absent.
 - After admission, the current phase's participant tools appear without refresh.
-- Owner tools appear only for the current owner.
+- Genuinely administrative owner tools (`get_waiting_participants`, `admit_participant`, `configure_participant`, `lock_meeting`/`unlock_meeting`, `remove_participant`, `transfer_ownership`, `set_decision_policy`, `set_participant_decision_role`, `enable_security_expert`) appear only for the current owner.
+- `advance_discussion` and `request_team_alignment` are procedural progression, not owner administration: they appear for *any* active claimed participant once prerequisites are met, not only the owner. `review_final_decision` appears for any active claimed participant whose `decisionRole` is `decision_maker` -- the owner always qualifies, but a promoted contributor does too.
 - Locking swaps `lock_meeting` for `unlock_meeting`.
 - Phase changes unregister the old mutation tools and register the next phase's tools.
 - Ownership transfer makes owner tools disappear from the old owner and appear for the new owner.
@@ -52,19 +53,21 @@ Run these prompts in order, supplying Maya's join-request ID or selecting it fro
    Expected: `get_coordination_status`.
 4. “Who is waiting to join?”  
    Expected: `get_waiting_participants`.
-5. “Admit Maya.”  
-   Expected: `admit_participant` using the returned `joinRequestId`.
-6. “Move the discussion forward.”  
+5. “Admit Maya as CTO and give her decision authority.”  
+   Expected: `admit_participant` using the returned `joinRequestId`, with `role: "CTO"` and `decisionRole: "decision_maker"` (A6) -- not two separate calls.
+6. “Make Maya's role VP Engineering instead.”  
+   Expected: `configure_participant` with `role` set and `decisionRole: null` (A6).
+7. “Move the discussion forward.”  
    Expected: `advance_discussion`.
-7. “Ask the team for alignment.”  
+8. “Ask the team for alignment.”  
    Expected: `request_team_alignment`.
-8. “What concerns are unresolved?”  
+9. “What concerns are unresolved?”  
    Expected: `get_open_issues`.
-9. “What changed since I last looked (use the room version from step 3)?”  
+10. “What changed since I last looked (use the room version from step 3)?”  
    Expected: `get_room_updates`.
-10. “Review the final decision.”  
+11. “Review the final decision.”  
    Expected: `review_final_decision`.
-11. “Finalize the decision.”  
+12. “Finalize the decision.”  
    Expected: `approve_final_decision`, returning `HUMAN_CONFIRMATION_REQUIRED`. The agent must not approve. The human reviews the exact hash and confirms visibly in the Decision workspace.
 
 ## Participant prompt script
@@ -116,3 +119,5 @@ ownership, decision roles, alignment, or approval.
 Read tools return participant-authored strings under `untrustedRoomContent` (or mark the output with `untrustedContentHint`). They never change actor identity, authority, tool availability, or execute a mutation. Actor authority is always derived from the authenticated browser session on the server.
 
 On `STALE_ROOM_STATE`, do not replay a consequential mutation automatically. Call `get_meeting_context`, reconsider the action against the returned `roomVersion`, and retry only if it remains appropriate.
+
+On `WAITING_FOR_PARTICIPANTS` (A5), the refusal names exactly who is still pending in `error.details.waitingParticipantIds` -- read `get_coordination_status` or `get_meeting_context` to turn those ids into names, tell the human who to follow up with, and do not retry until they've acted. This is distinct from `NOT_AUTHORIZED`: it means the room is not ready yet, not that the caller lacks permission.

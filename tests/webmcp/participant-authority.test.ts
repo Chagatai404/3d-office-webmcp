@@ -13,6 +13,7 @@ vi.mock("@/domain/rooms/operations", () => ({
   admitJoinRequest: vi.fn(),
   advanceRoomPhase: vi.fn(),
   approveParticipantFinalDecision: vi.fn(),
+  configureParticipant: vi.fn(),
   expressMyAlignment: vi.fn(),
   getFinalDecisionRecord: vi.fn(),
   getMeetingContext: vi.fn(),
@@ -106,7 +107,7 @@ describe("WebMCP participant/owner authority", () => {
     for (const [name, tool] of Object.entries(catalog())) {
       const participantIds = allPropertyNames(tool.inputSchema).filter((field) => field === "participantId");
       expect(participantIds, name).toEqual(
-        ["set_participant_decision_role", "remove_participant", "transfer_ownership"].includes(name)
+        ["set_participant_decision_role", "configure_participant", "remove_participant", "transfer_ownership"].includes(name)
           ? ["participantId"]
           : [],
       );
@@ -352,6 +353,43 @@ describe("WebMCP participant/owner authority", () => {
     await executeTool(catalog().set_participant_decision_role!, VALID_MUTATION_TOOL_INPUTS.set_participant_decision_role);
     expect(operations.setDecisionPolicy).toHaveBeenCalledOnce();
     expect(operations.setParticipantDecisionRole).toHaveBeenCalledOnce();
+  });
+
+  describe("A6: explicit role and decision-authority assignment", () => {
+    it("forwards admit_participant's role/decisionRole through to the domain unchanged", async () => {
+      await executeTool(catalog().admit_participant!, {
+        joinRequestId: "join-request-1", role: "CTO", decisionRole: "decision_maker",
+      });
+      expect(operations.admitJoinRequest).toHaveBeenCalledOnce();
+      const [, , input] = vi.mocked(operations.admitJoinRequest).mock.calls[0]!;
+      expect(input).toEqual({ joinRequestId: "join-request-1", role: "CTO", decisionRole: "decision_maker" });
+    });
+
+    it("admits with the joiner's own role and contributor when role/decisionRole are null", async () => {
+      await executeTool(catalog().admit_participant!, {
+        joinRequestId: "join-request-1", role: null, decisionRole: null,
+      });
+      const [, , input] = vi.mocked(operations.admitJoinRequest).mock.calls[0]!;
+      expect(input).toEqual({ joinRequestId: "join-request-1", role: null, decisionRole: null });
+    });
+
+    it("wires configure_participant to the domain operation with only the target as an id field", async () => {
+      await executeTool(catalog().configure_participant!, {
+        participantId: "participant-engineer", role: "CTO", decisionRole: "decision_maker",
+      });
+      expect(operations.configureParticipant).toHaveBeenCalledOnce();
+      const [, , input] = vi.mocked(operations.configureParticipant).mock.calls[0]!;
+      expect(input).toEqual({ participantId: "participant-engineer", role: "CTO", decisionRole: "decision_maker" });
+    });
+
+    it("rejects configure_participant with both role and decisionRole null before reaching the domain", async () => {
+      const result = await executeTool(catalog().configure_participant!, {
+        participantId: "participant-engineer", role: null, decisionRole: null,
+      }) as { ok: boolean; error: { code: string } };
+      expect(result.ok).toBe(false);
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+      expect(operations.configureParticipant).not.toHaveBeenCalled();
+    });
   });
 
   it("forwards a domain refusal unchanged, proving no WebMCP-layer bypass (stale-reference proof)", async () => {

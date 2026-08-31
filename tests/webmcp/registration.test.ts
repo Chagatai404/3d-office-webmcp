@@ -45,6 +45,7 @@ describe("centralized WebMCP capability registration", () => {
       [
         "advance_discussion",
         "admit_participant",
+        "configure_participant",
         "enable_security_expert",
         "get_coordination_status",
         "get_meeting_context",
@@ -64,12 +65,18 @@ describe("centralized WebMCP capability registration", () => {
   });
 
   it("registers exactly the milestone participant tools through the lifecycle for a claimed non-owner", () => {
+    // `advance_discussion` appears in Input for this contributor fixture
+    // because procedural progression is open to any active claimed human,
+    // not owner-gated -- see the dedicated A4 tests below. It does not
+    // reappear in Proposals/Deliberation/Voting here only because this
+    // fixture never sets an active proposal, which every later transition
+    // requires regardless of who calls it.
     const byPhase = LIFECYCLE.map((phase) => {
       const room = buildRoomStateFixture({ phase, selfParticipantId: "participant-engineer" });
       return available(room).filter((name) => !name.startsWith("get_"));
     });
     expect(byPhase).toEqual([
-      ["mark_my_input_ready", "share_my_context"],
+      ["advance_discussion", "mark_my_input_ready", "share_my_context"],
       ["suggest_option"],
       ["raise_concern", "resolve_my_concern", "respond_to_concern"],
       ["express_my_alignment"],
@@ -78,7 +85,7 @@ describe("centralized WebMCP capability registration", () => {
     ]);
   });
 
-  it("withholds owner-only tools from a non-owner claimed participant", () => {
+  it("withholds genuinely owner-only administration from a non-owner claimed participant", () => {
     for (const phase of LIFECYCLE) {
       const room = buildRoomStateFixture({ phase, selfParticipantId: "participant-engineer" });
       const names = available(room);
@@ -88,9 +95,6 @@ describe("centralized WebMCP capability registration", () => {
         "reject_participant",
         "lock_meeting",
         "unlock_meeting",
-        "advance_discussion",
-        "request_team_alignment",
-        "review_final_decision",
         "set_decision_policy",
         "set_participant_decision_role",
         "remove_participant",
@@ -99,6 +103,62 @@ describe("centralized WebMCP capability registration", () => {
         expect(names, `${phase}: ${ownerTool}`).not.toContain(ownerTool);
       }
     }
+  });
+
+  describe("A4: procedural progression vs decision-authority gating", () => {
+    it("registers advance_discussion and request_team_alignment for a non-owner contributor once prerequisites are met", () => {
+      const toProposals = buildRoomStateFixture({ phase: "input", selfParticipantId: "participant-engineer" });
+      expect(available(toProposals)).toContain("advance_discussion");
+
+      const toDeliberation = buildRoomStateFixture({
+        phase: "proposals", selfParticipantId: "participant-engineer", activeProposalId: "proposal-1",
+      });
+      expect(available(toDeliberation)).toContain("advance_discussion");
+
+      const toAlignment = buildRoomStateFixture({
+        phase: "deliberation", selfParticipantId: "participant-engineer", activeProposalId: "proposal-1",
+      });
+      expect(available(toAlignment)).toContain("request_team_alignment");
+    });
+
+    it("withholds review_final_decision from a non-owner contributor even with an active, unblocked proposal", () => {
+      const room = buildRoomStateFixture({
+        phase: "voting", selfParticipantId: "participant-engineer", activeProposalId: "proposal-1",
+      });
+      expect(available(room)).not.toContain("review_final_decision");
+    });
+
+    it("registers review_final_decision for a non-owner decision-maker, not just the owner", () => {
+      const baseline = buildRoomStateFixture();
+      const room = buildRoomStateFixture({
+        phase: "voting",
+        selfParticipantId: "participant-engineer",
+        activeProposalId: "proposal-1",
+        participants: baseline.participants.map((participant) =>
+          participant.id === "participant-engineer"
+            ? { ...participant, decisionRole: "decision_maker" as const }
+            : participant,
+        ),
+      });
+      expect(available(room)).toContain("review_final_decision");
+    });
+
+    it("still withholds true owner administration from a non-owner decision-maker", () => {
+      const baseline = buildRoomStateFixture();
+      const room = buildRoomStateFixture({
+        phase: "input",
+        selfParticipantId: "participant-engineer",
+        participants: baseline.participants.map((participant) =>
+          participant.id === "participant-engineer"
+            ? { ...participant, decisionRole: "decision_maker" as const }
+            : participant,
+        ),
+      });
+      const names = available(room);
+      for (const ownerTool of ["admit_participant", "remove_participant", "transfer_ownership", "set_decision_policy"]) {
+        expect(names, ownerTool).not.toContain(ownerTool);
+      }
+    });
   });
 
   it("never registers lock_meeting and unlock_meeting at the same time", () => {

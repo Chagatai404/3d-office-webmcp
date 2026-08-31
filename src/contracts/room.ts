@@ -472,6 +472,27 @@ export type SetParticipantDecisionRoleInput = z.infer<
   typeof setParticipantDecisionRoleInputSchema
 >;
 
+/**
+ * A6: the single post-admission role/decision-authority configuration
+ * capability -- "one clear configuration capability rather than many
+ * ambiguous controls." `participantId` is always the target, never caller
+ * authority, exactly like every other owner-only input in this contract.
+ * At least one of `role`/`decisionRole` must be present; `decisionRole`
+ * reuses `assignableDecisionRoleSchema`, so `advisor` (reserved for expert/
+ * simulation actors) can never be assigned to a human through this path.
+ */
+export const configureParticipantInputSchema = z
+  .object({
+    participantId: idSchema,
+    role: z.string().trim().min(1).max(120).nullish(),
+    decisionRole: assignableDecisionRoleSchema.nullish(),
+  })
+  .strict()
+  .refine((input) => input.role != null || input.decisionRole != null, {
+    message: "Provide a role, a decision role, or both.",
+  });
+export type ConfigureParticipantInput = z.infer<typeof configureParticipantInputSchema>;
+
 export const setDecisionPolicyInputSchema = z
   .object({
     decisionPolicy: decisionPolicySchema,
@@ -617,6 +638,7 @@ export const actionErrorCodeSchema = z.enum([
   "NOT_AUTHORIZED",
   "WRONG_PHASE",
   "STALE_ROOM_STATE",
+  "WAITING_FOR_PARTICIPANTS",
   "UNRESOLVED_BLOCKING_CONFLICT",
   "HUMAN_CONFIRMATION_REQUIRED",
   "DECISION_CHANGED",
@@ -628,6 +650,14 @@ export const actionErrorCodeSchema = z.enum([
 ]);
 export type ActionErrorCode = z.infer<typeof actionErrorCodeSchema>;
 
+/**
+ * Optional, JSON-safe structured detail carried by some refusals -- e.g.
+ * `WAITING_FOR_PARTICIPANTS`'s `{ waitingParticipantIds: [...] }`. Kept as
+ * a generic `JsonValue` rather than a per-code union: `ActionResult` is
+ * shared across every mutation, and a natural-language agent already reads
+ * `message`/`recovery`; `details` exists for the rarer case where an agent
+ * (or the UI) wants the exact structured list instead of parsing prose.
+ */
 export type ActionResult<T = null> =
   | {
       ok: true;
@@ -641,6 +671,7 @@ export type ActionResult<T = null> =
         code: ActionErrorCode;
         message: string;
         recovery?: string;
+        details?: JsonValue;
       };
       roomVersion: number;
     };
@@ -663,6 +694,7 @@ export const actionResultSchema = <T extends z.ZodType>(dataSchema: T) =>
             code: actionErrorCodeSchema,
             message: z.string().min(1),
             recovery: z.string().min(1).optional(),
+            details: jsonValueSchema.optional(),
           })
           .strict(),
         roomVersion: z.number().int().nonnegative(),
@@ -728,6 +760,22 @@ export const manageJoinRequestInputSchema = z.object({
   joinRequestId: idSchema,
 }).strict();
 export type ManageJoinRequestInput = z.infer<typeof manageJoinRequestInputSchema>;
+
+/**
+ * A6: the joiner's own requested `role` is metadata, not unquestioned
+ * authority. Admitting them accepts the owner's explicit `role`/
+ * `decisionRole` overrides in the same call ("Admit Deniz as CTO and give
+ * him decision authority") -- both nullish, meaning "use the joiner's own
+ * requested role" and "default to contributor" respectively, exactly
+ * preserving the previous behavior when the owner supplies neither.
+ * `decisionRole` reuses `assignableDecisionRoleSchema`, so `advisor` can
+ * never be requested through this path either.
+ */
+export const admitJoinRequestInputSchema = manageJoinRequestInputSchema.extend({
+  role: z.string().trim().min(1).max(120).nullish(),
+  decisionRole: assignableDecisionRoleSchema.nullish(),
+}).strict();
+export type AdmitJoinRequestInput = z.infer<typeof admitJoinRequestInputSchema>;
 
 export const joinRequestResultSchema = z.object({
   roomId: idSchema,
@@ -829,9 +877,10 @@ export interface RoomClient {
 
   listJoinRequests(roomId: string): Promise<ActionResult<JoinRequest[]>>;
 
+  /** `input.role`/`input.decisionRole` let the owner assign an explicit role and decision authority in the same call. */
   admitJoinRequest(
     roomId: string,
-    input: ManageJoinRequestInput,
+    input: AdmitJoinRequestInput,
   ): Promise<ActionResult<JoinRequest>>;
 
   rejectJoinRequest(
@@ -874,5 +923,19 @@ export interface RoomClient {
   setParticipantDecisionRole(
     roomId: string,
     input: SetParticipantDecisionRoleInput,
+  ): Promise<ActionResult>;
+
+  /**
+   * Owner-only. Updates an active human participant's human-readable role,
+   * decision authority, or both in one call -- the single post-admission
+   * configuration capability (A6). Same invariants as
+   * `setParticipantDecisionRole`: the current owner can never cease being a
+   * decision-maker, experts/simulations can never be targeted, and a
+   * decision-role change is rejected once an exact decision candidate is
+   * frozen.
+   */
+  configureParticipant(
+    roomId: string,
+    input: ConfigureParticipantInput,
   ): Promise<ActionResult>;
 }

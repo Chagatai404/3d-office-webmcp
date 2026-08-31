@@ -170,6 +170,7 @@ class FakeRoomClient implements RoomClient {
     this.setParticipantDecisionRoleCalls.push(input);
     return this.ok("Decision authority updated.");
   };
+  configureParticipant: RoomClient["configureParticipant"] = async () => this.ok("Participant configured.");
 
   publish(apply: (draft: RoomState) => void) {
     const draft = this.snapshot();

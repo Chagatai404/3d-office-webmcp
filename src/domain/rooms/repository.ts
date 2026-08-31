@@ -2,8 +2,10 @@ import type {
   ActionOrigin,
   ActionResult,
   AddPositionInput,
+  AdmitJoinRequestInput,
   ApproveFinalDecisionInput,
   ClaimSeatInput,
+  ConfigureParticipantInput,
   CreateRoomInput,
   DecisionRecord,
   ExpressAlignmentInput,
@@ -64,7 +66,7 @@ export interface RoomRepository {
   requestJoinByInvite(input: RequestJoinByInviteInput, actor: DomainActor): Promise<ActionResult<JoinRequestResult>>;
   getMyJoinRequest(joinRequestId: string, actor: DomainActor): Promise<ActionResult<JoinRequest>>;
   listJoinRequests(roomId: string, actor: DomainActor): Promise<ActionResult<JoinRequest[]>>;
-  admitJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext): Promise<ActionResult<JoinRequest>>;
+  admitJoinRequest(roomId: string, input: AdmitJoinRequestInput, context: MutationContext): Promise<ActionResult<JoinRequest>>;
   rejectJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext): Promise<ActionResult<JoinRequest>>;
   claimSeat(
     roomId: string,
@@ -153,6 +155,12 @@ export interface RoomRepository {
   setParticipantDecisionRole(
     roomId: string,
     input: SetParticipantDecisionRoleInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+
+  configureParticipant(
+    roomId: string,
+    input: ConfigureParticipantInput,
     context: MutationContext,
   ): Promise<ActionResult>;
 

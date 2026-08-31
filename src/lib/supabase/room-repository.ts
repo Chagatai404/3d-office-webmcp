@@ -8,9 +8,11 @@ import {
   roomInvitePreviewSchema,
   type ActionResult,
   type AddPositionInput,
+  type AdmitJoinRequestInput,
   type ApproveFinalDecisionInput,
   type ExpressAlignmentInput,
   type ClaimSeatInput,
+  type ConfigureParticipantInput,
   type CreateRoomInput,
   type ManageJoinRequestInput,
   type RecordExpertAdviceOutcomeInput,
@@ -117,9 +119,10 @@ export class SupabaseRoomRepository implements RoomRepository {
     return this.callWithData("list_join_requests", { p_room_id: roomId }, z.array(joinRequestSchema));
   }
 
-  admitJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext) {
+  admitJoinRequest(roomId: string, input: AdmitJoinRequestInput, context: MutationContext) {
     return this.callWithData("admit_join_request", {
       p_room_id: roomId, p_join_request_id: input.joinRequestId,
+      p_role: input.role ?? null, p_decision_role: input.decisionRole ?? null,
       p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
     }, joinRequestSchema);
   }
@@ -315,6 +318,18 @@ export class SupabaseRoomRepository implements RoomRepository {
     return this.call("set_participant_decision_role", {
       p_room_id: roomId, p_participant_id: input.participantId,
       p_decision_role: input.decisionRole,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  configureParticipant(
+    roomId: string,
+    input: ConfigureParticipantInput,
+    context: MutationContext,
+  ) {
+    return this.call("configure_participant", {
+      p_room_id: roomId, p_participant_id: input.participantId,
+      p_role: input.role ?? null, p_decision_role: input.decisionRole ?? null,
       p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
     });
   }

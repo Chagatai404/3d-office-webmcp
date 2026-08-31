@@ -85,6 +85,7 @@ class B3RoomClient implements RoomClient {
     this.unavailable();
   setDecisionPolicy: RoomClient["setDecisionPolicy"] = async () => this.unavailable();
   setParticipantDecisionRole: RoomClient["setParticipantDecisionRole"] = async () => this.unavailable();
+  configureParticipant: RoomClient["configureParticipant"] = async () => this.unavailable();
 
   advanceDemoPhase: RoomClient["advanceDemoPhase"] = async (_roomId, phase) => {
     this.advanceDemoPhaseCalls.push(phase);

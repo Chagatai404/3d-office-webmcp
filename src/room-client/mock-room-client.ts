@@ -5,7 +5,9 @@ import {
   type ActionResult,
   type ActivityEvent,
   type AddPositionInput,
+  type AdmitJoinRequestInput,
   type ClaimSeatInput,
+  type ConfigureParticipantInput,
   type Constraint,
   type DecisionRecord,
   type FinalDecisionPreview,
@@ -367,7 +369,7 @@ export class MockRoomClient implements RoomClient {
     return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Listing join requests"));
   }
 
-  admitJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
+  admitJoinRequest(roomId: string, input: AdmitJoinRequestInput): Promise<ActionResult<JoinRequest>> {
     void input;
     return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Admitting a join request"));
   }
@@ -406,6 +408,14 @@ export class MockRoomClient implements RoomClient {
   ): Promise<ActionResult> {
     void input;
     return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Changing decision authority"));
+  }
+
+  configureParticipant(
+    roomId: string,
+    input: ConfigureParticipantInput,
+  ): Promise<ActionResult> {
+    void input;
+    return Promise.resolve(this.#notInThisMilestone(roomId, "input", "Configuring a participant"));
   }
 
   #snapshot(): RoomState {

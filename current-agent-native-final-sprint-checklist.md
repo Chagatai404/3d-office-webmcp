@@ -477,46 +477,48 @@ advance_discussion
 request_team_alignment
 ```
 
-- [ ] These actions are not owner-only merely because they progress the workflow.
-- [ ] Canonical prerequisites still determine success.
-- [ ] No participant can bypass missing readiness/blockers/alignment.
-- [ ] Actor identity remains authenticated and auditable.
+- [x] These actions are not owner-only merely because they progress the workflow. (`advance_room_phase` now derives the caller's own participant row and only requires `decision_role = decision_maker` for the `voting -> approval` transition; every other transition just requires an active claimed human. `supabase/migrations/20260831120000_procedural_progression_authority.sql`.)
+- [x] Canonical prerequisites still determine success. (The joined/positioned/ready count checks before `proposals`, the active-proposal check before `deliberation`, and `apply_room_phase_entry`'s active-proposal/no-blocking-conflict checks before `voting`/`approval` are byte-for-byte unchanged -- only the authorization gate above them changed.)
+- [x] No participant can bypass missing readiness/blockers/alignment. (Same prerequisite checks; proven in `tests/domain/procedural-progression-authority.test.ts`'s "refuses Proposals -> Deliberation without an active proposal even for a legitimate caller.")
+- [x] Actor identity remains authenticated and auditable. (`room.phase_advanced` audit events are still attributed to the real caller's own participant id, not the owner's -- proven in "attributes the phase-advance audit event to the calling contributor, not the owner.")
 
 ### Decision-maker actions
 
 `decisionRole = decision_maker` should control legitimate decision-review authority.
 
-- [ ] `review_final_decision` is allowed to an active legitimate decision maker when prerequisites are satisfied.
-- [ ] `approve_final_decision` is available only when caller is a required approver for the frozen candidate.
-- [ ] Final approval still requires visible human confirmation.
+- [x] `review_final_decision` is allowed to an active legitimate decision maker when prerequisites are satisfied. (Both at the DB layer -- `actor_decision_role <> 'decision_maker'` refusal -- and the WebMCP capability layer -- `capability-context.ts`'s `review_final_decision` predicate now checks `decisionRole === "decision_maker"` instead of `isOwner`.)
+- [x] `approve_final_decision` is available only when caller is a required approver for the frozen candidate. (Unchanged from A1 -- `isRequiredApprover` gate.)
+- [x] Final approval still requires visible human confirmation. (Unchanged -- `HUMAN_CONFIRMATION_REQUIRED` flow untouched by this slice.)
 
 ### Keep genuine owner administration owner-only
 
-- [ ] `get_waiting_participants`
-- [ ] `admit_participant`
-- [ ] `reject_participant`
-- [ ] `lock_meeting`
-- [ ] `unlock_meeting`
-- [ ] `remove_participant`
-- [ ] `transfer_ownership`
-- [ ] decision-policy mutation
-- [ ] participant authority/role assignment
-- [ ] enabling the organizational specialist/Security Expert
+- [x] `get_waiting_participants`
+- [x] `admit_participant`
+- [x] `reject_participant`
+- [x] `lock_meeting`
+- [x] `unlock_meeting`
+- [x] `remove_participant`
+- [x] `transfer_ownership`
+- [x] decision-policy mutation (`set_decision_policy`)
+- [x] participant authority/role assignment (`set_participant_decision_role`)
+- [x] enabling the organizational specialist/Security Expert (`enable_security_expert`)
+
+(All ten still use `is_room_organizer` / `asOwnerNotFinalized`, completely untouched by this migration -- proven in `registration.test.ts`'s "withholds genuinely owner-only administration from a non-owner claimed participant" and "still withholds true owner administration from a non-owner decision-maker.")
 
 ### A4 tests
 
-- [ ] Contributor cannot perform true owner administration.
-- [ ] Non-owner active human can initiate allowed procedural advancement.
-- [ ] Advancement fails when prerequisites are missing.
-- [ ] Decision maker can enter final decision review when valid.
-- [ ] Contributor cannot freeze/approve a decision when not authorized.
-- [ ] Stale tools remain safely rejected after authority changes.
+- [x] Contributor cannot perform true owner administration. (`registration.test.ts`.)
+- [x] Non-owner active human can initiate allowed procedural advancement. (`procedural-progression-authority.test.ts` against real Postgres, plus `registration.test.ts` at the WebMCP capability layer.)
+- [x] Advancement fails when prerequisites are missing. (Same file, "refuses Proposals -> Deliberation without an active proposal.")
+- [x] Decision maker can enter final decision review when valid. ("allows the same participant to enter Decision review once promoted to decision-maker.")
+- [x] Contributor cannot freeze/approve a decision when not authorized. ("refuses a contributor (no decision authority) entering Decision review.")
+- [x] Stale tools remain safely rejected after authority changes. (Structural, not newly tested this slice: registration only gates discovery, and every mutation still independently re-derives authority server-side on every call -- the same architecture A1's "stale captured tool references still fail server-side" already covers generically for every tool, this one included.)
 
 ### A4 exit gate
 
-- [ ] Being a contributor no longer blocks normal collaboration/progression unnecessarily.
-- [ ] Owner status remains meaningful for administration.
-- [ ] Decision-maker status remains meaningful for consequential decision actions.
+- [x] Being a contributor no longer blocks normal collaboration/progression unnecessarily. (Verified end to end against real Postgres.)
+- [x] Owner status remains meaningful for administration. (The ten owner-only actions above are completely untouched.)
+- [x] Decision-maker status remains meaningful for consequential decision actions. (Entering decision review now requires it, for anyone including the owner.)
 
 ---
 
@@ -527,20 +529,31 @@ Add/standardize structured failure states where appropriate.
 Required semantics:
 
 ```text
-WAITING_FOR_PARTICIPANTS
-WAITING_FOR_ALIGNMENT
-UNRESOLVED_BLOCKING_CONFLICT
-HUMAN_CONFIRMATION_REQUIRED
+WAITING_FOR_PARTICIPANTS   -- [x] added; see below
+WAITING_FOR_ALIGNMENT      -- [ ] deliberately not added; see below
+UNRESOLVED_BLOCKING_CONFLICT  -- already existed
+HUMAN_CONFIRMATION_REQUIRED   -- already existed
 ```
 
 Use existing codes where equivalent; add new canonical codes only when they materially improve agent understanding.
 
+`WAITING_FOR_PARTICIPANTS` replaces the generic `VALIDATION_ERROR` the three
+`input -> proposals` readiness prerequisites (joined / positioned / ready)
+previously returned -- a genuine, frequently-hit "waiting for people" state
+distinct from a malformed request. `WAITING_FOR_ALIGNMENT` is **not**
+wired to anything: alignment never mechanically gates any phase transition
+anywhere in this schema (confirmed by rereading `apply_room_phase_entry` --
+`voting -> approval` only checks for an active proposal and no open
+blocking conflict). Inventing a call site for `WAITING_FOR_ALIGNMENT` would
+misrepresent that invariant rather than clarify it, so this code was not
+added to `actionErrorCodeSchema` at all. `supabase/migrations/20260831130000_waiting_for_participants_semantics.sql`.
+
 ### Every refusal should explain
 
-- [ ] Why the action cannot happen.
-- [ ] What/who is still pending.
-- [ ] What the agent/user should do next.
-- [ ] Current room version.
+- [x] Why the action cannot happen. (Already true of every existing refusal; unchanged.)
+- [x] What/who is still pending. (New for the readiness prerequisites: `error.details.waitingParticipantIds` names exactly which required participants are still pending, instead of only a prose count.)
+- [x] What the agent/user should do next. (`recovery` text; unchanged pattern, still present on every `WAITING_FOR_PARTICIPANTS` refusal.)
+- [x] Current room version. (Every `ActionResult` failure already carries `roomVersion`; unchanged.)
 
 Example:
 
@@ -557,14 +570,14 @@ Example:
 
 If `ActionResult.error` needs JSON-safe `details`:
 
-- [ ] Developer A updates the canonical contract.
-- [ ] All parsers/tests updated.
-- [ ] Developer B does not duplicate the type.
+- [x] Developer A updates the canonical contract. (`ActionResult.error.details?: JsonValue` and the matching `actionResultSchema` field, `src/contracts/room.ts`.)
+- [x] All parsers/tests updated. (The repository's Zod parse is the single chokepoint -- `SupabaseRoomRepository`'s `actionResultSchema(...).parse(data)` -- so no separate parser needed updating. `action-feedback.tsx`'s exhaustive `Record<ActionErrorCode, string>` maps got the required new entries, caught by `tsc --noEmit`. New tests: `tests/contracts/room.test.ts`'s "A5: ActionResult.error.details", `tests/domain/waiting-for-participants.test.ts` proving the field survives a real Postgres round trip end to end.)
+- [x] Developer B does not duplicate the type. (Nothing UI-side redefines `ActionResult` or `ActionErrorCode`; `action-feedback.tsx` imports both from `@/contracts/room`.)
 
 ### A5 exit gate
 
-- [ ] A natural-language agent can correctly distinguish "I am not authorized" from "the team is not ready yet."
-- [ ] Failed phase progression never leaves the agent guessing.
+- [x] A natural-language agent can correctly distinguish "I am not authorized" from "the team is not ready yet." (`NOT_AUTHORIZED` and `WAITING_FOR_PARTICIPANTS` are now genuinely distinct codes for genuinely distinct situations, proven side by side in `tests/domain/procedural-progression-authority.test.ts`.)
+- [x] Failed phase progression never leaves the agent guessing. (Every readiness refusal now names exactly who is still pending, not just a count.)
 
 ---
 
@@ -592,12 +605,12 @@ Target owner intent:
 "Admit Deniz as CTO and give him decision authority."
 ```
 
-- [ ] Joiner's requested role is treated as requested metadata, not unquestioned authority.
-- [ ] Owner can assign/confirm the participant's human-readable role.
-- [ ] Owner can assign `decision_maker` or `contributor` where allowed.
-- [ ] Ownership is not implicitly transferred.
-- [ ] Expert/simulation actors cannot be promoted into human authority.
-- [ ] Changes are audited.
+- [x] Joiner's requested role is treated as requested metadata, not unquestioned authority. (`admit_join_request`'s new `p_role`/`p_decision_role` overrides, when supplied, always win over `request_row.role`/the previous hardcoded `contributor`. `supabase/migrations/20260831140000_explicit_role_and_decision_authority.sql`.)
+- [x] Owner can assign/confirm the participant's human-readable role. (At admission via `admit_participant`'s `role` field, or after admission via `configure_participant`'s `role` field.)
+- [x] Owner can assign `decision_maker` or `contributor` where allowed. (Same two paths; both reuse `assignableDecisionRoleSchema`, so `advisor` is never reachable through either.)
+- [x] Ownership is not implicitly transferred. (Proven explicitly: "does not implicitly transfer ownership when admitting a decision-maker" in `tests/domain/explicit-role-and-decision-authority.test.ts`.)
+- [x] Expert/simulation actors cannot be promoted into human authority. (`configure_participant` rejects any target with `kind <> 'human'` with `NOT_AUTHORIZED`; proven against a real enabled Security Expert participant in "refuses to configure the Security Expert.")
+- [x] Changes are audited. (`join.admitted`'s `sanitizedInput` now includes `role`/`decisionRole` when admitting; `configure_participant` writes its own `participant.configured` audit event with `role`/`decisionRole` from/to values.)
 
 ### WebMCP owner tool
 
@@ -606,7 +619,7 @@ Prefer one clear configuration capability rather than many ambiguous controls, i
 Possible tool:
 
 ```text
-configure_participant
+configure_participant   -- [x] implemented, exactly this name and these fields
 ```
 
 Possible fields:
@@ -617,23 +630,25 @@ role
 decisionRole
 ```
 
-- [ ] No arbitrary acting participant ID is accepted.
-- [ ] Caller authority is always derived server-side.
-- [ ] Ownership transfer remains a separate sensitive operation.
+- [x] No arbitrary acting participant ID is accepted. (`participantId` is always the *target*; the owner's own identity is always derived from `auth.uid()`, exactly like every other owner-only mutation in this codebase -- proven by the `forbidden` identity-field scan in `tests/webmcp/participant-authority.test.ts` covering the whole catalog, `configure_participant` included.)
+- [x] Caller authority is always derived server-side. (`is_room_organizer`-equivalent inline owner lookup in `configure_participant`, matching `set_participant_decision_role`'s exact pattern.)
+- [x] Ownership transfer remains a separate sensitive operation. (`transfer_ownership` untouched; `configure_participant` never writes `meeting_role` or `rooms.owner_participant_id`.)
+
+`set_participant_decision_role` was kept alongside `configure_participant` rather than removed: it already existed, is well-tested and documented, and `configure_participant` is a strict superset (decision role + role) rather than a competing, ambiguous alternative -- removing it would have been unnecessary churn for no discoverability cost (`configure_participant`'s description makes clear when to reach for it instead).
 
 ### A6 tests
 
-- [ ] Owner admits participant as CTO contributor.
-- [ ] Owner admits/configures participant as CTO decision maker.
-- [ ] Decision-maker status changes tool availability/authority correctly.
-- [ ] Non-owner cannot assign roles/decision authority.
-- [ ] Expert/simulation cannot become human decision maker through this path.
+- [x] Owner admits participant as CTO contributor. ("admits with the owner's explicit role and contributor decision role by default.")
+- [x] Owner admits/configures participant as CTO decision maker. (Both admission-time and post-admission-via-`configure_participant` paths tested.)
+- [x] Decision-maker status changes tool availability/authority correctly. (Already proven in A4's `procedural-progression-authority.test.ts`; A6 additionally proves a participant can be admitted *directly* as decision-maker in one call, without a separate promotion step.)
+- [x] Non-owner cannot assign roles/decision authority. ("refuses a non-owner caller" for `configure_participant`; admission's owner check is the same `ownerRoomForJoinRequestManagement` gate every join-request action already used.)
+- [x] Expert/simulation cannot become human decision maker through this path. ("refuses to configure the Security Expert.")
 
 ### A6 exit gate
 
-- [ ] Every human participant has an explicit visible role.
-- [ ] Every human participant has explicit decision authority.
-- [ ] Owner's agent can understand and perform legitimate authority delegation.
+- [x] Every human participant has an explicit visible role. (Was already true structurally -- `role` is a required, non-null column set at admission; A6 makes it the *owner's* explicit choice rather than only the joiner's self-report.)
+- [x] Every human participant has explicit decision authority. (Was already true structurally -- `decisionRole` defaults to `contributor`; A6 lets the owner set it explicitly, including at admission time.)
+- [x] Owner's agent can understand and perform legitimate authority delegation. ("Admit Deniz as CTO and give him decision authority" now maps to exactly one tool call.)
 
 ---
 

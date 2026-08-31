@@ -100,6 +100,7 @@ class WaitingRoomFakeClient implements RoomClient {
 
   setDecisionPolicy: RoomClient["setDecisionPolicy"] = async () => this.unavailable();
   setParticipantDecisionRole: RoomClient["setParticipantDecisionRole"] = async () => this.unavailable();
+  configureParticipant: RoomClient["configureParticipant"] = async () => this.unavailable();
 
   transferOwnership: RoomClient["transferOwnership"] = async (_roomId, input) => {
     this.transferredToParticipantIds.push(input.participantId);

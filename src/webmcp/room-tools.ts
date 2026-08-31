@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   addPositionInputSchema,
+  admitJoinRequestInputSchema,
+  configureParticipantInputSchema,
   expressAlignmentInputSchema,
   manageJoinRequestInputSchema,
   recordExpertAdviceOutcomeInputSchema,
@@ -15,6 +17,7 @@ import {
   admitJoinRequest,
   advanceRoomPhase,
   approveParticipantFinalDecision,
+  configureParticipant,
   expressMyAlignment,
   lockMeeting,
   markMyInputReady,
@@ -545,16 +548,20 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext): Record<string
     admit_participant: {
       name: "admit_participant",
       description:
-        "Owner-only. Admit one waiting join request into the meeting as a participant. Read `get_waiting_participants` first for the exact `joinRequestId`. Admission is a normal, reversible meeting-management action, so this executes directly rather than requiring separate human confirmation.",
+        "Owner-only. Admit one waiting join request into the meeting as a participant. Read `get_waiting_participants` first for the exact `joinRequestId`. `role` and `decisionRole`, when non-null, let the owner assign an explicit human-readable role (e.g. 'CTO') and decision authority in the same call the joiner is admitted -- the joiner's own requested role is requested metadata, never unquestioned authority. Pass null for `role` to keep the joiner's own requested role, and null for `decisionRole` to default to contributor. Admission is a normal, reversible meeting-management action, so this executes directly rather than requiring separate human confirmation.",
       inputSchema: {
         type: "object",
-        properties: { joinRequestId: { type: "string", minLength: 1 } },
-        required: ["joinRequestId"],
+        properties: {
+          joinRequestId: { type: "string", minLength: 1 },
+          role: nullableString,
+          decisionRole: { type: ["string", "null"], enum: ["decision_maker", "contributor", null] },
+        },
+        required: ["joinRequestId", "role", "decisionRole"],
         additionalProperties: false,
       },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute: (rawInput) => safely(async () => {
-        const input = manageJoinRequestInputSchema.parse(rawInput);
+        const input = admitJoinRequestInputSchema.parse(rawInput);
         return admitJoinRequest(context.repository, context.roomId, input, await context.mutationContext());
       }),
     },
@@ -594,7 +601,7 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext): Record<string
     advance_discussion: {
       name: "advance_discussion",
       description:
-        "Owner-only. Move the room forward one step: from Input to Proposals, or from Proposals to Deliberation. There is no phase argument -- this always advances to the single valid next phase for the room's current state, so it can never skip ahead. Use `request_team_alignment` to move from Deliberation into Alignment, and `review_final_decision` to move from Alignment into Decision.",
+        "Move the room forward one step: from Input to Proposals, or from Proposals to Deliberation. Procedural progression, not owner administration -- any active participant may call this, not only the owner. There is no phase argument -- this always advances to the single valid next phase for the room's current state, so it can never skip ahead. Canonical prerequisites still apply regardless of who calls it: moving past Input returns `WAITING_FOR_PARTICIPANTS` with the exact `waitingParticipantIds` still pending if any required participant has not joined, shared input, or marked ready. Use `request_team_alignment` to move from Deliberation into Alignment, and `review_final_decision` to move from Alignment into Decision.",
       inputSchema: noInputSchema,
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute: () => safely(async () => {
@@ -614,7 +621,7 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext): Record<string
 
     request_team_alignment: {
       name: "request_team_alignment",
-      description: "Owner-only. Move the room from Deliberation into Alignment so participants can share support, concerns, and objections on the active candidate. Only valid during Deliberation, and only when no blocking concern is still open.",
+      description: "Move the room from Deliberation into Alignment so participants can share support, concerns, and objections on the active candidate. Procedural progression, not owner administration -- any active participant may call this, not only the owner. Only valid during Deliberation, and only when no blocking concern is still open.",
       inputSchema: noInputSchema,
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute: () => safely(async () => advanceRoomPhase(context.repository, context.roomId, "voting", await context.mutationContext())),
@@ -622,7 +629,7 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext): Record<string
 
     review_final_decision: {
       name: "review_final_decision",
-      description: "Owner-only. Move the room from Alignment into Decision review, freezing the exact current candidate as the decision to be approved. Only valid during Alignment, and only when no blocking concern is still open. This does not finalize anything by itself -- see `approve_final_decision`.",
+      description: "Move the room from Alignment into Decision review, freezing the exact current candidate as the decision to be approved. Requires decision authority (`decisionRole: decision_maker`), not meeting ownership -- the current owner always qualifies, but so does any other active decision-maker. Only valid during Alignment, and only when no blocking concern is still open. This does not finalize anything by itself -- see `approve_final_decision`.",
       inputSchema: noInputSchema,
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute: () => safely(async () => advanceRoomPhase(context.repository, context.roomId, "approval", await context.mutationContext())),
@@ -662,6 +669,27 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext): Record<string
       execute: (rawInput) => safely(async () => {
         const input = setParticipantDecisionRoleInputSchema.parse(rawInput);
         return setParticipantDecisionRole(context.repository, context.roomId, input, await context.mutationContext());
+      }),
+    },
+
+    configure_participant: {
+      name: "configure_participant",
+      description:
+        "Owner-only. Update an active human participant's human-readable role (e.g. 'CTO'), decision authority, or both in one call -- the single configuration capability for both, so 'make Deniz the CTO and a decision maker' is one call, not two. Read `get_meeting_context` first for the exact `participantId`. Pass null for whichever of `role`/`decisionRole` should stay unchanged; at least one must be non-null. The current owner can never cease being a decision maker, and expert/simulation actors can never be targeted -- they cannot be assigned a role or decision authority through this tool. A `decisionRole` change is refused once an exact decision candidate is frozen (return to Alignment first); a role-only change is not affected by that.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          participantId: { type: "string", minLength: 1 },
+          role: nullableString,
+          decisionRole: { type: ["string", "null"], enum: ["decision_maker", "contributor", null] },
+        },
+        required: ["participantId", "role", "decisionRole"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: false, untrustedContentHint: false },
+      execute: (rawInput) => safely(async () => {
+        const input = configureParticipantInputSchema.parse(rawInput);
+        return configureParticipant(context.repository, context.roomId, input, await context.mutationContext());
       }),
     },
 

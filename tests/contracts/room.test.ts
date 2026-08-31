@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  actionErrorCodeSchema,
+  actionResultSchema,
   alignmentChoiceSchema,
   alignmentSchema,
   decisionPolicySchema,
@@ -12,6 +14,7 @@ import {
   startDemoScenarioInputSchema,
   transferOwnershipInputSchema,
 } from "@/contracts/room";
+import { z } from "zod";
 import { demoRoom } from "@/fixtures/demo-room";
 import { createRoomVisualizationState } from "@/visualization/room-view-model";
 
@@ -190,5 +193,50 @@ describe("canonical room contract", () => {
     expect(view.participants[0]?.isClaimed).toBe(false);
     expect(view.recentActivity[0]?.action).toBe("room.created");
     expect(view.constraints).toHaveLength(6);
+  });
+
+  describe("A5: ActionResult.error.details", () => {
+    const resultSchema = actionResultSchema(z.null());
+
+    it("includes WAITING_FOR_PARTICIPANTS in the canonical error codes", () => {
+      expect(actionErrorCodeSchema.options).toContain("WAITING_FOR_PARTICIPANTS");
+    });
+
+    it("accepts a JSON-safe details payload alongside code/message/recovery", () => {
+      const parsed = resultSchema.parse({
+        ok: false,
+        error: {
+          code: "WAITING_FOR_PARTICIPANTS",
+          message: "Every required participant must mark their input ready before proposals begin.",
+          recovery: "Ask the remaining participants to confirm their input is complete.",
+          details: { waitingParticipantIds: ["participant-engineering"] },
+        },
+        roomVersion: 4,
+      });
+      expect(parsed).toMatchObject({
+        ok: false,
+        error: { details: { waitingParticipantIds: ["participant-engineering"] } },
+      });
+    });
+
+    it("still accepts a failure with no details at all, unchanged from before", () => {
+      const parsed = resultSchema.parse({
+        ok: false,
+        error: { code: "NOT_AUTHORIZED", message: "Not authorized." },
+        roomVersion: 4,
+      });
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) expect(parsed.error.details).toBeUndefined();
+    });
+
+    it("rejects a details payload that is not JSON-safe", () => {
+      expect(
+        resultSchema.safeParse({
+          ok: false,
+          error: { code: "NOT_AUTHORIZED", message: "x", details: { fn: () => {} } },
+          roomVersion: 4,
+        }).success,
+      ).toBe(false);
+    });
   });
 });
