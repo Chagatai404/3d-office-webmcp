@@ -23,6 +23,11 @@ WebMCP is experimental. Chrome 149 introduced the origin trial and DevTools supp
 
 If using Chrome DevTools for Agents, enable remote debugging in `chrome://inspect`, start Chrome with WebMCP testing enabled, and enable the experimental WebMCP tool category (currently `--categoryExperimentalWebmcp`). Experimental CLI flags may change, so check the current Chrome documentation when configuring a new machine.
 
+**Two gotchas confirmed against a real Chrome 151 session (WebMCP-testing flag) driving `document.modelContext` directly, not through an inspector extension:**
+
+- `executeTool(tool, input)` currently requires `input` as an already-serialized JSON **string**, not the plain object `Record<string, unknown>` the draft type shape (and this repo's own `WebMcpModelContext` ambient type in `src/webmcp/types.d.ts`) suggests. Passing an object throws `Failed to parse input arguments`. Re-verify against whatever Chrome build you're on before assuming either shape.
+- A `getTools()` snapshot goes stale the instant any call changes the registered tool set (a phase advance, any mutation that unregisters/re-registers tools). Reusing an older `tools` array in a later `executeTool()` call throws `The provided value is not of type 'RegisteredTool'` -- sometimes *after* the underlying action already went through server-side. Call `getTools()` fresh immediately before every single `executeTool()`; never batch several tool calls off one cached snapshot.
+
 ## What to inspect
 
 - `get_meeting_context`, `get_coordination_status`, and `get_room_updates` are registered in every phase, including before a seat is claimed.

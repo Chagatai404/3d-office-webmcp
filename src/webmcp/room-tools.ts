@@ -214,7 +214,7 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext): Record<string
               concern: activeAlignments.filter((a) => a.choice === "concern").length,
               strongObjection: activeAlignments.filter((a) => a.choice === "strong_objection").length,
               needsClarification: activeAlignments.filter((a) => a.choice === "needs_clarification").length,
-              notShared: activeHumans.length - activeAlignments.length,
+              notShared: Math.max(0, activeHumans.length - activeAlignments.length),
             }
           : null;
         const preview = room.finalDecisionPreview;

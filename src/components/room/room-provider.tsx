@@ -168,6 +168,16 @@ export interface RoomContextValue {
   self: Participant | null;
 
   actions: RoomActions;
+
+  /**
+   * True once this session's automatic solo-judge Founder-seat claim
+   * (below) has come back `NOT_AUTHORIZED` -- someone else already holds
+   * "demo-product". The session stays a read-only spectator of the live
+   * demo (see `docs/judge-demo.md`'s disclosed single-instance
+   * limitation); this only exists so the UI can say why, instead of
+   * leaving every control silently inert.
+   */
+  demoSeatClaimBlocked: boolean;
 }
 
 const RoomContext =
@@ -412,11 +422,14 @@ export function RoomProvider({
    * has to auto-claim.
    */
   const demoBootstrapAttempted = useRef(false);
+  const [demoSeatClaimBlocked, setDemoSeatClaimBlocked] = useState(false);
   useEffect(() => {
     if (roomId !== "demo" || !room || room.demoMode !== "solo_judge" || room.selfParticipantId !== null) return;
     if (demoBootstrapAttempted.current) return;
     demoBootstrapAttempted.current = true;
-    void actions.claimSeat({ seatId: "demo-product" });
+    void actions.claimSeat({ seatId: "demo-product" }).then((result) => {
+      if (!result.ok) setDemoSeatClaimBlocked(true);
+    });
   }, [roomId, room, actions]);
 
   const value =
@@ -439,8 +452,10 @@ export function RoomProvider({
           ) ?? null,
 
         actions,
+
+        demoSeatClaimBlocked,
       };
-    }, [room, actions]);
+    }, [room, actions, demoSeatClaimBlocked]);
 
   const reload = useCallback(() => {
     setRoom(null);

@@ -67,7 +67,7 @@ function DecisionReview() {
   const decisionHash = decisionPreview?.decisionHash ?? null;
 
   const isOwner = Boolean(
-    room.demoMode === null && self?.id === room.ownerParticipantId && self.meetingRole === "owner",
+    self?.id === room.ownerParticipantId && self.meetingRole === "owner",
   );
   const isRequiredApprover = Boolean(
     self && decisionPreview?.requiredApprovalParticipantIds.includes(self.id),
