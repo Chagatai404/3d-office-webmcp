@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { RoomState } from "@/contracts/room";
+import type { ActionResult, ClaimSeatInput, RoomState } from "@/contracts/room";
 import { createAttentionWebMcpTool } from "./attention";
 import {
   deriveOnboardingCapabilityContext,
@@ -27,8 +27,24 @@ import { RoomWebMcpContext } from "./tool-context";
  * removal, ownership transfer, decision-role change, policy change,
  * finalization, or a lock toggle. `AbortController` guarantees no stale
  * registrations accumulate across passes.
+ *
+ * `claimSeat` is only used for one thing: the solo-judge `/room/demo`'s
+ * unclaimed Founder seat. A plain page load used to claim it automatically,
+ * which meant any tab that merely opened the room -- another visitor, a
+ * duplicate tab, a link-preview bot -- silently became the Founder and
+ * locked everyone else into read-only spectating, with no recourse short of
+ * resetting the whole room. That auto-claim now lives here instead, gated on
+ * `document.modelContext` existing: a WebMCP-capable browser agent has no
+ * human present to click a "take the wheel" button, so it still claims for
+ * itself the moment it shows up, exactly as before. A plain human browsing
+ * without WebMCP now sees that button (`useRoom().claimDemoSeat`) instead of
+ * losing the race to whoever else's tab happened to load first.
  */
-export function useRoomWebMcpTools(roomId: string, room: RoomState | null) {
+export function useRoomWebMcpTools(
+  roomId: string,
+  room: RoomState | null,
+  claimSeat: (input: ClaimSeatInput) => Promise<ActionResult>,
+) {
   const roomRef = useRef(room);
   useEffect(() => {
     roomRef.current = room;
@@ -38,6 +54,23 @@ export function useRoomWebMcpTools(roomId: string, room: RoomState | null) {
     () => (room ? JSON.stringify(deriveRoomCapabilityContext(room)) : null),
     [room],
   );
+
+  const demoSeatClaimAttempted = useRef(false);
+  useEffect(() => {
+    if (
+      typeof document === "undefined" ||
+      !document.modelContext ||
+      roomId !== "demo" ||
+      !room ||
+      room.demoMode !== "solo_judge" ||
+      room.selfParticipantId !== null
+    ) {
+      return;
+    }
+    if (demoSeatClaimAttempted.current) return;
+    demoSeatClaimAttempted.current = true;
+    void claimSeat({ seatId: "demo-product" });
+  }, [roomId, room, claimSeat]);
 
   useEffect(() => {
     const modelContext = document.modelContext;

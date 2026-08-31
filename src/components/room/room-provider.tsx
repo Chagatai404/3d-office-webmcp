@@ -6,7 +6,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -170,14 +169,30 @@ export interface RoomContextValue {
   actions: RoomActions;
 
   /**
-   * True once this session's automatic solo-judge Founder-seat claim
-   * (below) has come back `NOT_AUTHORIZED` -- someone else already holds
+   * True once this session's own attempt to claim the solo-judge Founder
+   * seat (via `claimDemoSeat`, from the toolbar's "Take the wheel" button)
+   * has come back `NOT_AUTHORIZED` -- someone else already holds
    * "demo-product". The session stays a read-only spectator of the live
    * demo (see `docs/judge-demo.md`'s disclosed single-instance
    * limitation); this only exists so the UI can say why, instead of
    * leaving every control silently inert.
    */
   demoSeatClaimBlocked: boolean;
+
+  /**
+   * The solo-judge demo's one explicit, human-initiated path onto the
+   * Founder / Product Lead seat.
+   *
+   * A plain page load no longer claims this seat automatically: any tab
+   * that merely opened `/room/demo` -- another visitor, a duplicate tab, a
+   * link-preview bot -- used to silently become the Founder and lock
+   * everyone else into spectating, including this app's own devtools
+   * testing sessions racing a just-reset room. A WebMCP-capable browser
+   * agent still claims automatically (see `useRoomWebMcpTools`), since
+   * there is no human present there to click anything; a plain human now
+   * has to ask for the seat once, on purpose.
+   */
+  claimDemoSeat(): Promise<ActionResult>;
 }
 
 const RoomContext =
@@ -249,14 +264,6 @@ export function RoomProvider({
 
   const [reloadAttempt, setReloadAttempt] =
     useState(0);
-
-  /**
-   * Register browser-agent tools against the latest canonical room snapshot.
-   *
-   * When room.phase changes, the WebMCP hook unregisters/registers the
-   * appropriate phase-specific tool set.
-   */
-  useRoomWebMcpTools(roomId, room);
 
   useEffect(() => {
     let active = true;
@@ -402,35 +409,32 @@ export function RoomProvider({
   );
 
   /**
-   * `/room/demo` bootstrap: a first-time judge should not have to know a
-   * room ID/passcode or click anything to become the Founder/Product Lead.
-   * The demo seed (`supabase/seed.sql`, and every `start_demo_scenario`
-   * reset) leaves the fixed `demo-product` seat unclaimed
-   * (`kind: "human"`, `user_id: null`); this reuses the existing, ordinary
-   * `claimSeat` action -- the same one a normal room's owner-seat claim
-   * would use -- rather than adding a new privileged endpoint. If the seat
-   * is already claimed by a different session, `claim_participant_seat`
-   * refuses with `NOT_AUTHORIZED` and this session simply stays a read-only
-   * spectator of the live demo (see docs/judge-demo.md's noted
-   * single-instance limitation).
-   *
-   * Scoped to `demoMode === "solo_judge"` specifically, not any `"demo"`
-   * room id: the legacy `multi_user` demo shape has four independently
-   * claimable human seats (each browser choosing its own), so silently
-   * auto-claiming the Founder seat for every session that merely opens the
-   * room would fight that flow instead of the one seat solo_judge actually
-   * has to auto-claim.
+   * Register browser-agent tools against the latest canonical room snapshot,
+   * and -- for the solo-judge demo specifically -- the one path onto its
+   * unclaimed Founder seat that still happens without a click: a WebMCP
+   * agent has no human present to press a button, so it claims for itself.
+   * See the doc comment on `useRoomWebMcpTools` for why a plain page load no
+   * longer does the same thing.
    */
-  const demoBootstrapAttempted = useRef(false);
+  useRoomWebMcpTools(roomId, room, actions.claimSeat);
+
   const [demoSeatClaimBlocked, setDemoSeatClaimBlocked] = useState(false);
-  useEffect(() => {
-    if (roomId !== "demo" || !room || room.demoMode !== "solo_judge" || room.selfParticipantId !== null) return;
-    if (demoBootstrapAttempted.current) return;
-    demoBootstrapAttempted.current = true;
-    void actions.claimSeat({ seatId: "demo-product" }).then((result) => {
-      if (!result.ok) setDemoSeatClaimBlocked(true);
-    });
-  }, [roomId, room, actions]);
+
+  /**
+   * `/room/demo`'s explicit, human-initiated claim of its one Founder /
+   * Product Lead seat -- see `RoomContextValue.claimDemoSeat`'s doc comment
+   * for why this replaced the old silent auto-claim on page load. Reuses the
+   * same ordinary `claimSeat` action a normal room's owner-seat claim would
+   * use, rather than a new privileged endpoint; if the seat is already
+   * claimed by a different session, `claim_participant_seat` refuses with
+   * `NOT_AUTHORIZED` and this sets `demoSeatClaimBlocked` so the toolbar can
+   * say why, instead of the button just silently failing.
+   */
+  const claimDemoSeat = useCallback(async () => {
+    const result = await actions.claimSeat({ seatId: "demo-product" });
+    if (!result.ok) setDemoSeatClaimBlocked(true);
+    return result;
+  }, [actions]);
 
   const value =
     useMemo<RoomContextValue | null>(() => {
@@ -454,8 +458,10 @@ export function RoomProvider({
         actions,
 
         demoSeatClaimBlocked,
+
+        claimDemoSeat,
       };
-    }, [room, actions, demoSeatClaimBlocked]);
+    }, [room, actions, demoSeatClaimBlocked, claimDemoSeat]);
 
   const reload = useCallback(() => {
     setRoom(null);

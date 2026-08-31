@@ -1780,7 +1780,13 @@ select {
   max-width: min(58rem, calc(100% - 2rem));
   padding: 0.9rem 1.25rem;
   border-radius: 1.1rem;
-  background: var(--surface-strong);
+  /* The two front-row seats sit directly behind this strip at the Room
+     camera's fixed pose. Fully opaque, it read as a card pasted over the
+     people it was meant to summarise. Translucent + blurred keeps the text
+     legible while the room stays visible through it, the same glass
+     treatment the workspace-stage scrim already uses over the scene. */
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(10px);
   box-shadow: 0 14px 36px rgba(46, 43, 39, 0.13);
   animation: sceneFadeUp 0.3s ease-out;
 }

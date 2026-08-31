@@ -17,12 +17,25 @@ import { useAttentionItems } from "./use-attention-items";
  * not a fixed decorative number.
  */
 export function MeetingToolbar() {
-  const { room, self, demoSeatClaimBlocked } = useRoom();
+  const { room, self, demoSeatClaimBlocked, claimDemoSeat } = useRoom();
   const { activeWorkspace, moving, openDrawer, goToWorkspace } = useShell();
   const attentionItems = useAttentionItems();
   const [spectatorNoticeDismissed, setSpectatorNoticeDismissed] = useState(false);
+  const [claimingSeat, setClaimingSeat] = useState(false);
+  const needsDemoSeat = room.demoMode === "solo_judge" && self === null;
+  const showTakeTheWheel = needsDemoSeat && !demoSeatClaimBlocked;
   const showSpectatorNotice =
-    demoSeatClaimBlocked && self === null && !spectatorNoticeDismissed;
+    needsDemoSeat && demoSeatClaimBlocked && !spectatorNoticeDismissed;
+
+  async function takeTheWheel() {
+    if (claimingSeat) return;
+    setClaimingSeat(true);
+    try {
+      await claimDemoSeat();
+    } finally {
+      setClaimingSeat(false);
+    }
+  }
 
   const sourceCount = useMemo(
     () => room.sources.filter((source) => source.status !== "removed").length,
@@ -61,6 +74,16 @@ export function MeetingToolbar() {
           </>
         ) : null}
       </span>
+
+      {showTakeTheWheel ? (
+        <span className="toolbar-spectator-notice" role="status">
+          Nobody is driving this demo yet.{" "}
+          <button type="button" className="toolbar-link" onClick={() => void takeTheWheel()} disabled={claimingSeat}>
+            {claimingSeat ? "Taking the wheel…" : "Take the wheel"}
+          </button>{" "}
+          to become the Founder / Product Lead.
+        </span>
+      ) : null}
 
       {showSpectatorNotice ? (
         <span className="toolbar-spectator-notice" role="status">

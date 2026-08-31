@@ -154,9 +154,24 @@ X_AXIS = mathutils.Vector((1.0, 0.0, 0.0))   # the character's left-right axis
 UP_AXIS = mathutils.Vector((0.0, 0.0, 1.0))  # world up, for the arm swing
 
 
-def rotate_bone(pose_bone, axis, degrees):
-    """Rotate a posed bone about an armature-space axis through its own head."""
-    if pose_bone is None or not degrees:
+def rotate_bone(bones, name, axis, degrees):
+    """Rotate a posed bone about an armature-space axis through its own head.
+
+    Looks the bone up by name itself, rather than taking an already-resolved
+    `PoseBone`, so a miss can be reported with the name that caused it. A
+    silent `None` here used to mean one limb quietly stayed in its standing
+    rest pose while everything else folded -- exactly the "leg floating by
+    the armrest instead of on the seat" defect this pipeline shipped at least
+    once, on a source rig whose bone names didn't match this list.
+    """
+    pose_bone = bones.get(name)
+    if pose_bone is None:
+        print(
+            "WARNING: bone %r not found -- this limb will stay in its standing "
+            "pose instead of folding into the chair" % name
+        )
+        return
+    if not degrees:
         return
     rotation = mathutils.Matrix.Rotation(math.radians(degrees), 4, axis)
     head = pose_bone.matrix.to_translation()
@@ -180,19 +195,23 @@ def seat(armature):
     bpy.ops.object.mode_set(mode="POSE")
 
     bones = armature.pose.bones
-    rotate_bone(bones.get("Abdomen"), X_AXIS, POSE["lean"])
+    rotate_bone(bones, "Abdomen", X_AXIS, POSE["lean"])
 
     for side in (".L", ".R"):
-        rotate_bone(bones.get("UpperLeg" + side), X_AXIS, POSE["thigh"])
-        rotate_bone(bones.get("LowerLeg" + side), X_AXIS, POSE["shin"])
+        rotate_bone(bones, "UpperLeg" + side, X_AXIS, POSE["thigh"])
+        rotate_bone(bones, "LowerLeg" + side, X_AXIS, POSE["shin"])
         sign = 1.0 if side == ".L" else -1.0
-        rotate_bone(bones.get("UpperArm" + side), UP_AXIS, sign * POSE["upper_arm"])
-        rotate_bone(bones.get("LowerArm" + side), X_AXIS, POSE["fore_arm"])
+        rotate_bone(bones, "UpperArm" + side, UP_AXIS, sign * POSE["upper_arm"])
+        rotate_bone(bones, "LowerArm" + side, X_AXIS, POSE["fore_arm"])
 
     for side in (".L", ".R"):
         ankle = bones.get("LowerLeg" + side + "_end") or bones.get("LowerLeg" + side)
         foot = bones.get("Foot" + side)
         if ankle is None or foot is None:
+            print(
+                "WARNING: bone %r not found -- this foot will stay in its "
+                "standing pose instead of turning flat on the floor" % ("Foot" + side)
+            )
             continue
         rest_rotation = armature.data.bones["Foot" + side].matrix_local.to_3x3().to_4x4()
         foot.matrix = (
@@ -228,6 +247,7 @@ def bake_pose(mesh, armature):
             palette[name] = to_local @ arm_world @ skin @ arm_local @ world
 
     posed = []
+    unweighted = 0
     for vertex in mesh.data.vertices:
         blended = mathutils.Vector((0.0, 0.0, 0.0))
         total = 0.0
@@ -237,7 +257,27 @@ def bake_pose(mesh, armature):
                 continue
             blended += (transform @ vertex.co) * group.weight
             total += group.weight
-        posed.append(blended / total if total > 0.0 else vertex.co.copy())
+        if total > 0.0:
+            posed.append(blended / total)
+        else:
+            # No bone deformed this vertex, so it is left exactly where the
+            # source FBX put it: the standing bind pose. A whole unskinned
+            # sub-mesh (e.g. a shoe or trouser leg exported as its own object
+            # with no vertex groups) left this way is what produced the
+            # baked-in defect this pipeline shipped once already -- a leg
+            # hanging in mid-air by the chair's armrest while the skinned
+            # body correctly folded into the seat. Printed once per mesh, not
+            # per vertex, so a genuinely fine mesh (zero unweighted verts)
+            # stays silent.
+            unweighted += 1
+            posed.append(vertex.co.copy())
+    if unweighted:
+        print(
+            "WARNING: %s has %d/%d vertices with no bone weight -- they were "
+            "left in the standing rest pose and will not look seated" % (
+                mesh.name, unweighted, len(mesh.data.vertices),
+            )
+        )
     for vertex, co in zip(mesh.data.vertices, posed):
         vertex.co = co
     mesh.data.update()
