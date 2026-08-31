@@ -1,54 +1,110 @@
 # 3D Office WebMCP
 
-A structured decision room where people and browser agents negotiate proposals,
-surface conflicts, vote, and independently approve an exact final decision.
+A WebMCP-native shared decision room where each human keeps an independent
+identity, browser agent, vote, and final approval authority.
 
-This repository begins with a deliberately narrow shared baseline. The core and
-3D experience branches may evolve independently, but both program against the
-canonical contract in [`src/contracts/room.ts`](src/contracts/room.ts).
+**Agents negotiate. People decide.**
+
+## Product direction
+
+The room experience is being simplified around one clear spatial metaphor:
+
+- one bright, minimal 3D meeting room is the default view;
+- meeting metadata such as participants, roles, invitations, activity, and
+  settings lives in a compact meeting toolbar/drawer system;
+- decision artifacts such as the brief, constraints, proposals, issues,
+  whiteboard notes, voting, and the final decision live in a separate workspace
+  dock;
+- selecting a workspace moves the 3D camera to one dedicated board/surface;
+- only the active workspace is visually foregrounded — the UI must not render
+  every board, panel, and participant list at once;
+- production 3D assets will be authored later with Blender MCP. Until then,
+  scene props should remain lightweight procedural placeholders.
+
+The previous desktop-window / 2D-floor-plan direction is deprecated. Do not add
+new product work to it.
 
 ## Start locally
 
-Requirements: Node.js 20.9 or newer.
+Requirements: Node.js 20.9 or newer and Docker for local Supabase.
 
 ```bash
 npm install
+npm run supabase:start
+npx supabase status -o env
+```
+
+Copy the reported `API_URL` and `PUBLISHABLE_KEY` into `.env.local` using
+[`.env.example`](.env.example), then run:
+
+```bash
 npm run dev
 ```
 
-Open `http://localhost:3000/room/demo`.
+Open `http://localhost:3000/room/demo` for the seeded judge room.
 
-Run all baseline checks with:
+Core checks:
 
 ```bash
 npm run check
 npm run build
 ```
 
-## Architectural boundary
+Database and browser integration checks:
 
-```text
-UI -> ApiRoomClient -> Server/API adapter -> Domain operations -> Supabase
-                                              ^
-                                              |
-                                       Expert service
-
-RoomState -> 2D UI
-RoomState -> createRoomVisualizationState() -> 3D scene
+```bash
+npm run test:domain
+npx playwright install chromium
+npm run test:e2e
 ```
 
+## Architecture boundary
+
+```text
+Manual UI ────────┐
+Browser WebMCP ───┼──> Domain operations -> authorization -> Supabase
+Expert service ───┘
+
+RoomState -> semantic DOM UI
+RoomState -> createRoomVisualizationState() -> 3D presentation
+```
+
+Important invariants:
+
+- `src/contracts/room.ts` is the canonical shared integration contract.
 - The browser never supplies trusted participant identity for mutations.
-- Manual UI, WebMCP, and expert actions share server-side domain operations.
-- `MockRoomClient` and `ApiRoomClient` must implement the canonical
-  `RoomClient` interface.
-- Supabase client usage is limited to authentication and realtime invalidation;
-  authoritative writes go through server-side domain operations.
-- The 3D layer consumes only `RoomVisualizationState` and owns no business state.
-- Voting never implies approval. Approval binds to the exact decision hash.
+- Manual UI, WebMCP, and expert actions converge on the same domain operations.
+- `RoomProvider` owns the latest canonical room snapshot in the browser.
+- The 3D layer is presentation-only and performs no authorization or business
+  transitions.
+- Voting never implies approval; final approval is explicit and hash-bound.
 
-See [`docs/branching.md`](docs/branching.md) before creating workstream branches.
+## Repository guide
 
-## Source documents
+- [`3d-office-webmcp-shared-context.md`](3d-office-webmcp-shared-context.md) —
+  canonical product + architecture decisions.
+- [`docs/product-ux.md`](docs/product-ux.md) — the new meeting-room UX contract.
+- [`docs/status.md`](docs/status.md) — current implementation and migration status.
+- [`docs/hackathon.md`](docs/hackathon.md) — concise demo/submission checklist.
+- [`docs/backend-integration.md`](docs/backend-integration.md) — API, identity,
+  realtime, WebMCP, and backend handoff details.
+- [`docs/branching.md`](docs/branching.md) — integration rules for parallel work.
+- [`docs/workstreams/product-ux.md`](docs/workstreams/product-ux.md) — current
+  frontend/3D overhaul checklist.
+- [`docs/workstreams/core-platform-completed.md`](docs/workstreams/core-platform-completed.md)
+  — completed backend/core workstream record.
 
-- [`3d-office-webmcp-shared-context.md`](3d-office-webmcp-shared-context.md)
-- [`webmcp-hackathon-project-brief.md`](webmcp-hackathon-project-brief.md)
+## 3D asset policy
+
+Do not commit third-party office asset packs or generated low-poly prop dumps.
+The temporary scene should use procedural geometry only. Final authored assets
+should be small, intentional `.glb` files produced for this product and placed
+under `public/models/meeting-room/` only when they are actually wired into the
+runtime.
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0
+(AGPL-3.0-only).
+
+For commercial licensing inquiries, contact the project maintainers.

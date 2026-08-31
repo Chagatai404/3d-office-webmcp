@@ -1,0 +1,895 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const OUT_DIR = join(process.cwd(), "public", "models", "cozy-office-pack");
+
+const MATERIALS = {
+  plum: "#5e315b",
+  terracotta: "#ba6156",
+  pear: "#cfff70",
+  teal: "#3d6e70",
+  indigo: "#473b78",
+  sky: "#4da6ff",
+  softGray: "#c2c2d1",
+  charcoal: "#43434f",
+  deepPlum: "#57294b",
+  coral: "#e36956",
+  poppy: "#eb564b",
+  midnight: "#422445",
+  berry: "#bd4882",
+  blush: "#ffb5b5",
+};
+
+function hexToRgb(hex) {
+  const value = hex.replace("#", "");
+  return [0, 2, 4]
+    .map((offset) => Number.parseInt(value.slice(offset, offset + 2), 16) / 255)
+    .map((channel) => channel.toFixed(4));
+}
+
+function createMtl() {
+  return `${Object.entries(MATERIALS)
+    .map(([name, hex]) => {
+      const [r, g, b] = hexToRgb(hex);
+      return [
+        `newmtl ${name}`,
+        `Kd ${r} ${g} ${b}`,
+        "Ka 0.0500 0.0500 0.0500",
+        "Ks 0.0800 0.0800 0.0800",
+        "Ns 18.0000",
+      ].join("\n");
+    })
+    .join("\n\n")}\n`;
+}
+
+function materialForPart(name) {
+  const lower = name.toLowerCase();
+  if (/leaf|plant|stem|soil|exit/.test(lower)) {
+    return /soil/.test(lower) ? "charcoal" : "pear";
+  }
+  if (/wood|desk|table|shelf|cabinet|drawer|frame|door|ladder|book/.test(lower)) {
+    return "terracotta";
+  }
+  if (/screen|monitor|computer|camera|lens|webcam|cctv|phone|keyboard|mouse|printer/.test(lower)) {
+    return /screen|lens|window/.test(lower) ? "midnight" : "charcoal";
+  }
+  if (/cushion|sofa|couch|chair|towel|fabric|curtain|blind|rug|pillow|mat/.test(lower)) {
+    return /pillow|towel|curtain|mat/.test(lower) ? "blush" : "teal";
+  }
+  if (/paper|note|calendar|clipboard|binder|magazine|page|tissue|whiteboard|board|print/.test(lower)) {
+    return /note|header|label/.test(lower) ? "pear" : "softGray";
+  }
+  if (/lamp|light|glow|bulb|shade|sun|trophy|cup/.test(lower)) {
+    return /base|pole|stem/.test(lower) ? "charcoal" : "blush";
+  }
+  if (/fire|extinguisher|soda|can|button|dart|paddle/.test(lower)) return "poppy";
+  if (/pot|mug|coffee|briefcase|cardboard|box|bin|trash/.test(lower)) {
+    return /bin|trash/.test(lower) ? "indigo" : "coral";
+  }
+  if (/handle|knob|hinge|metal|clip|staple|vent|outlet|switch|wheel|castor/.test(lower)) {
+    return "sky";
+  }
+  if (/toy|rubik|gundam|skate/.test(lower)) return "berry";
+  return "plum";
+}
+
+const PACK_OBJECTS = [
+  "Adjustable Desk",
+  "Air Vent",
+  "Analog clock",
+  "Bathroom Sink",
+  "Bathroom Toilet Paper",
+  "Binder",
+  "Bins",
+  "Blank Picture Frame",
+  "Book Stack",
+  "Briefcase",
+  "CCTV Camera",
+  "Cabinet",
+  "Cabinet Bed Drawer Tabl",
+  "Calendar",
+  "Cardboard Box",
+  "Cardboard Boxes",
+  "Cardboard Boxes-pMdXdrUHvX",
+  "Ceiling Fan",
+  "Ceiling Light",
+  "Chair",
+  "Coat rack",
+  "Coffee Table",
+  "Coffee cup",
+  "Computer",
+  "Computer Screen",
+  "Computer mouse",
+  "Couch Medium",
+  "Couch Small",
+  "Couch | Wide",
+  "Crushed Soda Can",
+  "Cup",
+  "Curtains Double",
+  "Cushions",
+  "Dartboard",
+  "Darts",
+  "Desk",
+  "Desk Toy",
+  "Desk-7ban171PzCS",
+  "Desk-EtJlOllzbf",
+  "Desk-ISpMh81QGq",
+  "Doorway",
+  "Doorway Front",
+  "Dual Monitors on sit-stand arm",
+  "Electrical outlet",
+  "File Cabinet",
+  "Fire Exit Sign",
+  "Fire Exit Sign-0ywPpb36cyK",
+  "Fire Extinguisher",
+  "Houseplant",
+  "Houseplant-VtJh4Irl4w",
+  "Houseplant-bfLOqIV5uP",
+  "Houseplant-e9oRt-Ct6js",
+  "Keyboard",
+  "Keyboard-fOy2zvPJAj-",
+  "Ladder",
+  "Lamp",
+  "Laptop ",
+  "Laptop bag",
+  "Light Cube",
+  "Light Desk",
+  "Light Floor",
+  "Light Icosahedron",
+  "Light Switch",
+  "MS Gundam RX-78-2 with weapons",
+  "Magazine",
+  "Manhole cover",
+  "Medium Book Shelf",
+  "Message board",
+  "Monitor",
+  "Mouse",
+  "Mousepad",
+  "Mug",
+  "Mug With Office Tool",
+  "Night Stand",
+  "Notebook",
+  "Office Chair",
+  "Office Phone",
+  "Office Printer ",
+  "Pens",
+  "Phone",
+  "Plant - White Pot",
+  "Polaroids",
+  "Potted Plant",
+  "Printer",
+  "Rubik's cube",
+  "Rug",
+  "Rug Round",
+  "Shelf",
+  "Shelf Small",
+  "Skateboard",
+  "Small Stack of Paper",
+  "Soda",
+  "Soda Can",
+  "Standing Desk",
+  "Stapler",
+  "Sticky Notes",
+  "Table",
+  "Table Large Circular",
+  "Table Tennis Paddle",
+  "Table tennis table",
+  "Tissue Box",
+  "Toilet",
+  "Toilet Paper stack",
+  "Towel Rack",
+  "Trash Bin",
+  "Trashcan",
+  "Trashcan Small",
+  "Trophy",
+  "Various Stacks of Paper",
+  "Vending Machine",
+  "Wall Art 02",
+  "Wall Art 03",
+  "Wall Art 05",
+  "Wall Art 06",
+  "Wall Shelf",
+  "Water Cooler",
+  "Webcam",
+  "Whiteboard",
+  "Window Blinds",
+  "clipboard",
+];
+
+function slugify(name) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/rx-78-2/g, "rx78")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function createObj(assetName) {
+  const lines = [
+    `# Cozy low-poly interpretation of Office Pack object: ${assetName}`,
+    "# Generated by scripts/generate-cozy-office-pack-assets.mjs",
+    "mtllib cozy-palette.mtl",
+  ];
+  let vertexCount = 0;
+
+  function addVertex([x, y, z]) {
+    lines.push(`v ${x.toFixed(4)} ${y.toFixed(4)} ${z.toFixed(4)}`);
+    vertexCount += 1;
+    return vertexCount;
+  }
+
+  function addFace(indices) {
+    lines.push(`f ${indices.join(" ")}`);
+  }
+
+  function object(name) {
+    lines.push(`o ${slugify(name) || "part"}`);
+    lines.push(`usemtl ${materialForPart(name)}`);
+  }
+
+  function box(name, center, size) {
+    object(name);
+    const [cx, cy, cz] = center;
+    const [sx, sy, sz] = size.map((value) => value / 2);
+    const vertices = [
+      [cx - sx, cy - sy, cz - sz],
+      [cx + sx, cy - sy, cz - sz],
+      [cx + sx, cy + sy, cz - sz],
+      [cx - sx, cy + sy, cz - sz],
+      [cx - sx, cy - sy, cz + sz],
+      [cx + sx, cy - sy, cz + sz],
+      [cx + sx, cy + sy, cz + sz],
+      [cx - sx, cy + sy, cz + sz],
+    ].map(addVertex);
+    addFace([vertices[0], vertices[1], vertices[2], vertices[3]]);
+    addFace([vertices[4], vertices[7], vertices[6], vertices[5]]);
+    addFace([vertices[0], vertices[4], vertices[5], vertices[1]]);
+    addFace([vertices[1], vertices[5], vertices[6], vertices[2]]);
+    addFace([vertices[2], vertices[6], vertices[7], vertices[3]]);
+    addFace([vertices[3], vertices[7], vertices[4], vertices[0]]);
+  }
+
+  function cylinder(name, center, radius, depth, sides = 8, axis = "y", taper = 1) {
+    object(name);
+    const [cx, cy, cz] = center;
+    const bottom = [];
+    const top = [];
+    const half = depth / 2;
+
+    for (let index = 0; index < sides; index += 1) {
+      const angle = (index / sides) * Math.PI * 2 + Math.PI / sides;
+      const x = Math.cos(angle);
+      const z = Math.sin(angle);
+      const low = radius;
+      const high = radius * taper;
+
+      if (axis === "x") {
+        bottom.push(addVertex([cx - half, cy + x * low, cz + z * low]));
+        top.push(addVertex([cx + half, cy + x * high, cz + z * high]));
+      } else if (axis === "z") {
+        bottom.push(addVertex([cx + x * low, cy + z * low, cz - half]));
+        top.push(addVertex([cx + x * high, cy + z * high, cz + half]));
+      } else {
+        bottom.push(addVertex([cx + x * low, cy - half, cz + z * low]));
+        top.push(addVertex([cx + x * high, cy + half, cz + z * high]));
+      }
+    }
+
+    for (let index = 0; index < sides; index += 1) {
+      const next = (index + 1) % sides;
+      addFace([bottom[index], bottom[next], top[next], top[index]]);
+    }
+    addFace([...bottom].reverse());
+    addFace(top);
+  }
+
+  function pyramid(name, center, size) {
+    object(name);
+    const [cx, cy, cz] = center;
+    const [sx, sy, sz] = size.map((value) => value / 2);
+    const vertices = [
+      [cx - sx, cy - sy, cz - sz],
+      [cx + sx, cy - sy, cz - sz],
+      [cx + sx, cy - sy, cz + sz],
+      [cx - sx, cy - sy, cz + sz],
+      [cx, cy + sy, cz],
+    ].map(addVertex);
+    addFace([vertices[0], vertices[1], vertices[2], vertices[3]]);
+    addFace([vertices[0], vertices[4], vertices[1]]);
+    addFace([vertices[1], vertices[4], vertices[2]]);
+    addFace([vertices[2], vertices[4], vertices[3]]);
+    addFace([vertices[3], vertices[4], vertices[0]]);
+  }
+
+  function leaf(name, center, size, leanX = 0, leanZ = 0) {
+    object(name);
+    const [cx, cy, cz] = center;
+    const [sx, sy, sz] = size;
+    const root = addVertex([cx, cy - sy * 0.5, cz]);
+    const tip = addVertex([cx + leanX, cy + sy * 0.5, cz + leanZ]);
+    const left = addVertex([cx - sx, cy, cz - sz]);
+    const right = addVertex([cx + sx, cy, cz + sz]);
+    const ridge = addVertex([cx + leanX * 0.42, cy + sy * 0.08, cz + leanZ * 0.42]);
+    addFace([root, left, ridge]);
+    addFace([left, tip, ridge]);
+    addFace([tip, right, ridge]);
+    addFace([right, root, ridge]);
+  }
+
+  return { box, cylinder, pyramid, leaf, text: () => `${lines.join("\n")}\n` };
+}
+
+function addBooks(obj, x = 0, y = 0.08, z = 0, count = 4) {
+  for (let index = 0; index < count; index += 1) {
+    obj.box(`cozy_book_${index + 1}`, [x, y + index * 0.075, z], [
+      0.52 - index * 0.035,
+      0.06,
+      0.34 - index * 0.018,
+    ]);
+  }
+}
+
+function addMug(obj, x, y, z) {
+  obj.cylinder("round_mug_body", [x, y, z], 0.13, 0.2, 8, "y", 0.9);
+  obj.box("chunky_mug_handle", [x + 0.15, y + 0.01, z], [0.06, 0.15, 0.16]);
+}
+
+function addLamp(obj, x, y, z) {
+  obj.cylinder("soft_lamp_base", [x, y, z], 0.16, 0.07, 8);
+  obj.cylinder("warm_lamp_neck", [x, y + 0.28, z], 0.035, 0.5, 6);
+  obj.cylinder("faceted_lamp_shade", [x, y + 0.58, z], 0.22, 0.24, 8, "y", 0.62);
+}
+
+function addPlant(obj, variant = 0) {
+  obj.cylinder("cozy_pot_saucer", [0, 0.05, 0], 0.42, 0.1, 10);
+  obj.cylinder("tapered_planter", [0, 0.34, 0], 0.32, 0.54, 10, "y", variant % 2 === 0 ? 1.2 : 0.9);
+  obj.cylinder("soft_soil", [0, 0.62, 0], 0.34, 0.05, 10);
+  obj.cylinder("main_stem", [0, 0.94, 0], 0.035, 0.62, 6);
+  const leaves = [
+    [0, 1.15, 0.14, 0.24, 0.5, 0.08, 0.04, 0.28],
+    [0.05, 1.13, -0.16, 0.22, 0.48, 0.08, -0.04, -0.3],
+    [-0.25, 0.98, 0.02, 0.2, 0.42, 0.1, -0.32, 0.05],
+    [0.27, 1.0, 0.04, 0.2, 0.42, 0.1, 0.32, 0.08],
+    [-0.14, 1.28, -0.04, 0.18, 0.38, 0.08, -0.24, -0.12],
+    [0.18, 1.31, 0, 0.18, 0.36, 0.08, 0.26, 0.12],
+  ];
+  for (const [index, leafDef] of leaves.entries()) {
+    const [x, y, z, sx, sy, sz, leanX, leanZ] = leafDef;
+    obj.leaf(`leaf_${index + 1}`, [x, y + variant * 0.02, z], [sx, sy, sz], leanX, leanZ);
+  }
+}
+
+function deskLike(obj, name) {
+  const standing = /standing|adjustable/i.test(name);
+  const fancy = /etj|isp|7ban|mac/i.test(name);
+  obj.box("soft_chunky_desktop", [0, standing ? 1.03 : 0.76, 0], [2.7, 0.18, 1.18]);
+  obj.box("warm_front_apron", [0, standing ? 0.89 : 0.62, 0.54], [2.55, 0.2, 0.12]);
+  obj.box("left_storage_block", [-0.92, standing ? 0.47 : 0.37, 0.25], [0.62, standing ? 0.78 : 0.66, 0.72]);
+  obj.box("right_trestle_panel", [1.02, standing ? 0.52 : 0.35, 0.08], [0.18, standing ? 0.92 : 0.62, 0.82]);
+  if (standing) {
+    obj.cylinder("adjustable_left_lift", [-0.55, 0.5, -0.38], 0.055, 0.92, 8);
+    obj.cylinder("adjustable_right_lift", [0.55, 0.5, -0.38], 0.055, 0.92, 8);
+  }
+  if (fancy) {
+    obj.box("rear_cozy_shelf", [0, standing ? 1.28 : 1.02, -0.48], [2.25, 0.1, 0.16]);
+    obj.box("left_shelf_post", [-1.02, standing ? 1.17 : 0.91, -0.48], [0.1, 0.34, 0.12]);
+    obj.box("right_shelf_post", [1.02, standing ? 1.17 : 0.91, -0.48], [0.1, 0.34, 0.12]);
+  }
+  addBooks(obj, -0.42, standing ? 1.17 : 0.9, -0.18, 3);
+  addMug(obj, 0.36, standing ? 1.2 : 0.93, 0.26);
+  addLamp(obj, 0.86, standing ? 1.15 : 0.88, -0.24);
+}
+
+function chairLike(obj, name) {
+  const office = /office|chair/i.test(name);
+  obj.cylinder("center_lift", [0, 0.36, 0], 0.08, 0.58, 8);
+  obj.box("rounded_seat_cushion", [0, 0.72, 0.02], [office ? 0.92 : 0.78, 0.22, office ? 0.82 : 0.72]);
+  obj.box("soft_back_cushion", [0, 1.15, -0.34], [office ? 0.98 : 0.82, 0.78, 0.18]);
+  obj.box("left_arm", [-0.58, 0.9, 0.03], [0.11, 0.42, 0.66]);
+  obj.box("right_arm", [0.58, 0.9, 0.03], [0.11, 0.42, 0.66]);
+  for (let index = 0; index < 5; index += 1) {
+    const angle = (index / 5) * Math.PI * 2;
+    const x = Math.cos(angle);
+    const z = Math.sin(angle);
+    obj.box(`star_base_spoke_${index + 1}`, [x * 0.28, 0.13, z * 0.28], [
+      Math.abs(x) > Math.abs(z) ? 0.58 : 0.14,
+      0.08,
+      Math.abs(z) >= Math.abs(x) ? 0.58 : 0.14,
+    ]);
+    obj.cylinder(`tiny_castor_${index + 1}`, [x * 0.62, 0.08, z * 0.62], 0.09, 0.08, 8, Math.abs(x) > Math.abs(z) ? "z" : "x");
+  }
+}
+
+function couchLike(obj, name) {
+  const wide = /wide/i.test(name);
+  const small = /small/i.test(name);
+  const width = wide ? 3.2 : small ? 1.7 : 2.35;
+  obj.box("soft_sofa_base", [0, 0.35, 0], [width, 0.42, 0.95]);
+  obj.box("left_rounded_arm", [-width / 2 - 0.08, 0.68, 0], [0.22, 0.78, 1.05]);
+  obj.box("right_rounded_arm", [width / 2 + 0.08, 0.68, 0], [0.22, 0.78, 1.05]);
+  obj.box("cozy_back", [0, 0.86, -0.42], [width + 0.28, 0.9, 0.2]);
+  const cushions = wide ? 3 : small ? 1 : 2;
+  for (let index = 0; index < cushions; index += 1) {
+    const x = (index - (cushions - 1) / 2) * (width / cushions);
+    obj.box(`seat_cushion_${index + 1}`, [x, 0.65, 0.13], [width / cushions - 0.08, 0.18, 0.78]);
+    obj.box(`pillow_${index + 1}`, [x + 0.08, 1.0, -0.28], [0.48, 0.48, 0.12]);
+  }
+}
+
+function tableLike(obj, name) {
+  const round = /circular|round/i.test(name);
+  const tennis = /tennis/i.test(name);
+  if (tennis) {
+    obj.box("green_table_top", [0, 0.78, 0], [2.9, 0.12, 1.55]);
+    obj.box("soft_center_net", [0, 0.93, 0], [2.9, 0.22, 0.05]);
+    obj.box("left_fold_legs", [-0.9, 0.38, -0.48], [0.12, 0.72, 0.1]);
+    obj.box("right_fold_legs", [0.9, 0.38, 0.48], [0.12, 0.72, 0.1]);
+    return;
+  }
+  if (round) {
+    obj.cylinder("faceted_round_top", [0, 0.76, 0], 0.92, 0.14, 12);
+    obj.cylinder("chunky_pedestal", [0, 0.39, 0], 0.18, 0.72, 8);
+    obj.cylinder("warm_round_base", [0, 0.06, 0], 0.54, 0.12, 10);
+    return;
+  }
+  obj.box("cozy_table_top", [0, 0.74, 0], [2.2, 0.14, 1.05]);
+  for (const x of [-0.88, 0.88]) {
+    for (const z of [-0.36, 0.36]) {
+      obj.box(`chunky_leg_${x}_${z}`, [x, 0.36, z], [0.16, 0.68, 0.16]);
+    }
+  }
+}
+
+function storageLike(obj, name) {
+  const shelf = /shelf|book/i.test(name);
+  const file = /file/i.test(name);
+  obj.box("storage_body", [0, 0.85, 0], [shelf ? 1.5 : 1.18, file ? 1.45 : 1.7, 0.48]);
+  if (shelf) {
+    for (const y of [0.45, 0.85, 1.25]) obj.box(`open_shelf_${y}`, [0, y, 0.28], [1.42, 0.08, 0.16]);
+    addBooks(obj, -0.38, 0.52, 0.31, 4);
+    addBooks(obj, 0.28, 0.92, 0.31, 3);
+  } else {
+    for (const y of [0.42, 0.78, 1.14]) {
+      obj.box(`soft_drawer_${y}`, [0, y, 0.27], [0.92, 0.24, 0.08]);
+      obj.box(`drawer_pull_${y}`, [0, y, 0.34], [0.42, 0.04, 0.04]);
+    }
+  }
+}
+
+function wallFixtureLike(obj, name) {
+  if (/whiteboard|message/i.test(name)) {
+    obj.box("soft_board_surface", [0, 1.08, 0], [2.65, 1.35, 0.08]);
+    obj.box("wood_top_frame", [0, 1.78, 0.02], [2.82, 0.12, 0.12]);
+    obj.box("wood_bottom_tray", [0, 0.37, 0.08], [2.9, 0.12, 0.28]);
+    obj.box("left_frame", [-1.43, 1.08, 0.02], [0.12, 1.5, 0.12]);
+    obj.box("right_frame", [1.43, 1.08, 0.02], [0.12, 1.5, 0.12]);
+    obj.box("sticky_note_one", [-0.82, 1.32, 0.08], [0.28, 0.24, 0.025]);
+    obj.box("sticky_note_two", [0.76, 1.48, 0.08], [0.24, 0.24, 0.025]);
+    return;
+  }
+  if (/clock/i.test(name)) {
+    obj.cylinder("faceted_clock_face", [0, 1, 0], 0.55, 0.08, 12, "z");
+    obj.cylinder("clock_center_pin", [0, 1, 0.07], 0.05, 0.04, 8, "z");
+    obj.box("hour_hand", [0.12, 1.1, 0.1], [0.28, 0.035, 0.025]);
+    obj.box("minute_hand", [-0.02, 0.86, 0.1], [0.035, 0.36, 0.025]);
+    return;
+  }
+  if (/art|frame|polaroid/i.test(name)) {
+    obj.box("warm_picture_frame", [0, 1, 0], [1.12, 0.86, 0.08]);
+    obj.box("inset_print", [0, 1, 0.06], [0.84, 0.58, 0.035]);
+    obj.pyramid("tiny_mountain_print", [-0.16, 0.95, 0.09], [0.38, 0.3, 0.04]);
+    obj.cylinder("little_sun_print", [0.28, 1.14, 0.09], 0.08, 0.025, 8, "z");
+    return;
+  }
+  obj.box("flat_wall_plate", [0, 0.7, 0], [0.9, 0.55, 0.08]);
+  obj.box("raised_detail", [0, 0.7, 0.06], [0.56, 0.18, 0.05]);
+}
+
+function electronicsLike(obj, name) {
+  if (/keyboard/i.test(name)) {
+    obj.box("rounded_keyboard_base", [0, 0.05, 0], [1.35, 0.1, 0.42]);
+    for (let row = 0; row < 3; row += 1) {
+      for (let col = 0; col < 8; col += 1) {
+        obj.box(`key_${row}_${col}`, [-0.52 + col * 0.15, 0.12, -0.12 + row * 0.12], [0.1, 0.035, 0.07]);
+      }
+    }
+    return;
+  }
+  if (/mousepad/i.test(name)) {
+    obj.box("soft_mousepad", [0, 0.025, 0], [0.88, 0.05, 0.62]);
+    obj.box("stitched_edge", [0, 0.06, 0], [0.98, 0.035, 0.72]);
+    return;
+  }
+  if (/mouse/i.test(name)) {
+    obj.cylinder("rounded_mouse_body", [0, 0.11, 0], 0.22, 0.42, 10, "z", 0.8);
+    obj.box("mouse_split_line", [0, 0.23, -0.08], [0.03, 0.03, 0.2]);
+    return;
+  }
+  if (/webcam|cctv/i.test(name)) {
+    obj.box("camera_body", [0, 0.72, 0], [0.48, 0.28, 0.26]);
+    obj.cylinder("round_lens", [0, 0.72, 0.17], 0.1, 0.05, 10, "z");
+    obj.cylinder("short_mount", [0, 0.48, 0], 0.05, 0.36, 8);
+    obj.box("clamp_base", [0, 0.28, 0], [0.52, 0.12, 0.3]);
+    return;
+  }
+  if (/phone/i.test(name)) {
+    obj.box("phone_base", [0, 0.12, 0], [0.78, 0.18, 0.54]);
+    obj.box("curvy_handset", [0, 0.34, -0.04], [0.86, 0.16, 0.2]);
+    obj.cylinder("dial_button", [-0.18, 0.25, 0.18], 0.05, 0.035, 8);
+    obj.cylinder("dial_button_2", [0, 0.25, 0.18], 0.05, 0.035, 8);
+    obj.cylinder("dial_button_3", [0.18, 0.25, 0.18], 0.05, 0.035, 8);
+    return;
+  }
+  if (/printer|copier/i.test(name)) {
+    obj.box("printer_body", [0, 0.42, 0], [1.15, 0.6, 0.82]);
+    obj.box("scanner_lid", [0, 0.78, -0.04], [1.24, 0.12, 0.72]);
+    obj.box("paper_tray", [0, 0.18, 0.48], [0.86, 0.16, 0.24]);
+    obj.box("printed_page", [0, 0.1, 0.68], [0.66, 0.035, 0.36]);
+    return;
+  }
+  if (/laptop/i.test(name)) {
+    obj.box("laptop_base", [0, 0.08, 0], [1.2, 0.12, 0.76]);
+    obj.box("open_screen", [0, 0.54, -0.36], [1.15, 0.78, 0.08]);
+    obj.box("trackpad", [0, 0.16, 0.14], [0.34, 0.025, 0.2]);
+    return;
+  }
+  if (/dual/i.test(name)) {
+    obj.cylinder("monitor_arm_post", [0, 0.58, 0], 0.05, 1.08, 8);
+    obj.box("left_monitor", [-0.62, 1.0, 0], [0.86, 0.58, 0.08]);
+    obj.box("right_monitor", [0.62, 1.0, 0], [0.86, 0.58, 0.08]);
+    obj.box("left_arm", [-0.28, 0.88, 0], [0.52, 0.06, 0.06]);
+    obj.box("right_arm", [0.28, 0.88, 0], [0.52, 0.06, 0.06]);
+    return;
+  }
+  obj.box("monitor_screen", [0, 0.78, 0], [1.12, 0.72, 0.08]);
+  obj.cylinder("monitor_neck", [0, 0.34, 0], 0.055, 0.5, 8);
+  obj.box("monitor_foot", [0, 0.08, 0], [0.58, 0.12, 0.36]);
+  if (/computer/i.test(name) && !/screen/i.test(name)) {
+    obj.box("mini_tower", [0.84, 0.38, 0.02], [0.42, 0.72, 0.56]);
+  }
+}
+
+function lightLike(obj, name) {
+  if (/ceiling/i.test(name)) {
+    obj.cylinder("ceiling_cap", [0, 1.75, 0], 0.28, 0.1, 10);
+    obj.cylinder("warm_hanging_shade", [0, 1.42, 0], 0.42, 0.42, 10, "y", 0.72);
+    return;
+  }
+  if (/floor/i.test(name)) {
+    obj.cylinder("floor_lamp_base", [0, 0.05, 0], 0.35, 0.1, 10);
+    obj.cylinder("tall_lamp_pole", [0, 0.8, 0], 0.035, 1.5, 8);
+    obj.cylinder("soft_floor_shade", [0, 1.62, 0], 0.34, 0.38, 10, "y", 0.7);
+    return;
+  }
+  if (/cube/i.test(name)) {
+    obj.box("glowing_lowpoly_cube", [0, 0.36, 0], [0.72, 0.72, 0.72]);
+    obj.box("wood_cube_base", [0, 0.06, 0], [0.84, 0.12, 0.84]);
+    return;
+  }
+  if (/icosahedron/i.test(name)) {
+    obj.pyramid("upper_glow_pyramid", [0, 0.52, 0], [0.78, 0.72, 0.78]);
+    obj.pyramid("lower_glow_pyramid", [0, 0.18, 0], [0.78, 0.72, 0.78]);
+    return;
+  }
+  addLamp(obj, 0, 0.08, 0);
+}
+
+function doorwayLike(obj, name) {
+  obj.box("cozy_door_slab", [0, 1.05, 0], [1.08, 2.1, 0.16]);
+  obj.box("left_frame", [-0.67, 1.08, 0.04], [0.16, 2.28, 0.22]);
+  obj.box("right_frame", [0.67, 1.08, 0.04], [0.16, 2.28, 0.22]);
+  obj.box("top_frame", [0, 2.21, 0.04], [1.5, 0.16, 0.22]);
+  obj.box("upper_panel", [0, 1.52, 0.1], [0.68, 0.62, 0.08]);
+  obj.box("lower_panel", [0, 0.66, 0.1], [0.68, 0.72, 0.08]);
+  obj.cylinder("round_knob", [0.42, 1.03, 0.16], 0.08, 0.1, 8, "z");
+  if (/front/i.test(name)) obj.box("tiny_welcome_mat", [0, 0.02, 0.44], [1.25, 0.04, 0.62]);
+}
+
+function paperLike(obj, name) {
+  if (/calendar/i.test(name)) {
+    obj.box("calendar_back", [0, 0.62, 0], [0.88, 1.05, 0.06]);
+    obj.box("calendar_header", [0, 1.04, 0.05], [0.88, 0.22, 0.04]);
+    for (let row = 0; row < 4; row += 1) {
+      for (let col = 0; col < 5; col += 1) {
+        obj.box(`date_square_${row}_${col}`, [-0.32 + col * 0.16, 0.42 + row * 0.13, 0.08], [0.08, 0.055, 0.025]);
+      }
+    }
+    return;
+  }
+  if (/sticky/i.test(name)) {
+    for (let index = 0; index < 6; index += 1) {
+      obj.box(`sticky_note_${index + 1}`, [((index % 3) - 1) * 0.34, 0.04 + Math.floor(index / 3) * 0.045, 0], [0.28, 0.035, 0.28]);
+    }
+    return;
+  }
+  if (/binder/i.test(name)) {
+    obj.box("standing_binder", [0, 0.42, 0], [0.42, 0.84, 0.16]);
+    obj.box("binder_spine_label", [0, 0.42, 0.09], [0.25, 0.46, 0.035]);
+    return;
+  }
+  if (/notebook|magazine|clipboard/i.test(name)) {
+    obj.box("paper_pad", [0, 0.06, 0], [0.72, 0.08, 0.96]);
+    obj.box("soft_cover", [0, 0.12, 0], [0.78, 0.04, 1.02]);
+    if (/clipboard/i.test(name)) obj.box("metal_clip", [0, 0.17, -0.42], [0.36, 0.06, 0.12]);
+    return;
+  }
+  const count = /various/i.test(name) ? 5 : /small/i.test(name) ? 3 : 4;
+  for (let index = 0; index < count; index += 1) {
+    obj.box(`paper_stack_sheet_${index + 1}`, [0.02 * index, 0.025 + index * 0.035, -0.015 * index], [0.76, 0.025, 0.54]);
+  }
+}
+
+function containerLike(obj, name) {
+  if (/box/i.test(name)) {
+    const count = /boxes|pmd/i.test(name) ? 3 : 1;
+    for (let index = 0; index < count; index += 1) {
+      const x = (index - 1) * 0.55;
+      const y = index === 1 ? 0.52 : 0.32;
+      obj.box(`cardboard_box_${index + 1}`, [x, y, 0], [0.72, 0.64, 0.62]);
+      obj.box(`tape_strip_${index + 1}`, [x, y + 0.33, 0], [0.12, 0.035, 0.64]);
+    }
+    return;
+  }
+  if (/trash|bin|bins/i.test(name)) {
+    const small = /small/i.test(name);
+    obj.cylinder("faceted_bin_body", [0, small ? 0.34 : 0.48, 0], small ? 0.32 : 0.42, small ? 0.68 : 0.96, 10, "y", 1.14);
+    obj.cylinder("open_bin_rim", [0, small ? 0.7 : 0.98, 0], small ? 0.37 : 0.48, 0.08, 10);
+    return;
+  }
+  obj.box("soft_briefcase_body", [0, 0.35, 0], [0.92, 0.54, 0.22]);
+  obj.cylinder("briefcase_handle", [0, 0.72, 0], 0.08, 0.44, 8, "x");
+}
+
+function drinkLike(obj, name) {
+  if (/water cooler/i.test(name)) {
+    obj.cylinder("water_jug", [0, 1.34, 0], 0.34, 0.62, 10, "y", 0.82);
+    obj.box("cooler_body", [0, 0.62, 0], [0.66, 0.98, 0.58]);
+    obj.box("little_tap", [0, 0.72, 0.34], [0.24, 0.08, 0.12]);
+    return;
+  }
+  if (/soda|can/i.test(name)) {
+    obj.cylinder(/crushed/i.test(name) ? "crumpled_soda_can" : "soft_soda_can", [0, 0.19, 0], 0.16, /crushed/i.test(name) ? 0.24 : 0.38, 10, "y", /crushed/i.test(name) ? 1.22 : 1);
+    obj.box("tiny_pull_tab", [0, /crushed/i.test(name) ? 0.33 : 0.4, 0.04], [0.12, 0.025, 0.05]);
+    return;
+  }
+  addMug(obj, 0, 0.18, 0);
+}
+
+function bathroomLike(obj, name) {
+  if (/sink/i.test(name)) {
+    obj.box("sink_vanity", [0, 0.38, 0], [0.92, 0.64, 0.62]);
+    obj.cylinder("soft_basin", [0, 0.76, 0], 0.38, 0.16, 10);
+    obj.cylinder("curved_faucet", [0, 0.98, -0.12], 0.045, 0.28, 8);
+    return;
+  }
+  if (/toilet paper/i.test(name)) {
+    const count = /stack/i.test(name) ? 4 : 1;
+    for (let index = 0; index < count; index += 1) {
+      obj.cylinder(`toilet_paper_roll_${index + 1}`, [(index % 2) * 0.34, 0.18 + Math.floor(index / 2) * 0.34, 0], 0.16, 0.28, 12, "x");
+      obj.cylinder(`paper_roll_hole_${index + 1}`, [(index % 2) * 0.34, 0.18 + Math.floor(index / 2) * 0.34, 0], 0.06, 0.3, 8, "x");
+    }
+    return;
+  }
+  if (/towel/i.test(name)) {
+    obj.cylinder("towel_bar", [0, 0.88, 0], 0.04, 1.05, 8, "x");
+    obj.box("folded_towel", [0, 0.62, 0.04], [0.82, 0.5, 0.08]);
+    return;
+  }
+  obj.cylinder("cozy_toilet_bowl", [0, 0.34, 0.08], 0.36, 0.42, 10, "z", 0.75);
+  obj.box("toilet_tank", [0, 0.78, -0.34], [0.72, 0.58, 0.22]);
+  obj.cylinder("toilet_base", [0, 0.16, -0.06], 0.24, 0.28, 10);
+}
+
+function funLike(obj, name) {
+  if (/dartboard/i.test(name)) {
+    obj.cylinder("dartboard_ring", [0, 1, 0], 0.55, 0.08, 14, "z");
+    obj.cylinder("dartboard_bullseye", [0, 1, 0.07], 0.12, 0.035, 10, "z");
+    return;
+  }
+  if (/darts/i.test(name)) {
+    for (let index = 0; index < 3; index += 1) {
+      obj.cylinder(`dart_body_${index + 1}`, [-0.24 + index * 0.24, 0.34, 0], 0.035, 0.56, 8, "z");
+      obj.pyramid(`dart_tip_${index + 1}`, [-0.24 + index * 0.24, 0.34, 0.34], [0.12, 0.12, 0.18]);
+    }
+    return;
+  }
+  if (/skateboard/i.test(name)) {
+    obj.box("chunky_skate_deck", [0, 0.18, 0], [1.28, 0.12, 0.42]);
+    for (const x of [-0.42, 0.42]) for (const z of [-0.18, 0.18]) obj.cylinder(`wheel_${x}_${z}`, [x, 0.08, z], 0.08, 0.08, 8, "x");
+    return;
+  }
+  if (/paddle/i.test(name)) {
+    obj.cylinder("paddle_head", [0, 0.62, 0], 0.28, 0.06, 12, "z");
+    obj.box("paddle_handle", [0, 0.25, 0], [0.12, 0.52, 0.08]);
+    return;
+  }
+  if (/rubik/i.test(name)) {
+    for (let x = 0; x < 3; x += 1) for (let y = 0; y < 3; y += 1) for (let z = 0; z < 3; z += 1) obj.box(`cubelet_${x}_${y}_${z}`, [-0.22 + x * 0.22, 0.11 + y * 0.22, -0.22 + z * 0.22], [0.18, 0.18, 0.18]);
+    return;
+  }
+  if (/trophy/i.test(name)) {
+    obj.cylinder("trophy_base", [0, 0.09, 0], 0.28, 0.18, 10);
+    obj.cylinder("trophy_stem", [0, 0.36, 0], 0.08, 0.42, 8);
+    obj.cylinder("faceted_cup", [0, 0.72, 0], 0.26, 0.42, 10, "y", 1.28);
+    obj.box("left_handle", [-0.3, 0.75, 0], [0.12, 0.34, 0.08]);
+    obj.box("right_handle", [0.3, 0.75, 0], [0.12, 0.34, 0.08]);
+    return;
+  }
+  if (/gundam/i.test(name)) {
+    obj.box("toy_torso", [0, 0.78, 0], [0.42, 0.5, 0.24]);
+    obj.box("toy_head", [0, 1.16, 0], [0.28, 0.26, 0.24]);
+    obj.box("left_arm", [-0.36, 0.78, 0], [0.16, 0.52, 0.16]);
+    obj.box("right_arm", [0.36, 0.78, 0], [0.16, 0.52, 0.16]);
+    obj.box("left_leg", [-0.14, 0.32, 0], [0.16, 0.56, 0.18]);
+    obj.box("right_leg", [0.14, 0.32, 0], [0.16, 0.56, 0.18]);
+    return;
+  }
+  obj.cylinder("round_desk_toy_base", [0, 0.08, 0], 0.32, 0.16, 10);
+  obj.pyramid("little_desk_toy", [0, 0.42, 0], [0.58, 0.68, 0.58]);
+}
+
+function accessoryLike(obj, name) {
+  if (/pens/i.test(name)) {
+    obj.cylinder("pen_cup", [0, 0.22, 0], 0.18, 0.34, 8, "y", 1.12);
+    for (let index = 0; index < 5; index += 1) {
+      obj.cylinder(`friendly_pen_${index + 1}`, [-0.12 + index * 0.06, 0.52, 0.02 - index * 0.015], 0.018, 0.62, 6);
+    }
+    return;
+  }
+  if (/stapler/i.test(name)) {
+    obj.box("stapler_base", [0, 0.08, 0], [0.72, 0.12, 0.22]);
+    obj.box("stapler_top", [0.04, 0.2, 0], [0.66, 0.14, 0.2]);
+    obj.box("tiny_staples", [-0.22, 0.17, 0], [0.18, 0.035, 0.16]);
+    return;
+  }
+  if (/tissue/i.test(name)) {
+    obj.box("soft_tissue_box", [0, 0.2, 0], [0.78, 0.38, 0.46]);
+    obj.box("top_slot", [0, 0.41, 0], [0.44, 0.04, 0.1]);
+    obj.pyramid("single_tissue", [0, 0.6, 0], [0.46, 0.34, 0.18]);
+    return;
+  }
+  if (/vending/i.test(name)) {
+    obj.box("cozy_vending_body", [0, 0.95, 0], [0.9, 1.9, 0.58]);
+    obj.box("glowing_drink_window", [-0.12, 1.18, 0.31], [0.46, 0.92, 0.06]);
+    obj.box("button_column", [0.3, 1.1, 0.32], [0.18, 0.78, 0.06]);
+    obj.box("pickup_slot", [0, 0.32, 0.32], [0.58, 0.18, 0.07]);
+    return;
+  }
+  if (/manhole/i.test(name)) {
+    obj.cylinder("faceted_manhole_cover", [0, 0.04, 0], 0.58, 0.08, 14);
+    obj.cylinder("inner_ring", [0, 0.09, 0], 0.38, 0.035, 14);
+    for (let index = 0; index < 6; index += 1) {
+      const angle = (index / 6) * Math.PI * 2;
+      obj.box(`cover_groove_${index + 1}`, [Math.cos(angle) * 0.18, 0.12, Math.sin(angle) * 0.18], [
+        Math.abs(Math.cos(angle)) > 0.6 ? 0.36 : 0.06,
+        0.025,
+        Math.abs(Math.sin(angle)) > 0.6 ? 0.36 : 0.06,
+      ]);
+    }
+    return;
+  }
+  obj.box("cozy_accessory_base", [0, 0.3, 0], [0.72, 0.6, 0.72]);
+  obj.pyramid("cozy_accessory_top", [0, 0.86, 0], [0.58, 0.56, 0.58]);
+}
+
+function fixtureLike(obj, name) {
+  if (/cctv/i.test(name)) {
+    obj.box("wall_camera_body", [0, 0.72, 0], [0.52, 0.3, 0.28]);
+    obj.cylinder("camera_lens", [0, 0.72, 0.18], 0.11, 0.06, 10, "z");
+    obj.box("wall_mount_plate", [0, 0.72, -0.24], [0.38, 0.38, 0.08]);
+    obj.cylinder("stubby_mount_arm", [0, 0.72, -0.1], 0.045, 0.28, 8, "z");
+    return;
+  }
+  if (/fire exit/i.test(name)) {
+    obj.box("soft_exit_sign", [0, 0.48, 0], [1.18, 0.46, 0.08]);
+    obj.box("running_arrow", [0.26, 0.48, 0.07], [0.34, 0.08, 0.04]);
+    obj.pyramid("arrow_head", [0.5, 0.48, 0.07], [0.22, 0.18, 0.04]);
+    return;
+  }
+  if (/fire extinguisher/i.test(name)) {
+    obj.cylinder("extinguisher_body", [0, 0.55, 0], 0.18, 0.82, 10);
+    obj.cylinder("extinguisher_neck", [0, 1.0, 0], 0.08, 0.16, 8);
+    obj.box("handle", [0, 1.12, 0], [0.36, 0.08, 0.12]);
+    obj.cylinder("hose", [0.24, 0.86, 0], 0.035, 0.46, 8, "y");
+    return;
+  }
+  if (/outlet|switch/i.test(name)) {
+    obj.box("wall_plate", [0, 0.42, 0], [0.36, 0.52, 0.06]);
+    obj.box("toggle_or_socket", [0, 0.42, 0.05], [0.14, 0.22, 0.035]);
+    return;
+  }
+  if (/vent/i.test(name)) {
+    obj.box("vent_frame", [0, 0.42, 0], [1.16, 0.48, 0.08]);
+    for (let index = 0; index < 5; index += 1) obj.box(`vent_slat_${index + 1}`, [0, 0.26 + index * 0.08, 0.07], [0.96, 0.035, 0.04]);
+    return;
+  }
+  if (/blinds|curtains/i.test(name)) {
+    obj.box("curtain_rod", [0, 1.62, 0], [1.6, 0.08, 0.08]);
+    for (let index = 0; index < 6; index += 1) obj.box(`soft_fabric_panel_${index + 1}`, [-0.64 + index * 0.26, 0.8, 0], [0.16, 1.54, 0.06]);
+    return;
+  }
+  if (/fan/i.test(name)) {
+    obj.cylinder("ceiling_fan_hub", [0, 1.25, 0], 0.16, 0.16, 10);
+    for (const [index, angle] of [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2].entries()) {
+      const x = Math.cos(angle) * 0.44;
+      const z = Math.sin(angle) * 0.44;
+      obj.box(`soft_blade_${index + 1}`, [x, 1.25, z], [Math.abs(x) > 0 ? 0.84 : 0.16, 0.06, Math.abs(z) > 0 ? 0.84 : 0.16]);
+    }
+    return;
+  }
+  if (/ladder/i.test(name)) {
+    obj.box("left_ladder_rail", [-0.28, 0.8, 0], [0.08, 1.6, 0.08]);
+    obj.box("right_ladder_rail", [0.28, 0.8, 0], [0.08, 1.6, 0.08]);
+    for (let index = 0; index < 5; index += 1) obj.box(`ladder_rung_${index + 1}`, [0, 0.25 + index * 0.28, 0], [0.68, 0.07, 0.08]);
+    return;
+  }
+  if (/coat rack/i.test(name)) {
+    obj.cylinder("coat_rack_pole", [0, 0.86, 0], 0.045, 1.62, 8);
+    obj.cylinder("coat_rack_base", [0, 0.06, 0], 0.34, 0.12, 10);
+    for (const [index, angle] of [0, 2.1, 4.2].entries()) obj.box(`coat_hook_${index + 1}`, [Math.cos(angle) * 0.22, 1.42, Math.sin(angle) * 0.22], [0.42, 0.07, 0.08]);
+  }
+}
+
+function rugLike(obj, name) {
+  if (/round/i.test(name)) {
+    obj.cylinder("round_woven_rug", [0, 0.025, 0], 0.9, 0.05, 14);
+    obj.cylinder("inner_cozy_ring", [0, 0.06, 0], 0.55, 0.03, 14);
+    return;
+  }
+  obj.box("soft_rect_rug", [0, 0.025, 0], [1.8, 0.05, 1.05]);
+  obj.box("rug_inner_panel", [0, 0.06, 0], [1.34, 0.025, 0.72]);
+}
+
+function dispatch(name) {
+  const obj = createObj(name);
+  const lower = name.toLowerCase();
+
+  if (/desk/.test(lower)) deskLike(obj, name);
+  else if (/chair/.test(lower)) chairLike(obj, name);
+  else if (/couch|cushion/.test(lower)) couchLike(obj, name);
+  else if (/table/.test(lower)) tableLike(obj, name);
+  else if (/shelf|cabinet|night stand/.test(lower)) storageLike(obj, name);
+  else if (/plant/.test(lower)) addPlant(obj, PACK_OBJECTS.indexOf(name) % 3);
+  else if (/whiteboard|message board|clock|art|frame|polaroid/.test(lower)) wallFixtureLike(obj, name);
+  else if (/computer|monitor|keyboard|mouse|webcam|phone|printer|laptop/.test(lower)) electronicsLike(obj, name);
+  else if (/light|lamp/.test(lower)) lightLike(obj, name);
+  else if (/doorway/.test(lower)) doorwayLike(obj, name);
+  else if (/rug/.test(lower)) rugLike(obj, name);
+  else if (/box|bin|trash|briefcase/.test(lower)) containerLike(obj, name);
+  else if (/paper|binder|notebook|magazine|clipboard|sticky|calendar/.test(lower)) paperLike(obj, name);
+  else if (/mug|cup|soda|water cooler/.test(lower)) drinkLike(obj, name);
+  else if (/toilet|bathroom|sink|towel/.test(lower)) bathroomLike(obj, name);
+  else if (/dart|skateboard|paddle|rubik|trophy|gundam|desk toy/.test(lower)) funLike(obj, name);
+  else if (/pens|stapler|tissue|vending|manhole/.test(lower)) accessoryLike(obj, name);
+  else if (/exit|extinguisher|outlet|switch|vent|blind|curtain|fan|ladder|coat rack|cctv/.test(lower)) fixtureLike(obj, name);
+  else {
+    obj.box("cozy_generic_base", [0, 0.3, 0], [0.72, 0.6, 0.72]);
+    obj.pyramid("cozy_generic_top", [0, 0.86, 0], [0.58, 0.56, 0.58]);
+  }
+
+  return obj.text();
+}
+
+mkdirSync(OUT_DIR, { recursive: true });
+writeFileSync(join(OUT_DIR, "cozy-palette.mtl"), createMtl());
+
+const manifest = {
+  sourcePack: "/Users/ata/Downloads/Office Pack-zip",
+  style: "original cozy low-poly procedural OBJ interpretations",
+  count: PACK_OBJECTS.length,
+  assets: [],
+};
+
+const seen = new Map();
+for (const name of PACK_OBJECTS) {
+  const baseSlug = slugify(name);
+  const currentCount = seen.get(baseSlug) ?? 0;
+  seen.set(baseSlug, currentCount + 1);
+  const slug = currentCount === 0 ? baseSlug : `${baseSlug}-${currentCount + 1}`;
+  const filename = `${slug}.obj`;
+  writeFileSync(join(OUT_DIR, filename), dispatch(name));
+  manifest.assets.push({ name, file: filename });
+}
+
+writeFileSync(join(OUT_DIR, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
