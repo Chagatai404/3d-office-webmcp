@@ -90,6 +90,12 @@ test("removal: the removed participant loses room access; their history remains 
 
   const aliceSession = await joinByPasscode(browser, owner, roomId, passcode, "Alice", "Designer");
   const alice = aliceSession.page;
+  const aliceRefreshErrors: string[] = [];
+  alice.on("console", (message) => {
+    if (message.type() === "error" && message.text().includes("Room refresh failed")) {
+      aliceRefreshErrors.push(message.text());
+    }
+  });
 
   // Publish a position through WebMCP so there is real history to preserve.
   await callTool(alice, "share_my_context", {
@@ -118,23 +124,25 @@ test("removal: the removed participant loses room access; their history remains 
   // Alice disappears from the owner's active participant roster live.
   await expect(owner.getByTestId(`participant-kind-${aliceParticipantId}`)).toHaveCount(0);
 
+  // Alice's own live subscription observes the access loss without a reload.
+  await expect(alice.getByRole("heading", { name: "This room could not be opened" })).toBeVisible();
+  await expect(alice.getByTestId("e2e-room-harness")).toHaveCount(0);
+  expect(aliceRefreshErrors).toEqual([]);
+
   const staleRemovedAttempt = JSON.parse(String(await executeCapturedTool(alice, {
     summary: "Try to write after removal.",
     category: null,
     priority: null,
     constraints: [],
   })));
-  // RLS makes the room itself non-discoverable to the removed session, so
-  // the stale callback fails closed before it can reach a mutation RPC.
-  expect(staleRemovedAttempt).toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" } });
-
-  // Alice's own session can no longer load or mutate the room.
-  await alice.reload();
-  await expect(alice.getByTestId("e2e-room-harness")).toHaveCount(0);
+  // Clearing the live snapshot also revokes the captured tool's capability
+  // context, so it fails closed before it can reach a mutation RPC.
+  expect(staleRemovedAttempt).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" } });
 
   // Historical contributions remain visible to the owner.
   await expect(owner.getByTestId("positions")).toContainText("Preserve the existing interaction pattern.");
   await expect(owner.getByTestId("activity")).toContainText("participant.removed");
+  await expect(owner.getByTestId("connection-status")).toHaveText("Connected");
 
   await ownerSession.context.close();
   await aliceSession.context.close();

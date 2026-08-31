@@ -32,10 +32,27 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { ensureAnonymousAccessToken } from "@/lib/supabase/session";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 
+class RoomLoadError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "RoomLoadError";
+  }
+}
+
+type RoomSubscription = {
+  callback: (state: RoomState) => void;
+  onUnavailable: (() => void) | undefined;
+};
+
+const TERMINAL_ROOM_STATUSES = new Set([401, 403, 404]);
+
 export class ApiRoomClient implements RoomClient {
   private readonly supabase: SupabaseClient;
   private readonly versions = new Map<string, number>();
-  private readonly subscribers = new Map<string, Set<(state: RoomState) => void>>();
+  private readonly subscribers = new Map<string, Set<RoomSubscription>>();
   private readonly channels = new Map<string, RealtimeChannel>();
   private readonly startingChannels = new Set<string>();
   private sessionPromise: Promise<string> | null = null;
@@ -50,27 +67,30 @@ export class ApiRoomClient implements RoomClient {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
-    if (!response.ok) throw new Error(`Unable to load room (${response.status}).`);
+    if (!response.ok) {
+      throw new RoomLoadError(response.status, "The room could not be loaded.");
+    }
     const room = roomStateSchema.parse(await response.json());
     this.versions.set(roomId, room.version);
     return room;
   }
 
-  subscribe(roomId: string, callback: (state: RoomState) => void): () => void {
-    const callbacks = this.subscribers.get(roomId) ?? new Set();
-    callbacks.add(callback);
-    this.subscribers.set(roomId, callbacks);
-    void this.refresh(roomId);
-
+  subscribe(
+    roomId: string,
+    callback: (state: RoomState) => void,
+    onUnavailable?: () => void,
+  ): () => void {
+    const subscriptions = this.subscribers.get(roomId) ?? new Set();
+    const subscription = { callback, onUnavailable };
+    subscriptions.add(subscription);
+    this.subscribers.set(roomId, subscriptions);
     void this.startRealtime(roomId);
 
     return () => {
-      callbacks.delete(callback);
-      if (callbacks.size > 0) return;
+      subscriptions.delete(subscription);
+      if (subscriptions.size > 0) return;
       this.subscribers.delete(roomId);
-      const channel = this.channels.get(roomId);
-      if (channel) void this.supabase.removeChannel(channel);
-      this.channels.delete(roomId);
+      this.stopRealtime(roomId);
     };
   }
 
@@ -179,8 +199,16 @@ export class ApiRoomClient implements RoomClient {
     return this.mutate(roomId, "unlock", {});
   }
 
-  removeParticipant(roomId: string, input: RemoveParticipantInput): Promise<ActionResult> {
-    return this.mutate(roomId, "participants/remove", input);
+  async removeParticipant(roomId: string, input: RemoveParticipantInput): Promise<ActionResult> {
+    const result = await this.mutate(roomId, "participants/remove", input);
+    if (result.ok) {
+      void this.channels.get(roomId)?.send({
+        type: "broadcast",
+        event: "room_changed",
+        payload: {},
+      });
+    }
+    return result;
   }
 
   transferOwnership(roomId: string, input: TransferOwnershipInput): Promise<ActionResult> {
@@ -282,8 +310,14 @@ export class ApiRoomClient implements RoomClient {
   private async refresh(roomId: string) {
     try {
       const state = await this.getRoom(roomId);
-      this.subscribers.get(roomId)?.forEach((callback) => callback(state));
+      this.subscribers.get(roomId)?.forEach(({ callback }) => callback(state));
     } catch (error) {
+      if (error instanceof RoomLoadError && TERMINAL_ROOM_STATUSES.has(error.status)) {
+        this.versions.delete(roomId);
+        this.stopRealtime(roomId);
+        this.subscribers.get(roomId)?.forEach(({ onUnavailable }) => onUnavailable?.());
+        return;
+      }
       console.error("Room refresh failed", error);
     }
   }
@@ -298,14 +332,28 @@ export class ApiRoomClient implements RoomClient {
       const channel = this.supabase
         .channel(`room:${roomId}`)
         .on(
+          "broadcast",
+          { event: "room_changed" },
+          () => void this.refresh(roomId),
+        )
+        .on(
           "postgres_changes",
           { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${roomId}` },
           () => void this.refresh(roomId),
-        )
-        .subscribe();
+        );
       this.channels.set(roomId, channel);
+      channel.subscribe((status) => {
+        if (status !== "SUBSCRIBED" || this.channels.get(roomId) !== channel) return;
+        void this.refresh(roomId);
+      });
     } finally {
       this.startingChannels.delete(roomId);
     }
+  }
+
+  private stopRealtime(roomId: string) {
+    const channel = this.channels.get(roomId);
+    this.channels.delete(roomId);
+    if (channel) void this.supabase.removeChannel(channel);
   }
 }

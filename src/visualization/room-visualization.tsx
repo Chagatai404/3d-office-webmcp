@@ -2,6 +2,7 @@
 
 import { Component, memo, Suspense, type ErrorInfo, type ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
+import { PCFShadowMap } from "three";
 import { MeetingScene } from "./scene/meeting-scene";
 import type { CameraRequest } from "./scene/camera-controller";
 import type { WorkspaceId } from "./scene/camera-poses";
@@ -105,7 +106,7 @@ export const RoomVisualization = memo(function RoomVisualization({
             className="scene-canvas"
             dpr={[1, 1.75]}
             gl={{ antialias: true, alpha: true }}
-            shadows
+            shadows={{ type: PCFShadowMap }}
             /* Clicking past every object steps back out of the selection. */
             onPointerMissed={() => interaction.onSelect(null)}
             /* The dock carries the same semantics in the DOM. */

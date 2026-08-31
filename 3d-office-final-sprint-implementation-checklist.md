@@ -1322,6 +1322,21 @@ not been performed by any coding agent and remains an open manual step.
 - [ ] no exposed secrets;
 - [ ] finalized room immutable.
 
+**Slice 1 / Reliability Cleanup status note (2026-08-31):** Implementation is
+complete without schema/migration or product-scope changes. Expected
+401/403/404 room-access loss is quiet and live, unexpected refresh failures
+remain visible, initial loading is read-then-subscribe with one post-subscribe
+reconciliation, removed participants lose the room/WebMCP surface without a
+reload, and both canvases select `PCFShadowMap`. Verification passed for
+`npm run check` (151 tests), `npm run test:unit` (273 tests),
+`npm run test:domain` (80 tests), the focused Playwright removal regression,
+and `npm run build`. No Supabase migration diff exists. The Gate 8 automated
+suite remains unchecked because the final full `npm run test:e2e` rerun was
+blocked by a broken local Supabase Docker network/container recreation after
+an earlier isolated run reached 10/13 with three cold-server/test-setup
+timeouts. Repair the local stack and rerun the full Playwright command before
+self-certifying this gate.
+
 ## Gate 9 — Submission green
 
 - [ ] README current;

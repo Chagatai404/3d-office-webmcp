@@ -754,7 +754,11 @@ export type TransferOwnershipInput = z.infer<typeof transferOwnershipInputSchema
 export interface RoomClient {
   getRoom(roomId: string): Promise<RoomState>;
 
-  subscribe(roomId: string, callback: (state: RoomState) => void): () => void;
+  subscribe(
+    roomId: string,
+    callback: (state: RoomState) => void,
+    onUnavailable?: () => void,
+  ): () => void;
 
   claimSeat(roomId: string, input: ClaimSeatInput): Promise<ActionResult>;
 

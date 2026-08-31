@@ -19,6 +19,12 @@ test("normal creation binds one authenticated owner and creates no seats", async
   const outsiderSession = await newParticipantContext(browser);
   const creator = creatorSession.page;
   const outsider = outsiderSession.page;
+  const outsiderRefreshErrors: string[] = [];
+  outsider.on("console", (message) => {
+    if (message.type() === "error" && message.text().includes("Room refresh failed")) {
+      outsiderRefreshErrors.push(message.text());
+    }
+  });
 
   const { roomId, ownerParticipantId, passcode, inviteUrl } = await createRoomThroughOnboarding(
     creator,
@@ -70,6 +76,7 @@ test("normal creation binds one authenticated owner and creates no seats", async
   await outsider.goto(`/room/${roomId}`);
   await expect(outsider.getByRole("heading", { name: "This room could not be opened" }))
     .toBeVisible();
+  expect(outsiderRefreshErrors).toEqual([]);
 
   await creatorSession.context.close();
   await outsiderSession.context.close();

@@ -12,7 +12,12 @@ import {
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { PerspectiveCamera } from "@react-three/drei";
-import { Color, Vector3, type PerspectiveCamera as PerspectiveCameraImpl } from "three";
+import {
+  Color,
+  PCFShadowMap,
+  Vector3,
+  type PerspectiveCamera as PerspectiveCameraImpl,
+} from "three";
 import { createPlaceholderVisualizationState } from "@/visualization/room-view-model";
 import { CentralMeetingRoom } from "@/visualization/scene/central-meeting-room";
 import {
@@ -347,7 +352,7 @@ export function PreMeetingStage({
             className="flow-stage-canvas"
             dpr={[1, 1.75]}
             gl={{ antialias: true, alpha: true }}
-            shadows
+            shadows={{ type: PCFShadowMap }}
           >
             <PerspectiveCamera
               makeDefault
