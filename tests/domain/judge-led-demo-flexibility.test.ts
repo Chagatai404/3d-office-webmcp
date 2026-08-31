@@ -7,8 +7,8 @@ import {
   expressMyAlignment,
   getFinalDecisionRecord,
   getMeetingContext,
+  proposeParticipantTradeoff,
   startDemoScenario,
-  submitParticipantProposal,
 } from "@/domain/rooms/operations";
 import type { MutationContext } from "@/domain/rooms/repository";
 import { SupabaseRoomRepository } from "@/lib/supabase/room-repository";
@@ -20,16 +20,25 @@ import { SupabaseRoomRepository } from "@/lib/supabase/room-repository";
  * *actual text* of whatever proposal is active via `demo_proposal_text` +
  * regex predicates (`demo_is_ambitious_proposal`,
  * `demo_needs_accessibility_objection`, `demo_threatens_deadline`,
- * `demo_revision_is_acceptable`) -- never a hardcoded proposal id. This
- * file proves that against real Postgres with a proposal that is
- * *materially different* from the one
- * `tests/domain/supabase-operations.test.ts`'s "runs an idempotent
- * solo-judge scenario" already exercises: that one deliberately triggers
- * every objection and needs the canned compromise revision; this one
- * deliberately triggers none of them and must sail straight through
- * Deliberation with zero blocking conflicts. Two structurally different
- * judge-authored proposals both completing the full protocol is exactly
- * the A7 exit gate.
+ * `demo_revision_is_acceptable`) -- never a hardcoded proposal id.
+ *
+ * The seed proposal ('seed-proposal-onboarding-v1',
+ * `.../20260831160000_demo_seed_proposal_activation.sql`) is active from the
+ * moment the room enters Proposals, so a judge/agent can no longer sail an
+ * unrelated root proposal straight through Deliberation -- the seed's own
+ * ambitious text always triggers the Engineer's capacity objection first.
+ * (The Designer's accessibility objection never fires against the seed
+ * specifically: `demo_needs_accessibility_objection` requires the proposal
+ * text NOT mention "accessib*", and the seed's own rationale already says
+ * "...has not yet been reconciled with engineering capacity, accessibility,
+ * or data-handling constraints" -- a quirk of the seed's own wording, not a
+ * general rule; `tests/domain/supabase-operations.test.ts`'s differently
+ * worded "ambitious rebuild" proposal does trigger both.) This file proves
+ * the A7 exit gate a different way: a judge-authored *revision* of the seed,
+ * whose text matches every phrase `demo_revision_is_acceptable` looks for
+ * (reuses the existing auth model, reduced/incremental scope, holds the
+ * campaign date, keeps accessibility, improves onboarding/first-value),
+ * resolves the objection deterministically and completes the protocol.
  */
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321";
@@ -53,7 +62,7 @@ function context(session: Actor, expectedRoomVersion: number): MutationContext {
   return { actor: { authUserId: session.userId, origin: "manual_ui" }, expectedRoomVersion };
 }
 
-describe.sequential("A7: a judge-created proposal that needs no compromise also completes the protocol", () => {
+describe.sequential("A7: a judge-led revision that needs no further compromise also completes the protocol", () => {
   let product: Actor;
   let demoAdminRepository: SupabaseRoomRepository;
 
@@ -65,7 +74,7 @@ describe.sequential("A7: a judge-created proposal that needs no compromise also 
     product = await actor();
   });
 
-  it("reaches Alignment with zero blocking conflicts, then finalizes, for a proposal matching none of the deterministic trigger patterns", async () => {
+  it("resolves both auto-raised objections in one clean revision, then finalizes, for a revision matching every deterministic acceptance pattern", async () => {
     const reset = await startDemoScenario(
       demoAdminRepository, "demo", { mode: "solo_judge", humanRole: "product" }, product.userId,
     );
@@ -82,44 +91,58 @@ describe.sequential("A7: a judge-created proposal that needs no compromise also 
       context(product, claim.roomVersion),
     );
     if (!position.ok) throw new Error(position.error.message);
-    let room = await getMeetingContext(product.repository, product.userId, "demo");
-    expect(room?.phase).toBe("proposals");
 
-    // Deliberately avoids every trigger phrase `demo_is_ambitious_proposal`,
-    // `demo_needs_accessibility_objection`, and `demo_threatens_deadline`
-    // look for -- no "rebuild"/"custom"/"multi-step" language, no deadline
-    // language, reuses the existing auth model explicitly. A materially
-    // different shape from the "ambitious rebuild + compromise" proposal
-    // the sibling test in supabase-operations.test.ts exercises.
-    const safeProposal = await submitParticipantProposal(
+    // The seed proposal is active the moment Proposals is entered, so the
+    // settle pass triggered by this read cascades input -> proposals ->
+    // deliberation and raises the Engineer's capacity objection against it in
+    // the same pass. (Not the Designer's -- see the file docstring above.)
+    let room = await getMeetingContext(product.repository, product.userId, "demo");
+    expect(room?.phase).toBe("deliberation");
+    expect(room?.activeProposalId).toBe("seed-proposal-onboarding-v1");
+    const blockers = room!.conflicts.filter(
+      (conflict) => conflict.status === "open" && conflict.severity === "blocking",
+    );
+    expect(blockers).toHaveLength(1);
+    expect(blockers.map((conflict) => conflict.raisedByActorId)).toEqual(["demo-engineer"]);
+
+    // Deliberately matches every phrase demo_revision_is_acceptable requires
+    // (existing auth, reduced/incremental scope, the campaign launch date,
+    // accessibility, onboarding/first-value) -- a materially different shape
+    // from the "ambitious rebuild" the sibling test in
+    // supabase-operations.test.ts exercises, and a materially different
+    // *outcome* (fully resolved vs. one deliberate lingering warning) from
+    // that same sibling test's revision.
+    const safeRevision = await proposeParticipantTradeoff(
       product.repository, "demo",
       {
-        title: "Two contextual tooltips on the current flow",
-        summary: "Add two short contextual tooltips to the current onboarding flow, reusing the existing authentication and design system, keeping the current campaign timeline.",
-        rationale: "A small, low-risk addition to the existing flow that does not require new engineering work or a scope change.",
-        expectedOutcomes: ["Improve first-time completion"],
-        referencedConstraintIds: [],
-        parentProposalId: null,
+        conflictIds: blockers.map((conflict) => conflict.id),
+        description: "Replace the AI-personalization scope with two contextual tooltips on the existing flow.",
+        expectedEffect: "Removes every trigger pattern: no custom UI, reuses the existing authentication model with no auth rewrite, holds the campaign launch date, and keeps full keyboard/screen-reader accessibility.",
+        revisedProposal: {
+          title: "Two contextual tooltips on the existing flow",
+          summary: "Add two short contextual tooltips to the existing onboarding flow, reusing the existing authentication model with no auth rewrite, holding the two-week campaign launch date, with full keyboard and screen-reader accessibility.",
+          rationale: "A small, incremental addition to the existing flow that reuses the existing authentication model, needs no new engineering rework, keeps interaction patterns and accessibility unchanged, and holds the campaign launch date -- while still improving onboarding completion.",
+          expectedOutcomes: ["Improve first-time completion"],
+          referencedConstraintIds: [],
+        },
       },
       context(product, position.roomVersion),
     );
-    if (!safeProposal.ok) throw new Error(safeProposal.error.message);
+    if (!safeRevision.ok) throw new Error(safeRevision.error.message);
 
     room = await getMeetingContext(product.repository, product.userId, "demo");
-    // The deterministic scenario found nothing to object to in this
-    // proposal's text and advanced straight through Deliberation into
-    // Alignment within the same settle pass -- no engineer/designer/
-    // marketing objection, no compromise revision needed.
+    // The revision's text satisfies demo_revision_is_acceptable, so the
+    // settle pass resolves both simulated objections and advances straight
+    // through the rest of Deliberation into Alignment within the same pass.
     expect(room?.phase).toBe("voting");
     expect(room?.conflicts.filter((conflict) => conflict.status === "open")).toHaveLength(0);
-    expect(room?.tradeoffs).toHaveLength(0);
     expect(room?.alignments.filter((alignment) => alignment.participantId !== "demo-product")).toHaveLength(3);
     expect(room?.alignments.every((alignment) => alignment.choice === "support")).toBe(true);
 
     const humanAlignment = await expressMyAlignment(
       product.repository, "demo",
       { proposalId: room!.activeProposalId!, choice: "support", comment: "Low risk, ship it." },
-      context(product, safeProposal.roomVersion),
+      context(product, safeRevision.roomVersion),
     );
     if (!humanAlignment.ok) throw new Error(humanAlignment.error.message);
     room = await getMeetingContext(product.repository, product.userId, "demo");
@@ -137,7 +160,7 @@ describe.sequential("A7: a judge-created proposal that needs no compromise also 
 
     const record = await getFinalDecisionRecord(product.repository, product.userId, "demo");
     if (!record.ok) throw new Error("Final decision record unavailable.");
-    expect(record.data.decision.proposal.title).toBe("Two contextual tooltips on the current flow");
+    expect(record.data.decision.proposal.title).toBe("Two contextual tooltips on the existing flow");
     expect(record.data.decision.dissent).toEqual([]);
   });
 });

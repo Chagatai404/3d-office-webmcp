@@ -21,9 +21,7 @@ export function RoomStatusPanel() {
   );
 
   const isOwner = Boolean(
-    room.demoMode === null &&
-      self?.id === room.ownerParticipantId &&
-      self.meetingRole === "owner",
+    self?.id === room.ownerParticipantId && self.meetingRole === "owner",
   );
   const participantPositionIds = new Set(
     room.positions.map((position) => position.participantId),

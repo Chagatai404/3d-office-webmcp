@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRoom } from "@/components/room/room-provider";
 import { PHASE_LABEL } from "@/components/room/room-labels";
 import { MOVING_LABEL } from "@/visualization/scene/camera-poses";
@@ -17,9 +17,12 @@ import { useAttentionItems } from "./use-attention-items";
  * not a fixed decorative number.
  */
 export function MeetingToolbar() {
-  const { room } = useRoom();
+  const { room, self, demoSeatClaimBlocked } = useRoom();
   const { activeWorkspace, moving, openDrawer, goToWorkspace } = useShell();
   const attentionItems = useAttentionItems();
+  const [spectatorNoticeDismissed, setSpectatorNoticeDismissed] = useState(false);
+  const showSpectatorNotice =
+    demoSeatClaimBlocked && self === null && !spectatorNoticeDismissed;
 
   const sourceCount = useMemo(
     () => room.sources.filter((source) => source.status !== "removed").length,
@@ -58,6 +61,24 @@ export function MeetingToolbar() {
           </>
         ) : null}
       </span>
+
+      {showSpectatorNotice ? (
+        <span className="toolbar-spectator-notice" role="status">
+          Another session already has the wheel here.{" "}
+          <button type="button" className="toolbar-link" onClick={() => openDrawer("help")}>
+            Open Help to reset the demo
+          </button>{" "}
+          and start your own clean run.
+          <button
+            type="button"
+            className="toolbar-spectator-dismiss"
+            aria-label="Dismiss"
+            onClick={() => setSpectatorNoticeDismissed(true)}
+          >
+            ×
+          </button>
+        </span>
+      ) : null}
 
       <span className="toolbar-side">
         <button

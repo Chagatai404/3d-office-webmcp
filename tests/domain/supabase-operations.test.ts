@@ -784,35 +784,34 @@ describe.sequential("Supabase-backed room domain operations", () => {
       },
       context(product.userId, 4, "webmcp"),
     );
-    expect(position).toMatchObject({ ok: true, roomVersion: 6 });
+    // SupabaseRoomRepository.call() settles the deterministic solo-judge
+    // simulation immediately after any 'demo' RPC (see the file-level
+    // comment on tests/domain/production-demo-bootstrap.test.ts), so this
+    // single call's returned version already reflects the full cascade
+    // through Proposals into Deliberation.
+    expect(position).toMatchObject({ ok: true, roomVersion: 11 });
+    // The seed proposal ('seed-proposal-onboarding-v1',
+    // supabase/migrations/20260831160000_demo_seed_proposal_activation.sql)
+    // is active from the moment the room enters Proposals -- its own
+    // ambitious text plays the "triggers every deterministic reaction" role
+    // this test used to submit a fresh proposal to get; the settle pass
+    // triggered by this read cascades input -> proposals -> deliberation and
+    // raises the Engineer's capacity objection plus three Security Expert
+    // findings (behavioral tracking, auth-boundary expansion, data
+    // retention) against it in the same pass. The Designer's accessibility
+    // objection does not fire against the seed specifically:
+    // demo_needs_accessibility_objection requires the proposal text NOT
+    // mention "accessib*", and the seed's own rationale already says
+    // "...has not yet been reconciled with engineering capacity,
+    // accessibility, or data-handling constraints" -- a quirk of the seed's
+    // own wording (see tests/domain/judge-led-demo-flexibility.test.ts for
+    // the same note).
     room = await getMeetingContext(product.repository, product.userId, "demo");
-    expect(room).toMatchObject({ phase: "proposals", version: 6 });
-
-    const ambitious = await submitParticipantProposal(
-      product.repository,
-      "demo",
-      {
-        title: "Custom personalized onboarding rebuild",
-        summary: "Rebuild onboarding as a custom multi-step flow with new event tracking and expanded personalization before campaign launch.",
-        rationale: "The broad rebuild aims to improve onboarding completion and first value.",
-        expectedOutcomes: ["Higher completion"],
-        referencedConstraintIds: ["constraint-product-completion", "constraint-product-value"],
-        parentProposalId: null,
-      },
-      context(product.userId, 6, "webmcp"),
-    );
-    // +1 versus the pre-Slice-6 count: this proposal's "new event tracking"
-    // language also deterministically triggers one Security Expert
-    // behavioral-tracking finding during Deliberation (see
-    // tests/domain/security-expert.test.ts for dedicated coverage of that
-    // mechanism; this file only needs to account for the extra version bump).
-    expect(ambitious).toMatchObject({ ok: true, roomVersion: 11 });
-    room = await getMeetingContext(product.repository, product.userId, "demo");
-    expect(room).toMatchObject({ phase: "deliberation", version: 11 });
-    expect(room?.expertFindings.filter((finding) => finding.status === "open")).toHaveLength(1);
+    expect(room).toMatchObject({ phase: "deliberation", activeProposalId: "seed-proposal-onboarding-v1", version: 11 });
+    expect(room?.expertFindings.filter((finding) => finding.status === "open")).toHaveLength(3);
     const blockers = room!.conflicts.filter((item) => item.status === "open" && item.severity === "blocking");
-    expect(blockers).toHaveLength(2);
-    expect(blockers.map((item) => item.raisedByActorId).sort()).toEqual(["demo-designer", "demo-engineer"]);
+    expect(blockers).toHaveLength(1);
+    expect(blockers.map((item) => item.raisedByActorId)).toEqual(["demo-engineer"]);
     for (const blocker of blockers) {
       expect(room?.activity.find((event) => event.entityId === blocker.id)).toMatchObject({
         actorType: "participant",
@@ -828,7 +827,7 @@ describe.sequential("Supabase-backed room domain operations", () => {
       getMeetingContext(product.repository, product.userId, "demo"),
     ]);
     expect(concurrentReads.every((snapshot) => snapshot?.version === 11)).toBe(true);
-    expect(concurrentReads[0]?.conflicts.filter((item) => item.status === "open")).toHaveLength(2);
+    expect(concurrentReads[0]?.conflicts.filter((item) => item.status === "open")).toHaveLength(1);
 
     const compromise = await proposeParticipantTradeoff(
       product.repository,
@@ -852,14 +851,14 @@ describe.sequential("Supabase-backed room domain operations", () => {
       },
       context(product.userId, 11, "webmcp"),
     );
-    // +2 versus the pre-Slice-6 count: the revised proposal's text no longer
-    // matches the behavioral-tracking category, so the Security Expert
-    // review pass also deterministically auto-resolves the original finding
-    // (one more audited version bump) once the two blocking conflicts are
-    // resolved, before the room advances into Alignment.
-    expect(compromise).toMatchObject({ ok: true, roomVersion: 19 });
+    // The revised proposal's text no longer matches any of the three risk
+    // patterns the seed triggered, so the Security Expert review pass
+    // deterministically auto-resolves all three findings (three audited
+    // version bumps) once the one blocking conflict is resolved, before the
+    // room advances into Alignment.
+    expect(compromise).toMatchObject({ ok: true, roomVersion: 20 });
     room = await getMeetingContext(product.repository, product.userId, "demo");
-    expect(room).toMatchObject({ phase: "voting", version: 19 });
+    expect(room).toMatchObject({ phase: "voting", version: 20 });
     expect(room?.conflicts.filter((item) => item.status === "open" && item.severity === "blocking")).toHaveLength(0);
     expect(room?.conflicts.every((item) => item.status !== "resolved" || item.resolvedByActorId === item.raisedByActorId)).toBe(true);
     expect(room?.expertFindings.filter((finding) => finding.status === "open")).toHaveLength(0);
@@ -873,19 +872,19 @@ describe.sequential("Supabase-backed room domain operations", () => {
       product.repository,
       "demo",
       { decisionHash: "not-yet-available" },
-      context(product.userId, 19, "simulation"),
+      context(product.userId, 20, "simulation"),
     );
-    expect(simulatedApproval).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" }, roomVersion: 19 });
+    expect(simulatedApproval).toMatchObject({ ok: false, error: { code: "NOT_AUTHORIZED" }, roomVersion: 20 });
 
     const humanAlignment = await expressMyAlignment(
       product.repository,
       "demo",
       { proposalId: room!.activeProposalId!, choice: "support", comment: "Ready for exact human review." },
-      context(product.userId, 19, "webmcp"),
+      context(product.userId, 20, "webmcp"),
     );
-    expect(humanAlignment).toMatchObject({ ok: true, roomVersion: 21 });
+    expect(humanAlignment).toMatchObject({ ok: true, roomVersion: 22 });
     room = await getMeetingContext(product.repository, product.userId, "demo");
-    expect(room).toMatchObject({ phase: "approval", version: 21 });
+    expect(room).toMatchObject({ phase: "approval", version: 22 });
     expect(room?.approvals).toHaveLength(0);
     expect(room?.finalDecisionPreview?.requiredApprovalParticipantIds).toEqual(["demo-product"]);
     expect(room?.finalDecisionPreview?.expertAdvice.find((entry) => entry.status === "resolved")).toBeTruthy();
@@ -895,9 +894,9 @@ describe.sequential("Supabase-backed room domain operations", () => {
       product.repository,
       "demo",
       { decisionHash },
-      { ...context(product.userId, 21), humanConfirmed: true },
+      { ...context(product.userId, 22), humanConfirmed: true },
     );
-    expect(humanApproval).toMatchObject({ ok: true, roomVersion: 22 });
+    expect(humanApproval).toMatchObject({ ok: true, roomVersion: 23 });
     const record = await getFinalDecisionRecord(product.repository, product.userId, "demo");
     expect(record.ok).toBe(true);
     if (!record.ok) throw new Error("Solo decision record unavailable.");
@@ -915,7 +914,7 @@ describe.sequential("Supabase-backed room domain operations", () => {
     );
     expect(replayReset).toMatchObject({ ok: true, roomVersion: 3 });
     room = await getMeetingContext(product.repository, product.userId, "demo");
-    expect(room).toMatchObject({ phase: "input", version: 3, finalizedAt: null, activeProposalId: null });
+    expect(room).toMatchObject({ phase: "input", version: 3, finalizedAt: null, activeProposalId: "seed-proposal-onboarding-v1" });
     expect(room?.conflicts).toHaveLength(0);
     expect(room?.tradeoffs).toHaveLength(0);
     expect(room?.alignments).toHaveLength(0);
@@ -936,7 +935,114 @@ describe.sequential("Supabase-backed room domain operations", () => {
       { summary: "Replay onboarding outcome.", category: "outcome", priority: "high", constraints: [] },
       context(product.userId, 4),
     );
-    expect(replayPosition).toMatchObject({ ok: true, roomVersion: 6 });
+    expect(replayPosition).toMatchObject({ ok: true, roomVersion: 11 });
+  });
+
+  it("lets a later revision cite a conflict still attached to an earlier, now-superseded ancestor proposal", async () => {
+    // Regression for the bug the WebMCP `respond_to_concern` tool used to
+    // have: propose_participant_tradeoff required every referenced conflict
+    // to target the room's CURRENT active proposal exactly. Once a first
+    // revision didn't fully resolve an objection and nothing auto-raised a
+    // fresh conflict against the revision itself, the original conflict --
+    // still attached to its now-superseded ancestor -- could never be cited
+    // again, with no WebMCP path to submit a second revision addressing it.
+    // supabase/migrations/20260831170000_tradeoff_conflict_lineage.sql
+    // relaxes this to any proposal in the active proposal's own lineage.
+    const reset = await startDemoScenario(
+      demoAdminRepository, "demo", { mode: "solo_judge", humanRole: "product" }, product.userId,
+    );
+    if (!reset.ok) throw new Error(reset.error.message);
+    const claim = await claimParticipantSeat(
+      product.repository, "demo", { seatId: "demo-product" }, context(product.userId, reset.roomVersion),
+    );
+    if (!claim.ok) throw new Error(claim.error.message);
+    const position = await addParticipantPosition(
+      product.repository, "demo",
+      { summary: "Improve onboarding completion.", category: "outcome", priority: "high", constraints: [] },
+      context(product.userId, claim.roomVersion),
+    );
+    if (!position.ok) throw new Error(position.error.message);
+
+    // This single call's returned version already reflects the settle pass
+    // cascading input -> proposals -> deliberation and raising the
+    // Engineer's capacity objection against the seed (proposal A).
+    let room = await getMeetingContext(product.repository, product.userId, "demo");
+    expect(room).toMatchObject({ phase: "deliberation", activeProposalId: "seed-proposal-onboarding-v1" });
+    const originalConflict = room!.conflicts.find(
+      (conflict) => conflict.status === "open" && conflict.severity === "blocking",
+    )!;
+    expect(originalConflict.raisedByActorId).toBe("demo-engineer");
+
+    // Revise to proposal B, but only cite a self-raised, unrelated
+    // constraint concern -- not `originalConflict` -- so it stays open on
+    // A once A is superseded. (The revision text still avoids every
+    // deterministic trigger phrase so nothing auto-resolves it either.)
+    const selfConflict = await raiseParticipantObjection(
+      product.repository, "demo",
+      {
+        proposalId: room!.activeProposalId!,
+        constraintId: "constraint-product-value",
+        reason: "Want this explicitly tracked as its own concern before revising.",
+        severity: "blocking",
+      },
+      context(product.userId, room!.version),
+    );
+    if (!selfConflict.ok) throw new Error(selfConflict.error.message);
+    room = await getMeetingContext(product.repository, product.userId, "demo");
+    const selfConflictId = room!.conflicts.find(
+      (conflict) => conflict.status === "open" && conflict.raisedByActorId === "demo-product",
+    )!.id;
+
+    const firstRevision = await proposeParticipantTradeoff(
+      product.repository, "demo",
+      {
+        conflictIds: [selfConflictId],
+        description: "Tracking this separately while capacity is addressed next.",
+        expectedEffect: "Keeps the concern visible without resolving it yet.",
+        revisedProposal: {
+          title: "Onboarding v2 (capacity pending)",
+          summary: "An interim revision that has not yet addressed the engineering capacity objection.",
+          rationale: "Placeholder revision to prove the original conflict survives onto proposal B.",
+          expectedOutcomes: ["Placeholder"],
+          referencedConstraintIds: [],
+        },
+      },
+      context(product.userId, room!.version, "webmcp"),
+    );
+    if (!firstRevision.ok) throw new Error(firstRevision.error.message);
+    room = await getMeetingContext(product.repository, product.userId, "demo");
+    const proposalB = room!.activeProposalId!;
+    expect(proposalB).not.toBe("seed-proposal-onboarding-v1");
+    // The original Engineer conflict is still open, still attached to the
+    // now-superseded seed proposal -- not to the current active proposal B.
+    expect(room?.conflicts.find((conflict) => conflict.id === originalConflict.id)).toMatchObject({
+      id: originalConflict.id, status: "open",
+    });
+    expect(room?.proposals.find((proposal) => proposal.id === "seed-proposal-onboarding-v1")?.status).toBe("superseded");
+
+    // Before the fix, this call failed VALIDATION_ERROR: originalConflict's
+    // proposal_id (the seed) no longer equals room.activeProposalId (B).
+    const secondRevision = await proposeParticipantTradeoff(
+      product.repository, "demo",
+      {
+        conflictIds: [originalConflict.id],
+        description: "Now addressing the Engineer's original capacity objection from proposal B.",
+        expectedEffect: "Resolves the still-open ancestor conflict from within the current revision.",
+        revisedProposal: {
+          title: "Onboarding v3 (capacity addressed)",
+          summary: "Reuses the existing authentication model with no auth rewrite; a thin, incremental scope only.",
+          rationale: "Fits inside the available engineering capacity by reusing existing infrastructure.",
+          expectedOutcomes: ["Fits available engineering capacity"],
+          referencedConstraintIds: [],
+        },
+      },
+      context(product.userId, room!.version, "webmcp"),
+    );
+    expect(secondRevision.ok).toBe(true);
+
+    room = await getMeetingContext(product.repository, product.userId, "demo");
+    expect(room?.activeProposalId).not.toBe(proposalB);
+    expect(room?.proposals.find((proposal) => proposal.id === proposalB)?.status).toBe("superseded");
   });
 
   it("transactionally resets input, deliberation, voting, and approval state", async () => {
@@ -966,29 +1072,20 @@ describe.sequential("Supabase-backed room domain operations", () => {
         { seatId: "demo-product" },
         context(product.userId, 3),
       );
+      // The seed proposal ('seed-proposal-onboarding-v1') is active the
+      // moment the room enters Proposals -- this single call's returned
+      // version already reflects the settle pass cascading input ->
+      // proposals -> deliberation and raising the Engineer's capacity
+      // objection (see the identical note in "runs an idempotent solo-judge
+      // scenario...").
       await addParticipantPosition(
         product.repository,
         "demo",
         { summary: "Improve onboarding completion.", category: "outcome", priority: "high", constraints: [] },
         context(product.userId, 4),
       );
-      await submitParticipantProposal(
-        product.repository,
-        "demo",
-        {
-          title: "Custom onboarding rebuild",
-          summary: "Rebuild onboarding as a custom multi-step flow with new event tracking.",
-          rationale: "Improve onboarding completion and first value before campaign launch.",
-          expectedOutcomes: ["Higher completion"],
-          referencedConstraintIds: ["constraint-product-completion"],
-          parentProposalId: null,
-        },
-        context(product.userId, 6),
-      );
       const snapshot = await getMeetingContext(product.repository, product.userId, "demo");
-      // +1 versus the pre-Slice-6 count: see the identical note in "runs an
-      // idempotent solo-judge scenario...".
-      expect(snapshot).toMatchObject({ phase: "deliberation", version: 11 });
+      expect(snapshot).toMatchObject({ phase: "deliberation", activeProposalId: "seed-proposal-onboarding-v1", version: 11 });
       return snapshot!;
     }
 
@@ -1017,9 +1114,10 @@ describe.sequential("Supabase-backed room domain operations", () => {
         context(product.userId, 11),
       );
       const snapshot = await getMeetingContext(product.repository, product.userId, "demo");
-      // +2 versus the pre-Slice-6 count: see the identical note in "runs an
-      // idempotent solo-judge scenario...".
-      expect(snapshot).toMatchObject({ phase: "voting", version: 19 });
+      // See the identical note in "runs an idempotent solo-judge scenario...":
+      // all three Security Expert findings the seed triggered auto-resolve
+      // here too, once the revision text no longer matches their patterns.
+      expect(snapshot).toMatchObject({ phase: "voting", version: 20 });
       return snapshot!;
     }
 
@@ -1037,10 +1135,10 @@ describe.sequential("Supabase-backed room domain operations", () => {
       product.repository,
       "demo",
       { proposalId: voting.activeProposalId!, choice: "support", comment: null },
-      context(product.userId, 19),
+      context(product.userId, 20),
     );
     const approval = await getMeetingContext(product.repository, product.userId, "demo");
-    expect(approval).toMatchObject({ phase: "approval", version: 21 });
+    expect(approval).toMatchObject({ phase: "approval", version: 22 });
     await resetSolo();
 
     const multiReset = await startDemoScenario(

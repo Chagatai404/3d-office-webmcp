@@ -218,3 +218,35 @@ describe("get_coordination_status WebMCP tool", () => {
     expect(result.data.input).toBeNull();
   });
 });
+
+describe("get_current_decision WebMCP tool", () => {
+  /*
+   * Regression: `notShared` used to be a bare subtraction
+   * (activeHumans.length - activeAlignments.length) with no floor.
+   * Simulated demo teammates align too, so once more simulation participants
+   * have aligned than there are active humans in the room, that subtraction
+   * goes negative -- a visibly wrong number on an otherwise trustworthy
+   * decision surface. The UI's equivalent count already floors at zero
+   * (alignment-workspace.tsx); this tool's own count must match.
+   */
+  it("never reports a negative notShared count, even when simulated participants have aligned but the only human has not", async () => {
+    const simulationOne = { ...owner, id: "participant-sim-one", kind: "simulation" as const, meetingRole: "participant" as const };
+    const simulationTwo = { ...owner, id: "participant-sim-two", kind: "simulation" as const, meetingRole: "participant" as const };
+    const room = buildRoomStateFixture({
+      phase: "voting",
+      participants: [owner, simulationOne, simulationTwo],
+      activeProposalId: "proposal-1",
+      alignments: [
+        { proposalId: "proposal-1", participantId: "participant-sim-one", choice: "support", comment: null, updatedAt: "2026-08-30T00:00:00.000Z" },
+        { proposalId: "proposal-1", participantId: "participant-sim-two", choice: "support", comment: null, updatedAt: "2026-08-30T00:00:01.000Z" },
+      ],
+    });
+    const context = fakeRoomWebMcpContext({ room, roomVersion: room.version });
+    const result = await executeTool(createRoomWebMcpTools(context).get_current_decision!, {}) as {
+      ok: boolean;
+      data: { trustedContext: { alignmentSummary: { notShared: number } | null } };
+    };
+    expect(result.ok).toBe(true);
+    expect(result.data.trustedContext.alignmentSummary?.notShared).toBe(0);
+  });
+});
