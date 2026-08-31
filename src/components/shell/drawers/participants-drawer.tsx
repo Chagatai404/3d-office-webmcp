@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ParticipantPanel } from "@/components/room/participant-panel";
+import { RoomStatusPanel } from "@/components/room/room-status";
 import { useRoom } from "@/components/room/room-provider";
 import type { JoinRequest } from "@/contracts/room";
 import { DrawerShell } from "./drawer-shell";
@@ -9,6 +10,7 @@ import { DrawerShell } from "./drawer-shell";
 export function ParticipantsDrawer() {
   return (
     <DrawerShell label="Participants" title="Participants">
+      <RoomStatusPanel />
       <OwnerWaitingRoom />
       <ParticipantPanel />
     </DrawerShell>
