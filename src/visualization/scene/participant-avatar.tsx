@@ -39,16 +39,34 @@ const CHARACTERS = [
 
 const characterUrl = (id: string) => `/models/people/${id}.glb`;
 
-/** Feet rest on the rug — the same height the chair stands on. */
-const FEET_Y = RUG_TOP;
+/**
+ * How the figure meets the chair, measured off both meshes rather than judged
+ * by eye.
+ *
+ * Sampling `office-chair.glb` by height gives a seat pad whose top is at
+ * y≈0.44, running from z −0.30 at the backrest to z +0.35 at the front lip;
+ * the backrest's front face stands around z −0.29. Sampling a figure gives
+ * a baked seated pose with the feet at y=0, the buttocks underside at y≈0.47,
+ * and the buttocks spanning z −0.21 to +0.10 before the thighs carry forward
+ * to the knees.
+ *
+ * `SIT_BACK` was −0.24, which put the backside at z −0.45 — through the
+ * backrest and off the back of the pad, so the figure read as hovering behind
+ * its chair. −0.08 sits the buttocks over the rear half of the pad with the
+ * lower back just off the backrest, which is how a person actually sits.
+ */
+const SIT_BACK = -0.08;
 
 /**
- * The figure sits facing +Z, so −Z is back into the chair. The baked pose
- * puts the pelvis near the model origin; without this the seat of the trousers
- * lands on the front lip of the cushion with the thighs cantilevered over the
- * edge. This slides the whole figure back until the weight is over the pad.
+ * The pose expects a 0.47 seat and the pad is at 0.44, so the figure drops
+ * 3cm to close the gap. Split as 2cm here and 1cm left to the cushion: sinking
+ * the feet 2cm into the rug pile is invisible, where a bottom floating a
+ * finger's width above the pad is not.
  */
-const SIT_BACK = -0.24;
+const SIT_DROP = -0.02;
+
+/** Feet rest on the rug — the same height the chair stands on. */
+const FEET_Y = RUG_TOP + SIT_DROP;
 
 export function ParticipantAvatar({
   participant,

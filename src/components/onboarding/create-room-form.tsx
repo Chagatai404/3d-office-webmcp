@@ -1,10 +1,11 @@
 "use client";
 
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ApiRoomOnboardingClient } from "@/clients/api-room-onboarding-client";
 import type { RoomOnboardingClient } from "@/clients/room-onboarding-client";
 import type { CreateRoomInput, CreatedRoom } from "@/contracts/room";
+import { rememberInviteUrl } from "@/components/room/invite-stash";
 import { useOnboardingWebMcpTools } from "@/webmcp/register-tools";
 
 const CREATOR_ROLES = [
@@ -79,6 +80,10 @@ export function CreateRoomForm({ client: suppliedClient }: CreateRoomFormProps) 
     setStatus("submitting");
     try {
       const createdRoom = await client.createRoom(input);
+      // The raw invite token is unrecoverable once this screen is gone (the
+      // server keeps only its hash), so hold on to the link for this tab —
+      // the Participants drawer offers it again after the meeting starts.
+      rememberInviteUrl(createdRoom.roomId, createdRoom.inviteUrl);
       setCreatedRoom(createdRoom);
       setStatus("navigating");
     } catch {
@@ -88,22 +93,7 @@ export function CreateRoomForm({ client: suppliedClient }: CreateRoomFormProps) 
   }
 
   if (createdRoom) {
-    return (
-      <section className="flow-card" aria-labelledby="access-title">
-        <p className="flow-eyebrow">Meeting created</p>
-        <h1 className="flow-card-title" id="access-title">Share access, then enter.</h1>
-        <p className="flow-card-lede">The passcode is shown only now. Save it before leaving this page.</p>
-        <dl>
-          <div><dt>Room ID</dt><dd><code>{createdRoom.roomId}</code></dd></div>
-          <div><dt>Passcode</dt><dd><code>{createdRoom.passcode}</code></dd></div>
-          <div><dt>Generic invite link</dt><dd><input aria-label="Generic invite link" readOnly value={createdRoom.inviteUrl} /></dd></div>
-        </dl>
-        <div className="flow-form-actions">
-          <button type="button" className="flow-btn flow-btn-ghost" onClick={() => void navigator.clipboard.writeText(`${createdRoom.inviteUrl}\nRoom ID: ${createdRoom.roomId}\nPasscode: ${createdRoom.passcode}`)}>Copy invite</button>
-          <Link className="flow-btn flow-btn-primary" href={`/room/${encodeURIComponent(createdRoom.roomId)}`}>Enter meeting</Link>
-        </div>
-      </section>
-    );
+    return <CreatedRoomShare room={createdRoom} />;
   }
 
   return (
@@ -223,5 +213,106 @@ export function CreateRoomForm({ client: suppliedClient }: CreateRoomFormProps) 
         <p>The authenticated creator enters immediately as the room’s sole owner.</p>
       </div>
     </form>
+  );
+}
+
+/**
+ * The one-time hand-off after a room is created.
+ *
+ * The invite link is the whole story: opening it previews the meeting and only
+ * asks the joiner for a name and role, then puts them in the owner's admission
+ * queue. Room ID + passcode never need to travel with it — they are a fallback
+ * for a channel that can't carry a link, so they sit folded away under a
+ * disclosure with the "shown only now" warning that used to headline this page.
+ */
+function CreatedRoomShare({ room }: { room: CreatedRoom }) {
+  const [copied, setCopied] = useState<"link" | "code" | null>(null);
+  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (clearTimer.current) clearTimeout(clearTimer.current);
+    },
+    [],
+  );
+
+  function copy(kind: "link" | "code", text: string) {
+    void navigator.clipboard?.writeText(text);
+    setCopied(kind);
+    if (clearTimer.current) clearTimeout(clearTimer.current);
+    clearTimer.current = setTimeout(() => setCopied(null), 2400);
+  }
+
+  return (
+    <section className="flow-card" aria-labelledby="access-title">
+      <p className="flow-eyebrow">Meeting created</p>
+      <h1 className="flow-card-title" id="access-title">Share access, then enter.</h1>
+      <p className="flow-card-lede">
+        Send this link to everyone you want in the room. They ask to join from it
+        and you admit them — no room ID or passcode to pass around.
+      </p>
+
+      <div className="flow-share-block">
+        <span className="flow-share-label">Invite link</span>
+        <div className="flow-share-field">
+          <input
+            aria-label="Generic invite link"
+            readOnly
+            value={room.inviteUrl}
+            onFocus={(event) => event.currentTarget.select()}
+          />
+          <button
+            type="button"
+            className="flow-copy-btn"
+            onClick={() => copy("link", room.inviteUrl)}
+          >
+            {copied === "link" ? "Copied" : "Copy link"}
+          </button>
+        </div>
+        <p className="flow-copy-status" aria-live="polite">
+          {copied === "link" ? "Invite link copied to clipboard." : ""}
+        </p>
+      </div>
+
+      <details className="flow-reveal">
+        <summary>Manual access (if the link can’t be used)</summary>
+        <div className="flow-reveal-body">
+          <p className="flow-alert" role="alert">
+            The passcode is shown only now. Save it before leaving this page.
+          </p>
+          <dl className="flow-code-list">
+            <div className="flow-code-chip">
+              <dt>Room ID</dt>
+              <dd><code>{room.roomId}</code></dd>
+            </div>
+            <div className="flow-code-chip">
+              <dt>Passcode</dt>
+              <dd><code>{room.passcode}</code></dd>
+            </div>
+          </dl>
+          <button
+            type="button"
+            className="flow-copy-btn flow-copy-btn-ghost"
+            onClick={() =>
+              copy("code", `Room ID: ${room.roomId}\nPasscode: ${room.passcode}`)
+            }
+          >
+            {copied === "code" ? "Copied" : "Copy ID + passcode"}
+          </button>
+          <p className="flow-copy-status" aria-live="polite">
+            {copied === "code" ? "Room ID and passcode copied." : ""}
+          </p>
+        </div>
+      </details>
+
+      <div className="flow-form-actions">
+        <Link
+          className="flow-btn flow-btn-primary"
+          href={`/room/${encodeURIComponent(room.roomId)}`}
+        >
+          Enter meeting
+        </Link>
+      </div>
+    </section>
   );
 }

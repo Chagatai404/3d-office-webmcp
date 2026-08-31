@@ -3,6 +3,7 @@
 import { useRoom } from "@/components/room/room-provider";
 import { WORKSPACE_IDS, WORKSPACE_LABEL, type WorkspaceId } from "@/visualization/scene/camera-poses";
 import { useShell, type DrawerId } from "./shell-provider";
+import { useAttentionItems } from "./use-attention-items";
 
 /**
  * Layer 3: the workspace dock, and the meeting-controls row beneath it.
@@ -49,6 +50,12 @@ const DRAWER_ITEMS: Array<{ id: DrawerId; label: string; accent?: boolean }> = [
 export function WorkspaceDock() {
   const { room, self, visualization } = useRoom();
   const { activeWorkspace, activeDrawer, goToWorkspace, toggleDrawer } = useShell();
+  // People waiting in the lobby are the one piece of drawer state urgent
+  // enough to show on the closed drawer's own button: admission is blocking,
+  // and only the owner can clear it.
+  const waitingToJoin = useAttentionItems().filter(
+    (item) => item.type === "admission_request",
+  ).length;
 
   const openConflicts = visualization.conflicts.filter((conflict) => conflict.status === "open");
   const context: DockContext = {
@@ -108,7 +115,14 @@ export function WorkspaceDock() {
             />
             {item.label}
             {item.id === "participants" ? (
-              <span className="meeting-control-count">{room.participants.length}</span>
+              <>
+                <span className="meeting-control-count">{room.participants.length}</span>
+                {waitingToJoin > 0 ? (
+                  <span className="meeting-control-waiting">
+                    {waitingToJoin} waiting
+                  </span>
+                ) : null}
+              </>
             ) : null}
           </button>
         ))}

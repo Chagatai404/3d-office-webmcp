@@ -25,11 +25,12 @@ test("join meeting flies the camera to an unframed interior pose and leaves no f
   await page.waitForURL("**/join");
 
   // The join form is the foreground UI, clickable above the stage -- not a
-  // hanging framed card layered over it.
-  const roomIdField = page.getByRole("textbox").first();
-  await expect(roomIdField).toBeVisible();
-  await roomIdField.fill("rm_test123");
-  await expect(roomIdField).toHaveValue("rm_test123");
+  // hanging framed card layered over it. The first field is now "paste your
+  // invite link"; room ID + passcode sit behind a disclosure.
+  const firstField = page.getByRole("textbox").first();
+  await expect(firstField).toBeVisible();
+  await firstField.fill("rm_test123");
+  await expect(firstField).toHaveValue("rm_test123");
   await expect(page.locator(".flow-stage-framed")).toHaveCount(0);
 
   // Back navigation returns cleanly to the welcome framing, with no stale

@@ -225,5 +225,16 @@ describe("createRoomVisualizationState", () => {
 
     expect(view.consensus.hasBlockingConflict).toBe(true);
     expect(view.conflicts).toHaveLength(2);
+    // The objection text is projected so the Issues board can echo it.
+    expect(view.conflicts[0]?.reason).toBe(
+      "The scope does not fit the available capacity.",
+    );
+  });
+
+  it("carries the room title and brief for the Brief board", () => {
+    const view = createRoomVisualizationState(demoRoom);
+
+    expect(view.title).toBe(demoRoom.title);
+    expect(view.brief).toBe(demoRoom.brief);
   });
 });

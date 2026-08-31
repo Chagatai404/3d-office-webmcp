@@ -145,6 +145,29 @@ describe("creator-only room form", () => {
     expect(enterLink?.textContent).toContain("Enter meeting");
   });
 
+  it("leads with the invite link and folds the room ID + passcode into a manual-access disclosure", async () => {
+    const createRoom = vi.fn<RoomOnboardingClient["createRoom"]>().mockResolvedValue(createdRoom);
+    await mount(makeClient(createRoom));
+    await fillValidForm();
+    await submit();
+
+    // The invite link and its copy control are the primary, always-visible path.
+    const inviteField = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Generic invite link"]',
+    );
+    expect(inviteField?.closest("details")).toBeNull();
+    const copyLink = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Copy link",
+    );
+    expect(copyLink).toBeTruthy();
+
+    // Room ID + passcode live inside the collapsed fallback, not up front.
+    const disclosure = container.querySelector("details");
+    expect(disclosure?.querySelector("summary")?.textContent).toContain("Manual access");
+    expect(disclosure?.textContent).toContain(createdRoom.roomId);
+    expect(disclosure?.textContent).toContain(createdRoom.passcode);
+  });
+
   it("keeps entries after a failed request and allows retry", async () => {
     const createRoom = vi.fn<RoomOnboardingClient["createRoom"]>()
       .mockRejectedValueOnce(new Error("private detail"))
