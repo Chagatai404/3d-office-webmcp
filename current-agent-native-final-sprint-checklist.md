@@ -654,46 +654,48 @@ decisionRole
 
 ## A7 — Judge-Led Demo Behavior
 
+**Finding: this was already substantially built, in an earlier slice (the migration comments call it "Slice 6"), not something this pass had to construct from scratch.** `run_solo_demo_orchestration` reacts to the *actual text* of whichever proposal is active via `demo_proposal_text` (title+summary+rationale+expectedOutcomes, normalized) and regex predicates (`demo_is_ambitious_proposal`, `demo_needs_accessibility_objection`, `demo_threatens_deadline`, `demo_revision_is_acceptable`, all in `supabase/migrations/20260828190000_solo_demo_orchestration.sql`) -- never a hardcoded proposal id or a check against the seeded proposal specifically. This pass's job was to verify that claim rather than assume it, and it did not hold up as an *idle* claim -- see the new A7 exit-gate test below, which is the first thing in this repository to actually exercise a second, structurally different proposal end to end.
+
 ### Goal
 
 Keep deterministic participant constraints/reactions, but remove dependence on one fixed meeting script.
 
-Keep stable demo actors:
+Keep stable demo actors: (all confirmed present, unchanged, in the current `supabase/seed.sql` / `start_demo_scenario` fixture)
 
-- [ ] Founder / CEO or Product Lead human judge.
-- [ ] Engineer simulation.
-- [ ] Product Designer simulation.
-- [ ] Growth simulation.
-- [ ] Security Expert advisory actor.
+- [x] Founder / CEO or Product Lead human judge. (`demo-product`.)
+- [x] Engineer simulation. (`demo-engineer`.)
+- [x] Product Designer simulation. (`demo-designer`.)
+- [x] Growth simulation. (`demo-marketing`, "Marketing Lead"/Growth role.)
+- [x] Security Expert advisory actor. (`demo-security`, `kind: expert`, `decisionRole: advisor`.)
 
-Keep stable constraint domains:
+Keep stable constraint domains: (unchanged; each still has a dedicated regex predicate)
 
-- [ ] engineering capacity;
-- [ ] reuse/existing auth boundaries;
-- [ ] accessibility/interaction consistency;
-- [ ] launch timing;
-- [ ] privacy/security.
+- [x] engineering capacity; (`demo_is_ambitious_proposal` / `constraint-engineering-capacity`.)
+- [x] reuse/existing auth boundaries; (`demo_revision_is_acceptable`'s auth-preservation clause.)
+- [x] accessibility/interaction consistency; (`demo_needs_accessibility_objection` / `constraint-design-accessibility`.)
+- [x] launch timing; (`demo_threatens_deadline` / `constraint-marketing-date`.)
+- [x] privacy/security. (Security Expert's own deterministic classification, unchanged this slice.)
 
 ### Remove rigid meeting path
 
-- [ ] Judge can introduce a new proposal through normal WebMCP.
-- [ ] Simulations react to the actual active proposal/current state.
-- [ ] Security review analyzes the actual active proposal.
-- [ ] Demo does not require the original seeded proposal to be the only viable path.
-- [ ] Demo does not silently auto-finalize.
-- [ ] Human decision gate remains intact.
+- [x] Judge can introduce a new proposal through normal WebMCP. (`suggest_option`, unconditionally available in Proposals to any claimed participant -- no proposal-id gate anywhere in its path.)
+- [x] Simulations react to the actual active proposal/current state. (Confirmed by reading `demo_proposal_text`/the four predicate functions -- they operate on `p_proposal_id`'s live row content, not a literal id comparison -- and empirically: the new test's "safe" proposal, textually unrelated to the seeded one, correctly triggers zero objections.)
+- [x] Security review analyzes the actual active proposal. (`security_expert_classify` reads the active proposal's own text the same way, per `docs/webmcp-demo.md`'s existing description; unchanged this slice.)
+- [x] Demo does not require the original seeded proposal to be the only viable path. (Proven: the new test never touches `seed-proposal-onboarding-v1` at all -- an entirely judge-authored proposal runs the full protocol to finalization.)
+- [x] Demo does not silently auto-finalize. (`run_solo_demo_orchestration`'s loop unconditionally stops -- `return action_success('Demo scenario is stable.', ...)` -- the instant `current_phase in ('approval', 'finalized')`; it never calls `approve_participant_final_decision` itself.)
+- [x] Human decision gate remains intact. (Same mechanism as every other room: `approve_participant_final_decision` requires `p_human_confirmed = true`, which only a real UI confirmation click sets -- nothing demo-specific bypasses it.)
 
 ### Keep reliability
 
-- [ ] Simulation reactions remain deterministic/rule-based enough for a judge demo.
-- [ ] Demo remains resettable.
-- [ ] Reset produces a clean judge-ready state.
-- [ ] No hidden fake UI state is introduced.
+- [x] Simulation reactions remain deterministic/rule-based enough for a judge demo. (Regex predicates + `demo_reactions`'s unique `(room_id, reaction_key)` idempotency guard, both unchanged.)
+- [x] Demo remains resettable. (`start_demo_scenario` / "Reset demo", unchanged.)
+- [x] Reset produces a clean judge-ready state. (Unchanged; re-verified by this slice's new test's own `beforeAll` reset.)
+- [x] No hidden fake UI state is introduced. (Nothing added this slice touches the UI layer at all -- A7 was a verification pass, not a UI change.)
 
 ### A7 exit gate
 
-- [ ] Two materially different judge-created proposals can both run through the protocol.
-- [ ] The demo no longer depends on memorizing the old exact prompt sequence.
+- [x] Two materially different judge-created proposals can both run through the protocol. (`tests/domain/supabase-operations.test.ts`'s existing "runs an idempotent solo-judge scenario" -- an ambitious rebuild proposal that triggers all three objections and needs the canned compromise revision -- alongside this slice's new `tests/domain/judge-led-demo-flexibility.test.ts` -- a deliberately unrelated, low-risk proposal that triggers *zero* objections and needs no revision at all. Both reach a finalized decision.)
+- [x] The demo no longer depends on memorizing the old exact prompt sequence. (Structurally true from the above; the human-facing prompt-script side of this claim is B5's territory, not Developer A's.)
 
 ---
 
@@ -709,54 +711,56 @@ It must derive from canonical finalized decision state.
 
 ### Required report content
 
-- [ ] meeting title;
-- [ ] meeting brief;
-- [ ] executive summary;
-- [ ] final decision;
-- [ ] rationale;
-- [ ] participant names;
-- [ ] participant human-readable roles;
-- [ ] meeting/decision authority;
-- [ ] key inputs;
-- [ ] constraints;
-- [ ] proposals considered;
-- [ ] concerns raised;
-- [ ] resolved concerns;
-- [ ] accepted trade-offs;
-- [ ] alignment;
-- [ ] dissent/warnings;
-- [ ] Security Expert advice/dispositions;
-- [ ] action items;
-- [ ] owners;
-- [ ] deadlines;
-- [ ] decision hash;
-- [ ] finalized timestamp;
-- [ ] concise provenance/audit summary.
+All fields live on `MeetingReport` (`src/contracts/room.ts`), computed by `computeMeetingReport` (`src/domain/rooms/report.ts`) from a finalized `RoomState` plus its `DecisionRecord`:
+
+- [x] meeting title; (`title`, from `room.title`.)
+- [x] meeting brief; (`brief`, from `room.brief`.)
+- [x] executive summary; (`executiveSummary` -- a deterministic template built only from the structured fields already in the report, never freeform/generated prose, so it's byte-for-byte reproducible from the same finalized state.)
+- [x] final decision; (`finalDecision: { title, summary }`.)
+- [x] rationale; (`rationale`.)
+- [x] participant names; (`participants[].name`, the full roster -- `room.participants` unchanged, active and removed alike.)
+- [x] participant human-readable roles; (`participants[].role`.)
+- [x] meeting/decision authority; (`participants[].meetingRole`/`decisionRole`, plus room-level `decisionPolicy`.)
+- [x] key inputs; (`keyInputs`, from `room.positions`.)
+- [x] constraints; (`constraints`, from `room.constraints`.)
+- [x] proposals considered; (`proposalsConsidered`, the full `room.proposals`, not only the winning one.)
+- [x] concerns raised; (`concernsRaised`, the full `room.conflicts`.)
+- [x] resolved concerns; (`resolvedConcerns`, the `status === "resolved"` subset.)
+- [x] accepted trade-offs; (`acceptedTradeoffs`, from `record.decision`.)
+- [x] alignment; (`alignment`, from `record.decision.alignments`.)
+- [x] dissent/warnings; (`dissent` and `unresolvedWarnings`, from `record.decision`.)
+- [x] Security Expert advice/dispositions; (`expertAdvice`, from `record.decision`.)
+- [x] action items; (`actionItems`.)
+- [x] owners; (`owners`.)
+- [x] deadlines; (`deadlines`.)
+- [x] decision hash; (`decisionHash`.)
+- [x] finalized timestamp; (`finalizedAt`.)
+- [x] concise provenance/audit summary. (`provenanceSummary: { totalEvents, byAction }` -- an event-count-by-action summary, deliberately not the full line-by-line trail; that stays available from the pre-existing `get_decision_record`/`DecisionRecord.provenance` for anyone who wants it.)
 
 ### WebMCP
 
 Expose:
 
 ```text
-get_final_report
+get_final_report   -- [x] implemented, exactly this name
 ```
 
-- [ ] Available to every active participant after finalization.
-- [ ] Report returned to different participants is semantically identical.
-- [ ] Decision hash is identical for every participant.
-- [ ] Participant-authored content remains correctly marked/untrusted where appropriate.
+- [x] Available to every active participant after finalization. (Same capability rule as the pre-existing `get_decision_record`: `inRoom(c) && c.isFinalized`.)
+- [x] Report returned to different participants is semantically identical. (Proven against real Postgres: `tests/domain/meeting-report.test.ts`'s "is byte-for-byte identical whichever finalized participant computes it" -- not just semantically equal, `toEqual` exact.)
+- [x] Decision hash is identical for every participant. (Same test.)
+- [x] Participant-authored content remains correctly marked/untrusted where appropriate. (Whole tool marked `untrustedContentHint: true`, same convention as every other tool that can surface participant-authored text.)
 
 ### A8 tests
 
-- [ ] Report cannot be read before finalization.
-- [ ] Final report includes dissent.
-- [ ] Final report includes expert advice.
-- [ ] Final report includes approvals/authority.
-- [ ] Two participants receive the same final decision hash/report basis.
+- [x] Report cannot be read before finalization. (WebMCP-layer: capability registration + "forwards the underlying WRONG_PHASE refusal unchanged before finalization" in `tests/webmcp/report.test.ts`. Domain-layer, against real Postgres: "refuses to compute a report before finalization" in `tests/domain/meeting-report.test.ts`.)
+- [x] Final report includes dissent. (Both the fixture-level and real-Postgres tests assert `report.dissent.length > 0` on a room where a participant actually recorded a `concern`-choice alignment.)
+- [x] Final report includes expert advice. (Fixture-level test asserts `expertAdvice` carries the resolved Security Expert finding through unchanged; real-Postgres coverage of Security Expert findings specifically already exists in `tests/domain/security-expert.test.ts` and `computeMeetingReport` just passes `record.decision.expertAdvice` through unchanged, so there is nothing report-specific left to prove there beyond the pass-through itself.)
+- [x] Final report includes approvals/authority. ("includes dissent, approvals/authority, and resolved concerns once finalized" in `tests/domain/meeting-report.test.ts`.)
+- [x] Two participants receive the same final decision hash/report basis. (Same "byte-for-byte identical" test as above.)
 
 ### A8 exit gate
 
-- [ ] Agents no longer reconstruct the final meeting outcome by combining many separate reads.
+- [x] Agents no longer reconstruct the final meeting outcome by combining many separate reads. (One `get_final_report` call now carries everything the checklist's own required-content list asks for.)
 
 ---
 
@@ -779,30 +783,30 @@ WebMCP   UI     PDF
 Target:
 
 ```text
-GET /api/rooms/:roomId/report.pdf
+GET /api/rooms/:roomId/report.pdf   -- [x] implemented, exactly this path
 ```
 
-- [ ] Authenticated access required.
-- [ ] Caller must have legitimate room access.
-- [ ] Finalized room required.
-- [ ] Response content type is `application/pdf`.
-- [ ] Suggested filename is stable and human-readable.
-- [ ] PDF contains the important report sections.
-- [ ] Decision hash appears in PDF.
-- [ ] No service credentials leak into browser code.
-- [ ] PDF generation dependency, if required, is added only by Developer A.
+- [x] Authenticated access required. (`authenticateRoomRequest` -- 401 with no/invalid bearer token, same helper every other route uses.)
+- [x] Caller must have legitimate room access. (`getFinalDecisionRecord`'s own RLS-backed `repository.getRoom` check -- an unrelated caller gets the same `VALIDATION_ERROR: Room not found` a nonexistent room would, never a distinct "forbidden" signal that would leak room existence.)
+- [x] Finalized room required. (`getFinalDecisionRecord` returns `WRONG_PHASE` -- mapped to HTTP 409 by the existing `actionResponse` helper -- before finalization; no separate check needed.)
+- [x] Response content type is `application/pdf`.
+- [x] Suggested filename is stable and human-readable. (A slug of the room title, e.g. `pdf-export-end-to-end-decision-report.pdf` -- deterministic from the title, never a random/opaque id.)
+- [x] PDF contains the important report sections. (Title, executive summary, final decision + rationale, meeting brief/policy, participants & authority, key inputs, constraints, proposals considered, concerns, accepted trade-offs, alignment, dissent/warnings, Security Expert advice, action items/owners/deadlines, approvals, and the provenance summary -- see `src/domain/rooms/report-pdf.ts`.)
+- [x] Decision hash appears in PDF. (Rendered both under the title and again in a closing "Provenance" line; proven by decompressing and hex-decoding the actual PDF content stream, not just checking the raw bytes -- `pdf-lib` Flate-compresses content and encodes drawn text as PDF hex-string literals, so a naive raw-byte substring check would have been a false negative. See `tests/webmcp/report-pdf.test.ts`'s `extractDecompressedText` helper.)
+- [x] No service credentials leak into browser code. (Server-only Route Handler; uses the caller's own bearer token via `createAuthenticatedServerClient`, exactly like every other route -- no service-role key touches this path at all.)
+- [x] PDF generation dependency, if required, is added only by Developer A. (`pdf-lib` -- pure JS/TS, no native bindings, MIT-licensed, works in the same Node runtime as every other route handler. Added by this session, which owns `package.json`/the lockfile per the ownership rules.)
 
 ### A9 tests
 
-- [ ] Unauthorized caller cannot download.
-- [ ] Non-finalized room cannot download final report.
-- [ ] Finalized participant can download.
-- [ ] PDF is non-empty/valid.
-- [ ] PDF report decision hash matches `get_final_report`.
+- [x] Unauthorized caller cannot download. (No bearer token -> 401; proven against real Postgres/auth in `tests/domain/report-pdf-route.test.ts`.)
+- [x] Non-finalized room cannot download final report. (409 `WRONG_PHASE`, same file.)
+- [x] Finalized participant can download. (200, `application/pdf`, same file -- for *both* the owner and the other admitted participant, not just one.)
+- [x] PDF is non-empty/valid. (`%PDF-` header + byte length checks in both the fixture-level renderer tests and the real-Postgres route test.)
+- [x] PDF report decision hash matches `get_final_report`. (The route test captures the exact `decisionHash` from the live `finalDecisionPreview` used to approve/finalize, then asserts the served PDF's decompressed content contains that exact string -- for both participants.)
 
 ### A9 exit gate
 
-- [ ] Every participant can obtain the same finalized report as an exportable PDF.
+- [x] Every participant can obtain the same finalized report as an exportable PDF. (Proven end to end against real Postgres: two independently admitted participants both download a 200 PDF containing the identical decision hash.)
 
 ---
 

@@ -36,7 +36,7 @@ If using Chrome DevTools for Agents, enable remote debugging in `chrome://inspec
 - Phase changes unregister the old mutation tools and register the next phase's tools.
 - Ownership transfer makes owner tools disappear from the old owner and appear for the new owner.
 - Removal removes private mutation and attention tools from the removed session.
-- Finalization leaves `get_meeting_context`, `get_current_decision`, and `get_decision_record`; all mutation tools are absent.
+- Finalization leaves `get_meeting_context`, `get_current_decision`, `get_decision_record`, and `get_final_report`; all mutation tools are absent.
 - Once an owner calls `enable_security_expert`, it disappears (idempotent no-op path aside) and `get_expert_advice` appears for every participant, not just the owner.
 - `request_security_review` appears only once the Security Expert is enabled and an active proposal exists.
 - `record_expert_advice_outcome` appears only for the owner, only while an open finding exists, and disappears once an exact decision candidate is frozen (return to Alignment to see it again).
@@ -97,7 +97,7 @@ Run these prompts in order, supplying Maya's join-request ID or selecting it fro
 8. Owner calls `review_final_decision`, which freezes the exact candidate and hash.
 9. A required approver calls `approve_final_decision`; the result is `HUMAN_CONFIRMATION_REQUIRED` and the Decision workspace opens.
 10. The human checks the visible confirmation and clicks confirm.
-11. Both browsers converge on the same finalized record; `get_decision_record` returns it.
+11. Both browsers converge on the same finalized record; `get_decision_record` returns it, and `get_final_report` (A8) returns the same complete outcome -- title, decision, rationale, roster/authority, inputs, constraints, every proposal considered, concerns, trade-offs, alignment, dissent, Security Expert advice, action items, decision hash, and a concise provenance summary -- identically for both browsers.
 
 ## Safety checks
 

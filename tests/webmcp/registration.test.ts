@@ -262,6 +262,7 @@ describe("centralized WebMCP capability registration", () => {
     const names = available(room);
     expect(names.filter((name) => MUTATION_TOOL_NAMES.has(name))).toEqual([]);
     expect(names).toContain("get_decision_record");
+    expect(names).toContain("get_final_report");
     expect(names).not.toContain("get_my_attention_items");
   });
 
@@ -360,6 +361,7 @@ describe("centralized WebMCP capability registration", () => {
       "get_open_issues",
       "get_alignment",
       "get_decision_record",
+      "get_final_report",
       "get_my_attention_items",
       "get_waiting_participants",
       "get_expert_advice",

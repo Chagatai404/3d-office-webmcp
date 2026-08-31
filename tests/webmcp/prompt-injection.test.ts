@@ -76,6 +76,7 @@ describe("WebMCP prompt-injection hardening", () => {
       "get_open_issues",
       "get_alignment",
       "get_decision_record",
+      "get_final_report",
       "get_my_attention_items",
       "get_waiting_participants",
       "share_my_context",

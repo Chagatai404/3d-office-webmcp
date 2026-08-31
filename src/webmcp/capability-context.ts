@@ -129,6 +129,7 @@ export const TOOL_AVAILABILITY: Record<string, Predicate> = {
   get_open_issues: (c) => inRoom(c) && c.phase === "deliberation",
   get_alignment: (c) => inRoom(c) && c.phase === "voting",
   get_decision_record: (c) => inRoom(c) && c.isFinalized,
+  get_final_report: (c) => inRoom(c) && c.isFinalized,
 
   // Participant writes -- always require a claimed seat.
   share_my_context: asClaimedInPhase("input"),

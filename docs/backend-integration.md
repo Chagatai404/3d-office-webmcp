@@ -566,6 +566,7 @@ as deprecated in both the column comment and this file.
 - `POST /api/rooms/:roomId/decision-policy` (owner-only)
 - `POST /api/rooms/:roomId/decision-role` (owner-only)
 - `POST /api/rooms/:roomId/participants/configure` (owner-only; A6, role and/or decision role in one call)
+- `GET /api/rooms/:roomId/report.pdf` (any legitimate room member, finalized rooms only; A9 -- `MeetingReport` rendered to PDF via `pdf-lib`, see `src/domain/rooms/report-pdf.ts`)
 - `GET /api/rooms/:roomId/join-requests` (owner-only)
 - `POST /api/rooms/:roomId/join-requests/admit` (owner-only; accepts optional `role`/`decisionRole` overrides, A6)
 - `POST /api/rooms/:roomId/join-requests/reject` (owner-only)
@@ -647,7 +648,16 @@ The current catalog is split by intent:
   configuration in one call, A6), participant removal preparation, and
   ownership-transfer preparation;
 - final authority: `approve_final_decision` only for a current
-  missing required approver.
+  missing required approver;
+- final outcome: `get_final_report` (A8) once finalized -- the single
+  canonical `MeetingReport` (`src/domain/rooms/report.ts`), computed from
+  `DecisionRecord` plus room-level context (title, brief, full roster,
+  inputs, constraints, every proposal considered), never a second
+  reconstruction. Identical for every participant who reads it. The same
+  `MeetingReport` is what `GET /api/rooms/:roomId/report.pdf` (A9) renders
+  to PDF -- one canonical projection feeding WebMCP, the eventual report UI
+  (B7), and the PDF export, exactly as the sprint checklist's own
+  `DecisionRecord -> MeetingReport -> {WebMCP, UI, PDF}` diagram describes.
 
 The retired WebMCP-facing names `add_my_position`, `submit_proposal`,
 `raise_objection`, and `cast_my_vote` are not registered. Internal domain

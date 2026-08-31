@@ -107,6 +107,13 @@
     "expectedTools": ["get_my_attention_items"]
   },
   {
+    "name": "final report after finalization",
+    "phase": "finalized",
+    "prompt": "What was decided, and can you give me the full outcome?",
+    "expectedTools": ["get_final_report"],
+    "expectedBehavior": "get_final_report (A8) is the single canonical read for the complete finalized outcome -- decision, rationale, roster/authority, inputs, constraints, proposals considered, concerns, trade-offs, alignment, dissent, Security Expert advice, action items, decision hash, and a concise provenance summary -- so the agent should not need to combine get_meeting_context, get_open_issues, get_alignment, and get_decision_record itself."
+  },
+  {
     "name": "decision status check",
     "phase": "approval",
     "prompt": "Review the final decision.",

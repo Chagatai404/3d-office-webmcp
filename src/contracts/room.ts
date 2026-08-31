@@ -604,6 +604,67 @@ export const decisionRecordSchema = z
   .strict();
 export type DecisionRecord = z.infer<typeof decisionRecordSchema>;
 
+/**
+ * A8: the single canonical final-report projection. Every consumer --
+ * `get_final_report` (WebMCP), the finalized-room report UI (B7), and the
+ * PDF export (A9) -- reads this same shape, computed once by
+ * `computeMeetingReport` (`src/domain/rooms/report.ts`) from a finalized
+ * `RoomState` plus its `DecisionRecord`. Nothing here is a second
+ * reconstruction of the decision: every decision-shaped field is carried
+ * over from `DecisionRecord.decision` unchanged, and every added field
+ * (title, brief, roster, inputs, constraints, proposals, concerns) is
+ * read directly off canonical room state, never re-derived or
+ * approximated.
+ */
+export const meetingReportSchema = z
+  .object({
+    roomId: idSchema,
+    title: z.string().min(1),
+    brief: z.string().min(1),
+    /** One deterministic, templated paragraph built only from structured fields below -- never freeform/generated prose. */
+    executiveSummary: z.string().min(1),
+    finalDecision: z
+      .object({
+        title: z.string().min(1),
+        summary: z.string().min(1),
+      })
+      .strict(),
+    rationale: z.string().min(1),
+    participants: z.array(participantSchema),
+    decisionPolicy: decisionPolicySchema,
+    keyInputs: z.array(positionSchema),
+    constraints: z.array(constraintSchema),
+    proposalsConsidered: z.array(proposalSchema),
+    concernsRaised: z.array(conflictSchema),
+    resolvedConcerns: z.array(conflictSchema),
+    unresolvedWarnings: z.array(conflictSchema),
+    acceptedTradeoffs: z.array(tradeoffSchema),
+    alignment: z.array(alignmentSchema),
+    dissent: z.array(z.string().min(1)),
+    expertAdvice: z.array(decisionExpertAdviceSchema),
+    actionItems: z.array(decisionActionItemSchema),
+    owners: z.array(decisionOwnerSchema),
+    deadlines: z.array(decisionDeadlineSchema),
+    requiredApprovalParticipantIds: z.array(idSchema),
+    approvals: z.array(approvalSchema),
+    decisionHash: z.string().min(1),
+    finalizedAt: timestampSchema,
+    /**
+     * Deliberately concise -- an event-count-by-action summary, not the
+     * full audit trail. The full line-by-line history remains available
+     * from `get_decision_record` / `DecisionRecord.provenance` for anyone
+     * who wants it; a human-facing report is not the place to dump it.
+     */
+    provenanceSummary: z
+      .object({
+        totalEvents: z.number().int().nonnegative(),
+        byAction: z.record(z.string(), z.number().int().nonnegative()),
+      })
+      .strict(),
+  })
+  .strict();
+export type MeetingReport = z.infer<typeof meetingReportSchema>;
+
 export const roomStateSchema = z
   .object({
     id: idSchema,
