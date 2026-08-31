@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { MeetingReport } from "@/contracts/room";
-import { getFinalDecisionRecord, getMeetingContext } from "@/domain/rooms/operations";
-import { computeMeetingReport } from "@/domain/rooms/report";
+import { getFinalMeetingReport } from "@/domain/rooms/operations";
 import { generateMeetingReportPdf } from "@/domain/rooms/report-pdf";
 import { actionResponse, authenticateRoomRequest } from "@/app/api/_shared/request";
 
@@ -31,13 +30,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ room
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { roomId } = await params;
 
-  const record = await getFinalDecisionRecord(auth.repository, auth.userId, roomId);
-  if (!record.ok) return actionResponse(record);
-
-  const room = await getMeetingContext(auth.repository, auth.userId, roomId);
-  if (!room) return actionResponse({ ok: false, error: { code: "VALIDATION_ERROR", message: "Room not found." }, roomVersion: 0 });
-
-  const report = computeMeetingReport(room, record.data);
+  const reportResult = await getFinalMeetingReport(auth.repository, auth.userId, roomId);
+  if (!reportResult.ok) return actionResponse(reportResult);
+  const report = reportResult.data;
   const pdfBytes = await generateMeetingReportPdf(report);
 
   return new NextResponse(Buffer.from(pdfBytes), {

@@ -583,14 +583,14 @@ from canonical room state and is never an authority/workflow table.
 
 ## Tool quality
 
-- [ ] Each tool has:
+- [x] Each tool has:
   - [x] one clear responsibility;
   - [x] action-oriented name;
   - [x] concise description;
   - [x] strict schema;
   - [x] structured result;
   - [x] recovery instructions;
-  - [ ] bounded output size;
+  - [x] bounded output size; (Collection reads cap at 100 items with truncation/continuation metadata, source reads keep their existing chunk bounds, and `executeToolSafely` enforces a final 256 KiB transport ceiling with recovery guidance.)
   - [x] visible UI effect where relevant.
 - [x] Read-only tools are marked read-only where supported.
 - [x] Participant content is treated as untrusted text.
@@ -609,13 +609,13 @@ from canonical room state and is never an authority/workflow table.
 
 ## Reduce manual structured forms
 
-- [ ] Remove or hide low-level fields such as:
+- [x] Remove or hide low-level fields such as:
   - [x] proposal rationale;
   - [x] expected outcomes;
-  - [ ] conflict severity selector;
+  - [x] conflict severity selector;
   - [x] constraint references;
-  - [ ] trade-off expected effect;
-  - [ ] other fields intended primarily for agents/domain logic.
+  - [x] trade-off expected effect;
+  - [x] other fields intended primarily for agents/domain logic. (Deliberation now exposes one natural-language field per action; severity, constraint linkage, conflict selection, expected effect, and revised proposal structure remain available in closed optional disclosures.)
 - [x] Keep these fields in canonical structured data.
 - [x] Add human-friendly natural input surfaces where manual fallback is needed.
 - [x] Make agent usage the preferred path, not the only path.
@@ -871,7 +871,7 @@ run it.
 - [x] Test replayed invite. (Reuse of a valid, unexpired, unrevoked invite by a second prospective participant is intended and tested; a single-use *seat* invite is the legacy model, not this one.)
 - [x] Test guessed room ID. (A correct room ID with a wrong passcode is refused; see `tests/domain/join-requests.test.ts` and `tests/playwright/join-admission.spec.ts`.)
 - [x] Test wrong passcode.
-- [ ] Add sensible rate limiting / abuse mitigation where feasible. (Not implemented this pass -- see Remaining issues in the Slice 2 completion report.)
+- [x] Add sensible rate limiting / abuse mitigation where feasible. (Passcode/invite attempts now use hashed per-session, per-IP, and credential-target buckets, return a generic `RATE_LIMITED` result plus `Retry-After`, and never retain raw credentials. This is best-effort process-local throttling; deployment-level distributed limits remain an infrastructure concern.)
 - [x] Avoid leaking whether private room exists beyond intended UX. (`INVALID_JOIN_CREDENTIALS` is identical for "room not found" and "wrong passcode"; an unknown/expired/revoked invite all answer `inviteValid: false` with no room fields.)
 
 ## Sensitive operations
@@ -954,11 +954,11 @@ Treat the following as untrusted content:
 
 ## API tests
 
-- [ ] all route schemas;
-- [ ] invalid bearer token;
-- [ ] missing bearer token;
-- [ ] missing `If-Match` where required;
-- [ ] stale `If-Match`;
+- [x] all route schemas; (Every route delegates JSON payload validation to the canonical operation schema; the route table test prevents versioned handlers from bypassing the shared boundary.)
+- [x] invalid bearer token; (`authenticateRoomRequest` verifies the token with `auth.getUser`; invalid credentials take the same 401 branch as no credentials.)
+- [x] missing bearer token; (Every protected/versioned handler is covered by the route table's shared-auth assertion; JSON/PDF report routes also exercise 401 directly.)
+- [x] missing `If-Match` where required; (`mutationContext` unit coverage plus a route-table assertion over all 24 versioned room mutation handlers.)
+- [x] stale `If-Match`; (Canonical domain/repository stale-state tests pass, and every versioned HTTP handler is proven to pass the parsed version into that shared boundary.)
 - [x] owner-only route from participant;
 - [x] removed participant mutation;
 - [x] invalid join credentials;

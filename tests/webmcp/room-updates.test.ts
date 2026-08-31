@@ -18,6 +18,7 @@ function event(overrides: {
   entityType?: string | null;
   entityId?: string | null;
   result?: unknown;
+  sanitizedInput?: unknown;
   createdAt?: string;
 }) {
   return {
@@ -28,7 +29,7 @@ function event(overrides: {
     action: overrides.action,
     entityType: overrides.entityType ?? null,
     entityId: overrides.entityId ?? null,
-    sanitizedInput: {} as JsonValue,
+    sanitizedInput: (overrides.sanitizedInput ?? {}) as JsonValue,
     result: (overrides.result ?? { ok: true }) as JsonValue,
     previousRoomVersion: overrides.previousRoomVersion,
     resultingRoomVersion: overrides.resultingRoomVersion,
@@ -53,7 +54,19 @@ describe("computeRoomUpdates", () => {
       activity: [
         event({ id: "e-removed", action: "participant.removed", previousRoomVersion: 0, resultingRoomVersion: 1, actorId: "participant-owner" }),
         event({ id: "e-role", action: "participant.decision_role_changed", previousRoomVersion: 1, resultingRoomVersion: 2, actorId: "participant-owner" }),
-        event({ id: "e-input", action: "position.added", previousRoomVersion: 2, resultingRoomVersion: 3 }),
+        event({
+          id: "e-configured",
+          action: "participant.configured",
+          previousRoomVersion: 2,
+          resultingRoomVersion: 3,
+          actorId: "participant-owner",
+          sanitizedInput: {
+            participantId: "participant-engineer",
+            role: { from: "Engineer", to: "CTO" },
+            decisionRole: { from: "contributor", to: "decision_maker" },
+          },
+        }),
+        event({ id: "e-input", action: "position.added", previousRoomVersion: 3, resultingRoomVersion: 4 }),
         event({ id: "e-ready", action: "participant.input_ready", previousRoomVersion: 3, resultingRoomVersion: 4 }),
         event({ id: "e-proposal", action: "proposal.submitted", previousRoomVersion: 4, resultingRoomVersion: 5 }),
         event({ id: "e-concern", action: "objection.raised", previousRoomVersion: 5, resultingRoomVersion: 6 }),
@@ -72,6 +85,11 @@ describe("computeRoomUpdates", () => {
     const typeById = new Map(updates.map((u) => [u.id, u.type]));
     expect(typeById.get("e-removed")).toBe("participant_removed");
     expect(typeById.get("e-role")).toBe("decision_role_changed");
+    expect(typeById.get("e-configured")).toBe("participant_configured");
+    expect(updates.find((update) => update.id === "e-configured")?.changedFields).toEqual([
+      "role",
+      "decisionRole",
+    ]);
     expect(typeById.get("e-input")).toBe("input_shared");
     expect(typeById.get("e-ready")).toBe("readiness_changed");
     expect(typeById.get("e-proposal")).toBe("proposal_submitted");
@@ -85,7 +103,24 @@ describe("computeRoomUpdates", () => {
     expect(typeById.get("e-expert-raised")).toBe("expert_finding_raised");
     expect(typeById.get("e-expert-resolved")).toBe("expert_finding_resolved");
     expect(typeById.get("e-expert-disposed")).toBe("expert_finding_dispositioned");
-    expect(updates).toHaveLength(15);
+    expect(updates).toHaveLength(16);
+  });
+
+  it("labels a child proposal as a revision and carries its superseded parent id", () => {
+    const room = buildRoomStateFixture({
+      participants: [owner, engineer],
+      activity: [event({
+        id: "revision",
+        action: "proposal.submitted",
+        previousRoomVersion: 4,
+        resultingRoomVersion: 5,
+        sanitizedInput: { parentProposalId: "proposal-original" },
+      })],
+    });
+    expect(computeRoomUpdates(room, 0)[0]).toMatchObject({
+      type: "proposal_revised",
+      parentProposalId: "proposal-original",
+    });
   });
 
   it("surfaces the frozen decision hash on the phase-change event that entered approval", () => {
@@ -181,5 +216,23 @@ describe("get_room_updates WebMCP tool", () => {
     };
     expect(result.ok).toBe(false);
     expect(result.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("bounds large update responses and returns a continuation version", async () => {
+    const activity = Array.from({ length: 105 }, (_, index) => event({
+      id: `event-${index}`,
+      action: "position.added",
+      previousRoomVersion: index,
+      resultingRoomVersion: index + 1,
+    }));
+    const room = buildRoomStateFixture({ version: 105, participants: [owner, engineer], activity });
+    const result = await executeTool(
+      createRoomWebMcpTools(fakeRoomWebMcpContext({ room, roomVersion: 105 })).get_room_updates!,
+      { sinceVersion: 0 },
+    ) as { data: { updates: unknown[]; totalUpdateCount: number; hasMore: boolean; nextSinceVersion: number } };
+    expect(result.data.updates).toHaveLength(100);
+    expect(result.data.totalUpdateCount).toBe(105);
+    expect(result.data.hasMore).toBe(true);
+    expect(result.data.nextSinceVersion).toBe(100);
   });
 });

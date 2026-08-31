@@ -24,8 +24,9 @@ export function mutationContext(
   origin: ActionOrigin = "manual_ui",
   humanConfirmed = false,
 ): MutationContext | null {
-  const raw = request.headers.get("if-match")?.replaceAll('"', "");
-  const expectedRoomVersion = raw === undefined ? Number.NaN : Number(raw);
+  const raw = request.headers.get("if-match")?.replaceAll('"', "").trim();
+  if (!raw || !/^(0|[1-9]\d*)$/.test(raw)) return null;
+  const expectedRoomVersion = Number(raw);
   if (!Number.isSafeInteger(expectedRoomVersion) || expectedRoomVersion < 0) return null;
   return {
     actor: { authUserId: userId, origin },
@@ -56,8 +57,10 @@ export function actionResponse<T>(result: ActionResult<T>) {
       ? 403
       : result.error.code === "STALE_ROOM_STATE"
         ? 409
-        : result.error.code === "WRONG_PHASE"
+      : result.error.code === "WRONG_PHASE"
           ? 409
+          : result.error.code === "RATE_LIMITED"
+            ? 429
           : 400;
   return NextResponse.json(result, { status, headers: { "Cache-Control": "no-store" } });
 }

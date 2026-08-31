@@ -34,6 +34,7 @@ import {
   type FinalDecisionPreview,
   type JoinRequest,
   type JoinRequestResult,
+  type MeetingReport,
   type ManageJoinRequestInput,
   type RemoveParticipantInput,
   type RequestJoinByInviteInput,
@@ -51,6 +52,7 @@ import {
   type TransferOwnershipInput,
 } from "@/contracts/room";
 import { buildInviteUrl } from "./invitations";
+import { computeMeetingReport } from "./report";
 import type { DomainActor, MutationContext, RoomRepository } from "./repository";
 
 function failure<T = null>(
@@ -666,6 +668,28 @@ export async function getFinalDecisionRecord(
     );
   }
   return repository.getDecisionRecord(roomId, actorUserId);
+}
+
+/**
+ * The single authenticated report read used by HTTP, WebMCP, UI, and PDF.
+ * Keeping the projection here prevents each transport from quietly rebuilding
+ * a slightly different human-facing outcome.
+ */
+export async function getFinalMeetingReport(
+  repository: RoomRepository,
+  actorUserId: string,
+  roomId: string,
+): Promise<ActionResult<MeetingReport>> {
+  const record = await getFinalDecisionRecord(repository, actorUserId, roomId);
+  if (!record.ok) return record;
+  const room = await repository.getRoom(roomId, actorUserId);
+  if (!room) return failure("VALIDATION_ERROR", "Room not found.", 0);
+  return {
+    ok: true,
+    data: computeMeetingReport(room, record.data),
+    roomVersion: room.version,
+    message: "Final meeting report loaded.",
+  };
 }
 
 /**

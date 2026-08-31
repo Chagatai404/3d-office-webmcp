@@ -37,6 +37,8 @@ const DEFAULT_RECOVERY: Record<ActionErrorCode, string> = {
     "This join request was already resolved and cannot be resolved again.",
   MEETING_LOCKED:
     "This meeting is not accepting new participants right now.",
+  RATE_LIMITED:
+    "Wait briefly before trying again. Repeated access attempts are temporarily limited.",
 };
 
 const ERROR_TITLE: Record<ActionErrorCode, string> = {
@@ -53,6 +55,7 @@ const ERROR_TITLE: Record<ActionErrorCode, string> = {
   ALREADY_PARTICIPANT: "Already a participant",
   REQUEST_ALREADY_RESOLVED: "Request already resolved",
   MEETING_LOCKED: "Meeting locked",
+  RATE_LIMITED: "Too many attempts",
 };
 
 export function ActionFeedback({

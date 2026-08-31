@@ -417,12 +417,12 @@ Return relevant canonical changes after the supplied observed room version:
 
 - [x] participant joined/admitted; (`participant_joined` from `participant.seat_claimed`, `participant_admitted` from `join.admitted`.)
 - [x] participant removed; (`participant_removed` from `participant.removed`.)
-- [ ] role changed; (A6 now provides `configure_participant` and emits `participant.configured`, but `src/domain/rooms/room-updates.ts` does not map that audit action yet, so agents currently receive it only as `other`.)
+- [x] role changed; (`participant.configured` now maps to `participant_configured` and reports the exact changed configuration fields without duplicating the canonical event.)
 - [x] decision authority changed; (`decision_role_changed` from `participant.decision_role_changed`; ownership transfer also covered as `ownership_transferred`.)
 - [x] input/position shared; (`input_shared` from `position.added`.)
 - [x] readiness changed; (`readiness_changed` from `participant.input_ready`.)
 - [x] proposal created; (`proposal_submitted` from `proposal.submitted`.)
-- [ ] proposal revised/superseded; (A revised proposal from `respond_to_concern` is created as a new `proposal.submitted` row referencing the original via `parentProposalId` -- it surfaces as another `proposal_submitted` update, and `tradeoff_proposed` covers the trade-off half of the same action. There is no distinct "superseded" audit action in the schema to project separately; left open rather than claiming coverage that does not exist.)
+- [x] proposal revised/superseded; (`proposal.submitted` events carrying `parentProposalId` now project as `proposal_revised`, with both the new proposal ID and parent proposal ID.)
 - [x] concern raised; (`concern_raised` from `objection.raised`.)
 - [x] concern resolved; (`concern_resolved` from `conflict.resolved`.)
 - [x] trade-off created; (`tradeoff_proposed` from `tradeoff.proposed`.)
@@ -1089,7 +1089,7 @@ View detailed provenance
 
 - [x] Finalized room automatically exposes the report experience.
 - [x] Every participant sees the same decision outcome.
-- [ ] Report uses canonical `MeetingReport`. (A8 is merged; the remaining gap is that `final-report.tsx` still calls `getDecisionRecord()` and performs local lookups.)
+- [x] Report uses canonical `MeetingReport`. (`FinalReport` now loads the authenticated canonical JSON report through `RoomClient.getMeetingReport()`; raw `DecisionRecord` is retained only for the optional detailed provenance disclosure.)
 - [x] No second frontend-only report model is introduced.
 - [x] Download PDF action points to the authenticated A9 endpoint.
 - [x] Provenance is available but not allowed to overwhelm the primary report.
@@ -1276,7 +1276,7 @@ git rebase origin/main
 
 Then:
 
-- [ ] B7 wired to canonical `MeetingReport`.
+- [x] B7 wired to canonical `MeetingReport`.
 - [x] B7 Download PDF wired to canonical A9 endpoint.
 - [x] B8 final 3D/report transitions completed.
 

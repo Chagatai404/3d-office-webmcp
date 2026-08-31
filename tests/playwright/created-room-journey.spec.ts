@@ -132,3 +132,60 @@ test("WebMCP creates a real room, requests admission, and lets the owner admit t
   await ownerSession.context.close();
   await mayaSession.context.close();
 });
+
+test("two rooms stay isolated across reads, writes, WebMCP, and realtime", async ({ browser }) => {
+  const ownerSession = await newParticipantContext(browser);
+  const roomAPage = ownerSession.page;
+  const roomA = await createRoomThroughOnboarding(roomAPage, {
+    ...roomInput,
+    title: "Isolation room A",
+    brief: "Only room A should receive its delivery constraint.",
+  });
+  const roomB = await createRoomThroughOnboarding(roomAPage, {
+    ...roomInput,
+    title: "Isolation room B",
+    brief: "Room B must remain unchanged.",
+  });
+  expect(roomA.roomId).not.toBe(roomB.roomId);
+
+  const roomBPage = await ownerSession.context.newPage();
+  await Promise.all([
+    roomAPage.goto(`/room/${roomA.roomId}`),
+    roomBPage.goto(`/room/${roomB.roomId}`),
+  ]);
+  await expect(roomAPage.getByTestId("connection-status")).toHaveText("Connected");
+  await expect(roomBPage.getByTestId("connection-status")).toHaveText("Connected");
+  await expect.poll(() => toolNames(roomAPage)).toContain("share_my_context");
+  await expect.poll(() => toolNames(roomBPage)).toContain("share_my_context");
+
+  const beforeA = await callTool(roomAPage, "get_meeting_context");
+  const beforeB = await callTool(roomBPage, "get_meeting_context");
+  expect(beforeA.data.trustedContext.roomId).toBe(roomA.roomId);
+  expect(beforeB.data.trustedContext.roomId).toBe(roomB.roomId);
+
+  expect(await callTool(roomAPage, "share_my_context", {
+    summary: "Room A owns this context.",
+    category: "delivery",
+    priority: "high",
+    constraints: [{
+      category: "scope",
+      text: "ROOM_A_ONLY_SENTINEL",
+      priority: "high",
+      referencedSourceIds: [],
+    }],
+    referencedSourceIds: [],
+  })).toMatchObject({ ok: true, roomVersion: 1 });
+
+  await expect(roomAPage.getByTestId("room-version")).toHaveText("1");
+  await expect(roomBPage.getByTestId("room-version")).toHaveText("0");
+  const afterB = await callTool(roomBPage, "get_meeting_context");
+  expect(afterB.data.trustedContext.roomId).toBe(roomB.roomId);
+  expect(afterB.data.trustedContext.stateSummary).toMatchObject({
+    positionCount: 0,
+    constraintCount: 0,
+  });
+  expect(JSON.stringify(afterB)).not.toContain("ROOM_A_ONLY_SENTINEL");
+  await expect(roomBPage.getByTestId("constraints")).not.toContainText("ROOM_A_ONLY_SENTINEL");
+
+  await ownerSession.context.close();
+});

@@ -86,6 +86,8 @@ export function fakeRoomWebMcpContext(
     getOpenIssues: () => Promise.resolve([]),
     getDecisionRecord: () =>
       Promise.resolve({ ok: false, error: { code: "WRONG_PHASE", message: "Not finalized." }, roomVersion }),
+    getMeetingReport: () =>
+      Promise.resolve({ ok: false, error: { code: "WRONG_PHASE", message: "Not finalized." }, roomVersion }),
     listMeetingSources: () => Promise.resolve({ ok: true, data: room.sources, roomVersion, message: "Meeting sources loaded." }),
     readMeetingSourceContent: () =>
       Promise.resolve({
