@@ -5,14 +5,24 @@ import {
   finalDecisionPreviewSchema,
   joinRequestResultSchema,
   joinRequestSchema,
+  meetingSourceContentSchema,
+  meetingSourceSearchResultsSchema,
+  meetingSourceSchema,
   roomInvitePreviewSchema,
   type ActionResult,
   type AddPositionInput,
+  type AdmitJoinRequestInput,
   type ApproveFinalDecisionInput,
   type ExpressAlignmentInput,
   type ClaimSeatInput,
+  type ConfigureParticipantInput,
+  type CreateMeetingSourceInput,
   type CreateRoomInput,
   type ManageJoinRequestInput,
+  type MarkMeetingSourceFailedInput,
+  type MarkMeetingSourceProcessedInput,
+  type MeetingSourceIdInput,
+  type ReadMeetingSourceContentInput,
   type RecordExpertAdviceOutcomeInput,
   type RemoveParticipantInput,
   type RequestJoinByInviteInput,
@@ -21,6 +31,7 @@ import {
   type ResolveObjectionInput,
   type ProposeTradeoffInput,
   type RoomPhase,
+  type SearchMeetingSourcesInput,
   type SetDecisionPolicyInput,
   type SetParticipantDecisionRoleInput,
   type StartDemoScenarioInput,
@@ -117,9 +128,10 @@ export class SupabaseRoomRepository implements RoomRepository {
     return this.callWithData("list_join_requests", { p_room_id: roomId }, z.array(joinRequestSchema));
   }
 
-  admitJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext) {
+  admitJoinRequest(roomId: string, input: AdmitJoinRequestInput, context: MutationContext) {
     return this.callWithData("admit_join_request", {
       p_room_id: roomId, p_join_request_id: input.joinRequestId,
+      p_role: input.role ?? null, p_decision_role: input.decisionRole ?? null,
       p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
     }, joinRequestSchema);
   }
@@ -138,11 +150,155 @@ export class SupabaseRoomRepository implements RoomRepository {
     });
   }
 
+  listSources(roomId: string, actor: DomainActor) {
+    void actor;
+    return this.callWithData(
+      "list_meeting_sources",
+      { p_room_id: roomId },
+      z.array(meetingSourceSchema),
+    );
+  }
+
+  createSource(
+    roomId: string,
+    input: CreateMeetingSourceInput,
+    context: MutationContext,
+  ) {
+    return this.callWithData(
+      "create_meeting_source",
+      {
+        p_room_id: roomId,
+        p_expected_version: context.expectedRoomVersion,
+        p_title: input.title,
+        p_filename: input.filename,
+        p_mime_type: input.mimeType,
+        p_byte_size: input.byteSize,
+        p_sha256: input.sha256,
+        p_visibility: input.visibility,
+        p_chunks: input.chunks,
+        p_summary: input.summary,
+        p_expects_extraction: input.expectsExtraction ?? false,
+        p_storage_bucket: input.storageBucket ?? null,
+        p_storage_path: input.storagePath ?? null,
+        p_origin: context.actor.origin,
+      },
+      meetingSourceSchema,
+    );
+  }
+
+  markSourceProcessed(
+    roomId: string,
+    input: MarkMeetingSourceProcessedInput,
+    context: MutationContext,
+  ) {
+    return this.callWithData(
+      "mark_meeting_source_processed",
+      {
+        p_room_id: roomId,
+        p_source_id: input.sourceId,
+        p_expected_version: context.expectedRoomVersion,
+        p_chunks: input.chunks,
+        p_summary: input.summary,
+        p_origin: context.actor.origin,
+      },
+      meetingSourceSchema,
+    );
+  }
+
+  markSourceFailed(
+    roomId: string,
+    input: MarkMeetingSourceFailedInput,
+    context: MutationContext,
+  ) {
+    return this.callWithData(
+      "mark_meeting_source_failed",
+      {
+        p_room_id: roomId,
+        p_source_id: input.sourceId,
+        p_expected_version: context.expectedRoomVersion,
+        p_error_message: input.errorMessage,
+        p_origin: context.actor.origin,
+      },
+      meetingSourceSchema,
+    );
+  }
+
+  readSourceContent(
+    roomId: string,
+    input: ReadMeetingSourceContentInput,
+    actor: DomainActor,
+  ) {
+    void actor;
+    return this.callWithData(
+      "read_meeting_source_content",
+      {
+        p_room_id: roomId,
+        p_source_id: input.sourceId,
+        p_cursor: input.cursor,
+        p_max_chunks: input.maxChunks,
+      },
+      meetingSourceContentSchema,
+    );
+  }
+
+  searchSources(
+    roomId: string,
+    input: SearchMeetingSourcesInput,
+    actor: DomainActor,
+  ) {
+    void actor;
+    return this.callWithData(
+      "search_meeting_sources",
+      {
+        p_room_id: roomId,
+        p_query: input.query,
+        p_source_ids: input.sourceIds,
+        p_limit: input.limit,
+      },
+      meetingSourceSearchResultsSchema,
+    );
+  }
+
+  shareSource(
+    roomId: string,
+    input: MeetingSourceIdInput,
+    context: MutationContext,
+  ) {
+    return this.callWithData(
+      "share_meeting_source",
+      {
+        p_room_id: roomId,
+        p_source_id: input.sourceId,
+        p_expected_version: context.expectedRoomVersion,
+        p_origin: context.actor.origin,
+      },
+      meetingSourceSchema,
+    );
+  }
+
+  removeSource(
+    roomId: string,
+    input: MeetingSourceIdInput,
+    context: MutationContext,
+  ) {
+    return this.call("remove_meeting_source", {
+      p_room_id: roomId,
+      p_source_id: input.sourceId,
+      p_expected_version: context.expectedRoomVersion,
+      p_origin: context.actor.origin,
+    });
+  }
+
   addPosition(roomId: string, input: AddPositionInput, context: MutationContext) {
     return this.call("add_participant_position", {
       p_room_id: roomId, p_expected_version: context.expectedRoomVersion,
       p_summary: input.summary, p_category: input.category, p_priority: input.priority,
-      p_constraints: input.constraints, p_origin: context.actor.origin,
+      p_constraints: input.constraints.map((constraint) => ({
+        ...constraint,
+        referencedSourceIds: constraint.referencedSourceIds ?? [],
+      })),
+      p_referenced_source_ids: input.referencedSourceIds ?? [],
+      p_origin: context.actor.origin,
     });
   }
 
@@ -152,6 +308,7 @@ export class SupabaseRoomRepository implements RoomRepository {
       p_title: input.title, p_summary: input.summary, p_rationale: input.rationale,
       p_expected_outcomes: input.expectedOutcomes,
       p_referenced_constraint_ids: input.referencedConstraintIds,
+      p_referenced_source_ids: input.referencedSourceIds ?? [],
       p_parent_proposal_id: input.parentProposalId, p_origin: context.actor.origin,
     });
   }
@@ -315,6 +472,18 @@ export class SupabaseRoomRepository implements RoomRepository {
     return this.call("set_participant_decision_role", {
       p_room_id: roomId, p_participant_id: input.participantId,
       p_decision_role: input.decisionRole,
+      p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
+    });
+  }
+
+  configureParticipant(
+    roomId: string,
+    input: ConfigureParticipantInput,
+    context: MutationContext,
+  ) {
+    return this.call("configure_participant", {
+      p_room_id: roomId, p_participant_id: input.participantId,
+      p_role: input.role ?? null, p_decision_role: input.decisionRole ?? null,
       p_expected_version: context.expectedRoomVersion, p_origin: context.actor.origin,
     });
   }

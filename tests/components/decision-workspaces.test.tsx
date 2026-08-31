@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AlignmentWorkspace } from "@/components/room/alignment-workspace";
@@ -7,6 +7,11 @@ import { DecisionWorkspace } from "@/components/room/decision-workspace";
 import { IssuesWorkspace } from "@/components/room/issues-workspace";
 import { ProposalsWorkspace } from "@/components/room/proposals-workspace";
 import { RoomProvider } from "@/components/room/room-provider";
+import {
+  MeetingShellProvider,
+  useShell,
+  type ShellContextValue,
+} from "@/components/shell/shell-provider";
 import { demoRoom, demoTimestamp } from "@/fixtures/demo-room";
 import { setRoomClientForTests } from "@/room-client/room-client";
 import type {
@@ -33,6 +38,7 @@ declare global {
 
 let container: HTMLDivElement;
 let root: Root;
+let shell: ShellContextValue;
 
 type Listener = (state: RoomState) => void;
 
@@ -170,6 +176,7 @@ class FakeRoomClient implements RoomClient {
     this.setParticipantDecisionRoleCalls.push(input);
     return this.ok("Decision authority updated.");
   };
+  configureParticipant: RoomClient["configureParticipant"] = async () => this.ok("Participant configured.");
 
   publish(apply: (draft: RoomState) => void) {
     const draft = this.snapshot();
@@ -207,6 +214,7 @@ function proposal(id = "proposal-1", parentProposalId: string | null = null): Pr
       "This protects launch timing, product impact, and implementation capacity.",
     expectedOutcomes: ["Faster first value", "Accessibility review completed"],
     referencedConstraintIds: ["constraint-1", "constraint-3", "constraint-5"],
+    referencedSourceIds: [],
     parentProposalId,
     status: "candidate",
     createdAt: demoTimestamp(id === "proposal-1" ? 5 : 7),
@@ -296,6 +304,7 @@ function finalPreview(hash = "hash-v1"): FinalDecisionPreview {
       },
     ],
     dissent: ["Marketing raised a concern until launch copy is reviewed."],
+    sourceProvenance: [],
     expertAdvice: [],
     requiredApprovalParticipantIds: [
       "participant-product",
@@ -353,12 +362,33 @@ function roomInPhase(phase: RoomPhase): RoomState {
   return room;
 }
 
+/* Mounted inside the shell, because that is where these live: the Decision
+   surface reads the shell to know whether an agent handed the last step back
+   to a person, and the room is the only place that ever mounts it. */
 async function mount(client: FakeRoomClient, ui: React.ReactElement) {
   setRoomClientForTests(client);
   await act(async () => {
-    root.render(<RoomProvider roomId={client.state.id}>{ui}</RoomProvider>);
+    root.render(
+      <MeetingShellProvider>
+        <RoomProvider roomId={client.state.id}>
+          <ShellProbe />
+          {ui}
+        </RoomProvider>
+      </MeetingShellProvider>,
+    );
   });
   await act(async () => {});
+}
+
+/* Publishes the shell after each commit so a test can do what the WebMCP
+   confirmation bridge does — hand the last step back to a person — without
+   mounting the 3D canvas that normally subscribes to it. */
+function ShellProbe() {
+  const value = useShell();
+  useEffect(() => {
+    shell = value;
+  }, [value]);
+  return null;
 }
 
 function byTestId<T extends HTMLElement>(testId: string): T {
@@ -409,6 +439,18 @@ async function click(element: HTMLElement) {
 
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  // jsdom has no matchMedia; MeetingShellProvider's reduced-motion
+  // subscription needs a MediaQueryList-shaped stub.
+  window.matchMedia = window.matchMedia ?? ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  } as unknown as MediaQueryList));
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -427,19 +469,59 @@ describe("proposals workspace", () => {
     const client = new FakeRoomClient(roomInPhase("proposals"));
     await mount(client, <ProposalsWorkspace />);
 
-    expect(container.textContent).toContain("Active proposal");
+    expect(container.textContent).toContain("On the table");
     expect(container.textContent).toContain("candidate board");
 
+    // B1: the primary surface is one description. Title and rationale are
+    // taken from the proposer's own words unless they refine them.
+    setValue(
+      byTestId<HTMLFormElement>("proposal-form").querySelector<HTMLTextAreaElement>(
+        'textarea[name="description"]',
+      )!,
+      "Ship a two-week accessible onboarding scope. Accessibility review stays in scope.",
+    );
     await submit("proposal-form");
 
     expect(client.submitProposalCalls).toHaveLength(1);
     expect(client.submitProposalCalls[0]).toMatchObject({
-      title: "Two-week accessible onboarding scope",
+      title: "Ship a two-week accessible onboarding scope",
+      summary:
+        "Ship a two-week accessible onboarding scope. Accessibility review stays in scope.",
+      rationale:
+        "Ship a two-week accessible onboarding scope. Accessibility review stays in scope.",
       parentProposalId: null,
     });
     expect(client.submitProposalCalls[0]?.referencedConstraintIds).toContain(
       "constraint-3",
     );
+  });
+
+  it("prefers an explicitly refined title and rationale over the derived ones", async () => {
+    const client = new FakeRoomClient(roomInPhase("proposals"));
+    await mount(client, <ProposalsWorkspace />);
+
+    const form = byTestId<HTMLFormElement>("proposal-form");
+    setValue(
+      form.querySelector<HTMLTextAreaElement>('textarea[name="description"]')!,
+      "Cut the release down to the single highest-impact onboarding step.",
+    );
+    setValue(form.querySelector<HTMLInputElement>('input[name="title"]')!, "Narrow first release");
+    setValue(
+      form.querySelector<HTMLTextAreaElement>('textarea[name="rationale"]')!,
+      "It fits the delivery window without dropping the accessibility review.",
+    );
+    setValue(
+      form.querySelector<HTMLTextAreaElement>('textarea[name="expectedOutcomes"]')!,
+      "Faster first value\nAccessibility review completed",
+    );
+    await submit("proposal-form");
+
+    expect(client.submitProposalCalls[0]).toMatchObject({
+      title: "Narrow first release",
+      summary: "Cut the release down to the single highest-impact onboarding step.",
+      rationale: "It fits the delivery window without dropping the accessibility review.",
+      expectedOutcomes: ["Faster first value", "Accessibility review completed"],
+    });
   });
 });
 
@@ -486,8 +568,27 @@ describe("issues workspace", () => {
         resolutionNote: "The revised proposal keeps the accessibility review.",
       },
     ]);
+    // B2: blockers and warnings are counted separately and named in words,
+    // so "1 blocking" can never be read as "1 issue, unspecified".
+    expect(byTestId("issues-tally").textContent).toContain("1 blocking objection");
+    expect(byTestId("issues-tally").textContent).toContain("no open warnings");
     expect(container.textContent).toContain(
-      "Alignment cannot open until they are settled.",
+      "Alignment opens once every blocking objection is settled.",
+    );
+  });
+
+  it("names a warning as a warning and says the room is not blocked by it", async () => {
+    const seed = roomInPhase("deliberation");
+    for (const conflict of seed.conflicts) {
+      conflict.severity = "warning";
+    }
+    const client = new FakeRoomClient(seed);
+    await mount(client, <IssuesWorkspace />);
+
+    expect(byTestId("issues-tally").textContent).toContain("Nothing blocking");
+    expect(byTestId("issues-tally").textContent).toContain("1 open warning, not blocking");
+    expect(container.textContent).toContain(
+      "Warnings travel with the decision instead of stopping it.",
     );
   });
 });
@@ -552,15 +653,183 @@ describe("decision workspace", () => {
     expect(approvalButton.disabled).toBe(true);
   });
 
-  it("loads the immutable final decision record instead of reconstructing it locally", async () => {
+  /*
+   * B7: once the room is finalized, the decision surface stops being a review
+   * and becomes the report. Same place in the room, one artifact — and the
+   * artifact is the server's record, never a local reconstruction.
+   */
+  it("becomes the shared report once the room is finalized, without being asked", async () => {
     const client = new FakeRoomClient(roomInPhase("finalized"));
     await mount(client, <DecisionWorkspace />);
 
-    await click(buttonNamed("Load persisted final record"));
-
     expect(client.recordCalls).toBe(1);
-    expect(container.textContent).toContain("Immutable decision record loaded.");
-    expect(container.textContent).toContain("Accepted tradeoffs");
+    expect(byTestId("final-report")).toBeTruthy();
+    expect(container.querySelector('[data-testid="approval-panel"]')).toBeNull();
+    expect(container.textContent).toContain("Decision report");
+    expect(container.textContent).toContain("Why we chose it");
+    expect(container.textContent).toContain("Trade-offs");
     expect(container.textContent).toContain("Provenance");
+  });
+});
+
+/**
+ * B6: the last step is a person's, and the room says so.
+ *
+ * `request_final_decision_confirmation` deliberately never approves. It
+ * prepares the exact decision, returns `HUMAN_CONFIRMATION_REQUIRED`, and asks
+ * the shell to bring the person to the Decision surface. What is under test
+ * here is that arriving that way reads as a hand-off rather than as a failure,
+ * and that nothing about it shortens the confirmation a person still owes.
+ */
+describe("human final approval", () => {
+  it("explains the hand-off when an agent prepared the decision, without implying the agent failed", async () => {
+    const client = new FakeRoomClient(roomInPhase("approval"));
+    await mount(client, <DecisionWorkspace />);
+
+    expect(container.querySelector('[data-testid="agent-decision-handoff"]')).toBeNull();
+
+    // Exactly what the confirmation bridge does when the tool refuses.
+    await act(async () => {
+      shell.openDecisionReviewForHuman();
+    });
+
+    expect(shell.activeWorkspace).toBe("decision");
+    const handoff = byTestId("agent-decision-handoff");
+    expect(handoff.textContent).toContain("Your agent prepared the final decision");
+    expect(handoff.textContent).toContain("Review this exact decision before approving");
+    for (const blame of ["failed", "error", "could not", "unable", "denied"]) {
+      expect(handoff.textContent?.toLowerCase()).not.toContain(blame);
+    }
+  });
+
+  it("still requires the person's own confirmation after an agent hand-off", async () => {
+    const client = new FakeRoomClient(roomInPhase("approval"));
+    await mount(client, <DecisionWorkspace />);
+    await act(async () => {
+      shell.openDecisionReviewForHuman();
+    });
+
+    // The hand-off changes what the room says, never what it asks for.
+    const approve = byTestId<HTMLButtonElement>("confirm-approval");
+    expect(approve.disabled).toBe(true);
+    expect(client.approveFinalDecisionCalls).toHaveLength(0);
+    expect(byTestId("human-confirmation-note").textContent).toContain(
+      "takes your own confirmation",
+    );
+
+    const checkbox = byTestId<HTMLElement>("approval-panel").querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    )!;
+    await click(checkbox);
+    await click(approve);
+
+    expect(client.approveFinalDecisionCalls).toEqual([{ decisionHash: "hash-v1" }]);
+    // Answered: the notice does not linger over a decision already confirmed.
+    expect(container.querySelector('[data-testid="agent-decision-handoff"]')).toBeNull();
+  });
+
+  it("names the exact decision the tick is bound to", async () => {
+    const client = new FakeRoomClient(roomInPhase("approval"));
+    await mount(client, <DecisionWorkspace />);
+
+    expect(byTestId("approval-panel").textContent).toContain("Bound to hash-v1");
+    expect(byTestId("approval-panel").textContent).toContain("this confirmation is void");
+  });
+
+  it("drops the hand-off notice when the person walks somewhere else", async () => {
+    const client = new FakeRoomClient(roomInPhase("approval"));
+    await mount(client, <DecisionWorkspace />);
+    await act(async () => {
+      shell.openDecisionReviewForHuman();
+    });
+    expect(shell.agentPreparedDecision).toBe(true);
+
+    await act(async () => {
+      shell.goToWorkspace("issues");
+    });
+
+    expect(shell.agentPreparedDecision).toBe(false);
+  });
+});
+
+/**
+ * B7: a finalized meeting ends in one shared artifact.
+ *
+ * Everything on the report is read out of the server's own `DecisionRecord`,
+ * so two participants comparing screens are comparing one server-side record
+ * down to the hash — not two local reconstructions that agree today.
+ */
+describe("final decision report", () => {
+  it("lays out the decision in reading order, not as a state dump", async () => {
+    const client = new FakeRoomClient(roomInPhase("finalized"));
+    await mount(client, <DecisionWorkspace />);
+
+    const report = byTestId("final-report");
+    for (const heading of [
+      "Decision",
+      "Why we chose it",
+      "Key constraints",
+      "Concerns addressed",
+      "Trade-offs",
+      "Team alignment",
+      "Owners & actions",
+      "Security advice",
+    ]) {
+      expect(report.textContent).toContain(heading);
+    }
+
+    expect(report.textContent).toContain("Two-week accessible onboarding scope");
+    expect(report.textContent).toContain("Schedule accessibility review.");
+    expect(report.textContent).toContain("Own launch scope.");
+  });
+
+  it("keeps dissent and warnings in the record rather than tidying them away", async () => {
+    const client = new FakeRoomClient(roomInPhase("finalized"));
+    await mount(client, <DecisionWorkspace />);
+
+    expect(byTestId("final-report").textContent).toContain(
+      "Marketing raised a concern until launch copy is reviewed.",
+    );
+    expect(byTestId("final-report").textContent).toContain("Concern");
+  });
+
+  it("offers the PDF from the authenticated server endpoint", async () => {
+    const client = new FakeRoomClient(roomInPhase("finalized"));
+    await mount(client, <DecisionWorkspace />);
+
+    const pdf = [...container.querySelectorAll("a")].find((anchor) =>
+      anchor.textContent?.includes("Download PDF"),
+    );
+    // Same-origin and session-authenticated: no credential is ever in reach of
+    // this component, and the server decides who may have the file.
+    expect(pdf?.getAttribute("href")).toBe(`/api/rooms/${client.state.id}/report.pdf`);
+  });
+
+  it("keeps provenance available without letting it crowd the report", async () => {
+    const client = new FakeRoomClient(roomInPhase("finalized"));
+    await mount(client, <DecisionWorkspace />);
+
+    const provenance = byTestId<HTMLDetailsElement>("report-provenance");
+    expect(provenance.open).toBe(false);
+    expect(provenance.textContent).toContain("Provenance");
+    expect(provenance.textContent).toContain("hash-v1");
+  });
+
+  it("shows every participant the same decision hash", async () => {
+    const first = new FakeRoomClient(roomInPhase("finalized"));
+    await mount(first, <DecisionWorkspace />);
+    const seenByEngineer = byTestId("report-hash").textContent;
+
+    await act(async () => {
+      root.unmount();
+    });
+    root = createRoot(container);
+
+    const other = roomInPhase("finalized");
+    other.selfParticipantId = "participant-marketing";
+    await mount(new FakeRoomClient(other), <DecisionWorkspace />);
+
+    expect(byTestId("report-hash").textContent).toBe(seenByEngineer);
+    expect(seenByEngineer).toContain("hash-v1");
   });
 });

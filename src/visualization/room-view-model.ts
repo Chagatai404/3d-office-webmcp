@@ -1,3 +1,4 @@
+import { deriveCoordinationStatus } from "@/components/room/coordination";
 import type {
   ActionOrigin,
   ActorType,
@@ -36,6 +37,18 @@ export interface VisualParticipant {
   /** Whether this participant is currently a required approver under the room's decision policy. */
   isRequiredApprover: boolean;
   hasApprovedCurrentDecision: boolean;
+  /** Whether they have marked their own input ready. */
+  isReady: boolean;
+  /**
+   * Whether the room is, right now, waiting on this person.
+   *
+   * Read from the same `deriveCoordinationStatus` the DOM roster and the
+   * coordination strip read, so a marker on a seat can never disagree with the
+   * sentence printed above it. It is empty in phases where the room is short
+   * of a thing rather than a person (an option on the table, a settled
+   * objection): a seat is not a place to invent pressure.
+   */
+  isWaitedOn: boolean;
 }
 
 export interface VisualConstraint {
@@ -63,6 +76,13 @@ export interface VisualConflict {
   reason: string;
 }
 
+export interface VisualMeetingSource {
+  id: string;
+  title: string;
+  visibility: RoomState["sources"][number]["visibility"];
+  status: RoomState["sources"][number]["status"];
+}
+
 export interface VisualActivity {
   id: string;
   actorType: ActorType;
@@ -88,6 +108,7 @@ export interface RoomVisualizationState {
   proposals: VisualProposal[];
   activeProposal: VisualProposal | null;
   conflicts: VisualConflict[];
+  sources: VisualMeetingSource[];
   recentActivity: VisualActivity[];
 
   decisionPolicy: RoomState["decisionPolicy"];
@@ -159,6 +180,8 @@ export function createPlaceholderVisualizationState(
       alignmentComment: null,
       isRequiredApprover: false,
       hasApprovedCurrentDecision: false,
+      isReady: false,
+      isWaitedOn: false,
     }),
   );
 
@@ -173,6 +196,7 @@ export function createPlaceholderVisualizationState(
     proposals: [],
     activeProposal: null,
     conflicts: [],
+    sources: [],
     recentActivity: [],
     decisionPolicy: "owner_decides",
     consensus: {
@@ -210,6 +234,8 @@ export function createRoomVisualizationState(
     room.participants.map((participant) => [participant.id, participant.name]),
   );
 
+  const waitedOn = new Set(deriveCoordinationStatus(room).waitingParticipantIds);
+
   // Every *active* participant has a seat at the one shared table, in join
   // order. A removed participant's chair disappears from the room the same
   // way it disappears from the roster; their historical contributions remain
@@ -230,6 +256,8 @@ export function createRoomVisualizationState(
       alignmentComment: alignmentByParticipant.get(participant.id)?.comment ?? null,
       isRequiredApprover: requiredApproverIds.has(participant.id),
       hasApprovedCurrentDecision: approvedParticipantIds.has(participant.id),
+      isReady: participant.isReady,
+      isWaitedOn: waitedOn.has(participant.id),
     }));
 
   const proposals: VisualProposal[] = room.proposals.map((proposal) => ({
@@ -268,6 +296,14 @@ export function createRoomVisualizationState(
       status: conflict.status,
       reason: conflict.reason,
     })),
+    sources: room.sources
+      .filter((source) => source.status !== "removed")
+      .map((source) => ({
+        id: source.id,
+        title: source.title,
+        visibility: source.visibility,
+        status: source.status,
+      })),
     recentActivity: room.activity
       .slice(-RECENT_ACTIVITY_LIMIT)
       .map((event) => ({

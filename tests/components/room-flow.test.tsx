@@ -81,6 +81,31 @@ function requireForm(): HTMLFormElement {
   return form;
 }
 
+/**
+ * Opens one more row under "Add structured detail" and fills it in, the way
+ * someone reaching for the advanced path would.
+ */
+async function addHardLimit(category: string, text: string) {
+  const addButton = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Add a hard limit",
+  );
+  if (!addButton) throw new Error("The structured-detail disclosure is not rendered.");
+  await act(async () => {
+    addButton.click();
+  });
+
+  const fieldset = container.querySelector(".constraint-fieldset");
+  const rows = [...(fieldset?.querySelectorAll(".constraint-draft") ?? [])];
+  const row = rows.at(-1);
+  if (!row) throw new Error("The new limit row is not rendered.");
+
+  const inputs = [...row.querySelectorAll<HTMLInputElement>("input")];
+  await act(async () => {
+    setValue(inputs[0]!, category);
+    setValue(inputs[1]!, text);
+  });
+}
+
 async function submitForm() {
   await act(async () => {
     requireForm().dispatchEvent(
@@ -111,7 +136,7 @@ describe("adding a constraint through the room client", () => {
 
     expect(container.textContent).toContain("Maya Okonkwo");
     expect(container.textContent).toContain("Emre Yilmaz");
-    expect(container.textContent).toContain("Simulated participant");
+    expect(container.textContent).toContain("Simulated teammate");
     expect(container.textContent).toContain(
       "Every new onboarding step needs an accessibility review",
     );
@@ -128,12 +153,20 @@ describe("adding a constraint through the room client", () => {
       ),
     ).toHaveLength(0);
 
+    // B1: the primary surface is one box. The structured limits still exist
+    // behind "Add structured detail" and still travel in the same canonical
+    // `addMyPosition` input, which is what this asserts.
     await act(async () => {
       setValue(
         requireSummaryField(),
         "Capacity is roughly one engineer for two weeks.",
       );
     });
+    await addHardLimit(
+      "capacity",
+      "Implementation capacity is roughly one engineer for two weeks.",
+    );
+    await addHardLimit("architecture", "No authentication rewrite as part of this change.");
     await submitForm();
 
     const after = latestVisualization();

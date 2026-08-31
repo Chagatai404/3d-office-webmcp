@@ -45,28 +45,43 @@ describe("centralized WebMCP capability registration", () => {
       [
         "advance_discussion",
         "admit_participant",
+        "configure_participant",
         "enable_security_expert",
+        "get_coordination_status",
         "get_meeting_context",
+        "get_meeting_sources",
         "get_my_attention_items",
+        "get_room_updates",
         "get_waiting_participants",
         "lock_meeting",
+        "mark_my_input_ready",
+        "read_meeting_source",
         "reject_participant",
         "remove_participant",
+        "request_source_upload",
+        "search_meeting_sources",
         "set_decision_policy",
         "set_participant_decision_role",
         "share_my_context",
+        "summarize_meeting_sources",
         "transfer_ownership",
       ].sort(),
     );
   });
 
   it("registers exactly the milestone participant tools through the lifecycle for a claimed non-owner", () => {
+    // `advance_discussion` appears in Input for this contributor fixture
+    // because procedural progression is open to any active claimed human,
+    // not owner-gated -- see the dedicated A4 tests below. It does not
+    // reappear in Proposals/Deliberation/Voting here only because this
+    // fixture never sets an active proposal, which every later transition
+    // requires regardless of who calls it.
     const byPhase = LIFECYCLE.map((phase) => {
       const room = buildRoomStateFixture({ phase, selfParticipantId: "participant-engineer" });
-      return available(room).filter((name) => !name.startsWith("get_"));
+      return available(room).filter((name) => MUTATION_TOOL_NAMES.has(name));
     });
     expect(byPhase).toEqual([
-      ["share_my_context"],
+      ["advance_discussion", "mark_my_input_ready", "request_source_upload", "share_my_context"],
       ["suggest_option"],
       ["raise_concern", "resolve_my_concern", "respond_to_concern"],
       ["express_my_alignment"],
@@ -75,7 +90,7 @@ describe("centralized WebMCP capability registration", () => {
     ]);
   });
 
-  it("withholds owner-only tools from a non-owner claimed participant", () => {
+  it("withholds genuinely owner-only administration from a non-owner claimed participant", () => {
     for (const phase of LIFECYCLE) {
       const room = buildRoomStateFixture({ phase, selfParticipantId: "participant-engineer" });
       const names = available(room);
@@ -85,9 +100,6 @@ describe("centralized WebMCP capability registration", () => {
         "reject_participant",
         "lock_meeting",
         "unlock_meeting",
-        "advance_discussion",
-        "request_team_alignment",
-        "review_final_decision",
         "set_decision_policy",
         "set_participant_decision_role",
         "remove_participant",
@@ -96,6 +108,62 @@ describe("centralized WebMCP capability registration", () => {
         expect(names, `${phase}: ${ownerTool}`).not.toContain(ownerTool);
       }
     }
+  });
+
+  describe("A4: procedural progression vs decision-authority gating", () => {
+    it("registers advance_discussion and request_team_alignment for a non-owner contributor once prerequisites are met", () => {
+      const toProposals = buildRoomStateFixture({ phase: "input", selfParticipantId: "participant-engineer" });
+      expect(available(toProposals)).toContain("advance_discussion");
+
+      const toDeliberation = buildRoomStateFixture({
+        phase: "proposals", selfParticipantId: "participant-engineer", activeProposalId: "proposal-1",
+      });
+      expect(available(toDeliberation)).toContain("advance_discussion");
+
+      const toAlignment = buildRoomStateFixture({
+        phase: "deliberation", selfParticipantId: "participant-engineer", activeProposalId: "proposal-1",
+      });
+      expect(available(toAlignment)).toContain("request_team_alignment");
+    });
+
+    it("withholds review_final_decision from a non-owner contributor even with an active, unblocked proposal", () => {
+      const room = buildRoomStateFixture({
+        phase: "voting", selfParticipantId: "participant-engineer", activeProposalId: "proposal-1",
+      });
+      expect(available(room)).not.toContain("review_final_decision");
+    });
+
+    it("registers review_final_decision for a non-owner decision-maker, not just the owner", () => {
+      const baseline = buildRoomStateFixture();
+      const room = buildRoomStateFixture({
+        phase: "voting",
+        selfParticipantId: "participant-engineer",
+        activeProposalId: "proposal-1",
+        participants: baseline.participants.map((participant) =>
+          participant.id === "participant-engineer"
+            ? { ...participant, decisionRole: "decision_maker" as const }
+            : participant,
+        ),
+      });
+      expect(available(room)).toContain("review_final_decision");
+    });
+
+    it("still withholds true owner administration from a non-owner decision-maker", () => {
+      const baseline = buildRoomStateFixture();
+      const room = buildRoomStateFixture({
+        phase: "input",
+        selfParticipantId: "participant-engineer",
+        participants: baseline.participants.map((participant) =>
+          participant.id === "participant-engineer"
+            ? { ...participant, decisionRole: "decision_maker" as const }
+            : participant,
+        ),
+      });
+      const names = available(room);
+      for (const ownerTool of ["admit_participant", "remove_participant", "transfer_ownership", "set_decision_policy"]) {
+        expect(names, ownerTool).not.toContain(ownerTool);
+      }
+    });
   });
 
   it("never registers lock_meeting and unlock_meeting at the same time", () => {
@@ -136,7 +204,7 @@ describe("centralized WebMCP capability registration", () => {
       selfParticipantId: "participant-owner",
       activeProposalId: "proposal-1",
       finalDecisionPreview: {
-        proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], parentProposalId: null, status: "candidate", createdAt: "2026-08-30T00:00:00.000Z" },
+        proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], referencedSourceIds: [], parentProposalId: null, status: "candidate", createdAt: "2026-08-30T00:00:00.000Z" },
         rationale: "r",
         acceptedTradeoffs: [],
         unresolvedWarnings: [],
@@ -145,7 +213,7 @@ describe("centralized WebMCP capability registration", () => {
         owners: [],
         deadlines: [],
         actionItems: [],
-        dissent: [],
+        dissent: [], sourceProvenance: [],
         expertAdvice: [],
         requiredApprovalParticipantIds: ["participant-owner"],
         decisionHash: "hash-1",
@@ -157,12 +225,12 @@ describe("centralized WebMCP capability registration", () => {
     expect(names).not.toContain("set_decision_policy");
     expect(names).not.toContain("set_participant_decision_role");
     // The owner is still the required approver, so confirmation stays available.
-    expect(names).toContain("request_final_decision_confirmation");
+    expect(names).toContain("approve_final_decision");
   });
 
-  it("registers request_final_decision_confirmation only for the participant currently required to approve", () => {
+  it("registers approve_final_decision only for the participant currently required to approve", () => {
     const preview = {
-      proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], parentProposalId: null, status: "candidate" as const, createdAt: "2026-08-30T00:00:00.000Z" },
+      proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], referencedSourceIds: [], parentProposalId: null, status: "candidate" as const, createdAt: "2026-08-30T00:00:00.000Z" },
       rationale: "r",
       acceptedTradeoffs: [],
       unresolvedWarnings: [],
@@ -171,7 +239,7 @@ describe("centralized WebMCP capability registration", () => {
       owners: [],
       deadlines: [],
       actionItems: [],
-      dissent: [],
+      dissent: [], sourceProvenance: [],
       expertAdvice: [],
       requiredApprovalParticipantIds: ["participant-owner"],
       decisionHash: "hash-1",
@@ -190,8 +258,8 @@ describe("centralized WebMCP capability registration", () => {
       activeProposalId: "proposal-1",
       finalDecisionPreview: preview,
     });
-    expect(available(requiredApprover)).toContain("request_final_decision_confirmation");
-    expect(available(notRequired)).not.toContain("request_final_decision_confirmation");
+    expect(available(requiredApprover)).toContain("approve_final_decision");
+    expect(available(notRequired)).not.toContain("approve_final_decision");
   });
 
   it("finalized rooms register only read-only tools", () => {
@@ -199,6 +267,7 @@ describe("centralized WebMCP capability registration", () => {
     const names = available(room);
     expect(names.filter((name) => MUTATION_TOOL_NAMES.has(name))).toEqual([]);
     expect(names).toContain("get_decision_record");
+    expect(names).toContain("get_final_report");
     expect(names).not.toContain("get_my_attention_items");
   });
 
@@ -273,9 +342,9 @@ describe("centralized WebMCP capability registration", () => {
             ? {
                 activeProposalId: "proposal-1",
                 finalDecisionPreview: {
-                  proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], parentProposalId: null, status: "candidate" as const, createdAt: "2026-08-30T00:00:00.000Z" },
+                  proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], referencedSourceIds: [], parentProposalId: null, status: "candidate" as const, createdAt: "2026-08-30T00:00:00.000Z" },
                   rationale: "r", acceptedTradeoffs: [], unresolvedWarnings: [], alignments: [],
-                  decisionPolicy: "owner_decides" as const, owners: [], deadlines: [], actionItems: [], dissent: [],
+                  decisionPolicy: "owner_decides" as const, owners: [], deadlines: [], actionItems: [], dissent: [], sourceProvenance: [],
                   expertAdvice: [],
                   requiredApprovalParticipantIds: ["participant-owner"], decisionHash: "hash-1", approvals: [],
                   missingApprovalParticipantIds: ["participant-owner"],
@@ -291,13 +360,20 @@ describe("centralized WebMCP capability registration", () => {
   it("marks read tools read-only and every participant-content output untrusted", () => {
     for (const name of [
       "get_meeting_context",
+      "get_coordination_status",
+      "get_room_updates",
       "get_current_decision",
       "get_open_issues",
       "get_alignment",
       "get_decision_record",
+      "get_final_report",
       "get_my_attention_items",
       "get_waiting_participants",
       "get_expert_advice",
+      "get_meeting_sources",
+      "read_meeting_source",
+      "search_meeting_sources",
+      "summarize_meeting_sources",
     ]) {
       expect(fullCatalog[name]?.annotations?.readOnlyHint).toBe(true);
       expect(fullCatalog[name]?.annotations?.untrustedContentHint).toBe(true);

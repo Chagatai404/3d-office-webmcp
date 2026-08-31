@@ -9,7 +9,7 @@
  * and never bypasses the human's own click. `transfer_ownership` and
  * `remove_participant` (`src/webmcp/room-tools.ts`) validate their target
  * read-only and then call `requestUiConfirmation` instead of calling the
- * domain layer at all; `request_final_decision_confirmation` calls the
+ * domain layer at all; `approve_final_decision` calls the
  * domain layer (which itself refuses without a human confirmation, per
  * `approve_participant_final_decision`'s `p_human_confirmed` gate) and then
  * calls `requestUiConfirmation` so the Decision workspace is already open
@@ -18,7 +18,8 @@
 
 export type ConfirmationRequest =
   | { kind: "participants"; action: "remove" | "transfer"; participantId: string }
-  | { kind: "decision" };
+  | { kind: "decision" }
+  | { kind: "sources"; action: "upload" };
 
 type ParticipantsRequest = Extract<ConfirmationRequest, { kind: "participants" }>;
 

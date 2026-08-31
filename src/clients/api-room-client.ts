@@ -6,21 +6,35 @@ import {
   decisionRecordSchema,
   finalDecisionPreviewSchema,
   joinRequestSchema,
+  meetingSourceContentSchema,
+  meetingSourceSearchResultsSchema,
+  meetingSourceSchema,
   roomStateSchema,
   type ActionResult,
   type AddPositionInput,
   type ExpressAlignmentInput,
   type ClaimSeatInput,
+  type AdmitJoinRequestInput,
+  type ConfigureParticipantInput,
+  type CreateMeetingSourceInput,
   type DecisionRecord,
   type FinalDecisionPreview,
-  type ManageJoinRequestInput,
   type JoinRequest,
+  type ManageJoinRequestInput,
+  type MarkMeetingSourceFailedInput,
+  type MarkMeetingSourceProcessedInput,
+  type MeetingSource,
+  type MeetingSourceContent,
+  type MeetingSourceSearchResults,
+  type MeetingSourceVisibility,
   type ProposeTradeoffInput,
   type RaiseObjectionInput,
+  type ReadMeetingSourceContentInput,
   type RemoveParticipantInput,
   type ResolveObjectionInput,
   type RoomClient,
   type RoomPhase,
+  type SearchMeetingSourcesInput,
   type RoomState,
   type SetDecisionPolicyInput,
   type SetParticipantDecisionRoleInput,
@@ -46,6 +60,12 @@ type RoomSubscription = {
   callback: (state: RoomState) => void;
   onUnavailable: (() => void) | undefined;
 };
+
+export interface UploadMeetingSourceInput {
+  file: File;
+  title?: string;
+  visibility: MeetingSourceVisibility;
+}
 
 const TERMINAL_ROOM_STATUSES = new Set([401, 403, 404]);
 
@@ -96,6 +116,132 @@ export class ApiRoomClient implements RoomClient {
 
   claimSeat(roomId: string, input: ClaimSeatInput) {
     return this.mutate(roomId, "claim-seat", input);
+  }
+
+  listMeetingSources(roomId: string): Promise<ActionResult<MeetingSource[]>> {
+    return this.readAction(roomId, "sources", z.array(meetingSourceSchema));
+  }
+
+  createMeetingSource(
+    roomId: string,
+    input: CreateMeetingSourceInput,
+  ): Promise<ActionResult<MeetingSource>> {
+    return this.mutateWithData(roomId, "sources", input, meetingSourceSchema);
+  }
+
+  async uploadMeetingSource(
+    roomId: string,
+    input: UploadMeetingSourceInput,
+  ): Promise<ActionResult<MeetingSource>> {
+    if (!this.versions.has(roomId)) await this.getRoom(roomId);
+    const accessToken = await this.ensureAnonymousSession();
+    const body = new FormData();
+    body.append("file", input.file);
+    body.append("visibility", input.visibility);
+    if (input.title?.trim()) body.append("title", input.title.trim());
+
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/sources`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "If-Match": String(this.versions.get(roomId) ?? 0),
+      },
+      body,
+    });
+    const parsed = actionResultSchema(meetingSourceSchema).safeParse(await response.json());
+    if (!parsed.success) throw new Error(`Room source upload failed with HTTP ${response.status}.`);
+    const result = parsed.data as ActionResult<MeetingSource>;
+    this.versions.set(roomId, result.roomVersion);
+    if (result.ok || result.error.code === "STALE_ROOM_STATE") await this.refresh(roomId);
+    return result;
+  }
+
+  readMeetingSourceContent(
+    roomId: string,
+    input: ReadMeetingSourceContentInput,
+  ): Promise<ActionResult<MeetingSourceContent>> {
+    return this.readAction(
+      roomId,
+      `sources/${encodeURIComponent(input.sourceId)}/content?cursor=${encodeURIComponent(input.cursor ?? "")}&maxChunks=${input.maxChunks}`,
+      meetingSourceContentSchema,
+    );
+  }
+
+  searchMeetingSources(
+    roomId: string,
+    input: SearchMeetingSourcesInput,
+  ): Promise<ActionResult<MeetingSourceSearchResults>> {
+    return this.mutateWithData(
+      roomId,
+      "sources/search",
+      input,
+      meetingSourceSearchResultsSchema,
+    );
+  }
+
+  markMeetingSourceProcessed(
+    roomId: string,
+    input: MarkMeetingSourceProcessedInput,
+  ): Promise<ActionResult<MeetingSource>> {
+    return this.mutateWithData(
+      roomId,
+      `sources/${encodeURIComponent(input.sourceId)}/process`,
+      { chunks: input.chunks, summary: input.summary },
+      meetingSourceSchema,
+    );
+  }
+
+  markMeetingSourceFailed(
+    roomId: string,
+    input: MarkMeetingSourceFailedInput,
+  ): Promise<ActionResult<MeetingSource>> {
+    return this.mutateWithData(
+      roomId,
+      `sources/${encodeURIComponent(input.sourceId)}/fail`,
+      { errorMessage: input.errorMessage },
+      meetingSourceSchema,
+    );
+  }
+
+  /**
+   * Re-run text extraction on a `failed` (or still-`processing`) source from a
+   * file the human re-selects, then finish it. Keeps the same source row so
+   * its citations and audit history survive the retry.
+   */
+  async retryMeetingSource(
+    roomId: string,
+    sourceId: string,
+    file: File,
+  ): Promise<ActionResult<MeetingSource>> {
+    if (!this.versions.has(roomId)) await this.getRoom(roomId);
+    const accessToken = await this.ensureAnonymousSession();
+    const body = new FormData();
+    body.append("file", file);
+    const response = await fetch(
+      `/api/rooms/${encodeURIComponent(roomId)}/sources/${encodeURIComponent(sourceId)}/process`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "If-Match": String(this.versions.get(roomId) ?? 0),
+        },
+        body,
+      },
+    );
+    const parsed = actionResultSchema(meetingSourceSchema).safeParse(await response.json());
+    if (!parsed.success) throw new Error(`Room source retry failed with HTTP ${response.status}.`);
+    const result = parsed.data as ActionResult<MeetingSource>;
+    this.versions.set(roomId, result.roomVersion);
+    if (result.ok || result.error.code === "STALE_ROOM_STATE") await this.refresh(roomId);
+    return result;
+  }
+
+  shareMeetingSource(roomId: string, sourceId: string): Promise<ActionResult<MeetingSource>> {
+    return this.mutateWithData(roomId, `sources/${encodeURIComponent(sourceId)}/share`, {}, meetingSourceSchema);
+  }
+
+  removeMeetingSource(roomId: string, sourceId: string): Promise<ActionResult> {
+    return this.deleteMutation(roomId, `sources/${encodeURIComponent(sourceId)}`);
   }
 
   addMyPosition(roomId: string, input: AddPositionInput) {
@@ -183,7 +329,7 @@ export class ApiRoomClient implements RoomClient {
     return this.readAction(roomId, "join-requests", z.array(joinRequestSchema));
   }
 
-  admitJoinRequest(roomId: string, input: ManageJoinRequestInput): Promise<ActionResult<JoinRequest>> {
+  admitJoinRequest(roomId: string, input: AdmitJoinRequestInput): Promise<ActionResult<JoinRequest>> {
     return this.mutateWithData(roomId, "join-requests/admit", input, joinRequestSchema);
   }
 
@@ -224,6 +370,13 @@ export class ApiRoomClient implements RoomClient {
     input: SetParticipantDecisionRoleInput,
   ): Promise<ActionResult> {
     return this.mutate(roomId, "decision-role", input);
+  }
+
+  configureParticipant(
+    roomId: string,
+    input: ConfigureParticipantInput,
+  ): Promise<ActionResult> {
+    return this.mutate(roomId, "participants/configure", input);
   }
 
   private async ensureAnonymousSession(): Promise<string> {
@@ -302,6 +455,27 @@ export class ApiRoomClient implements RoomClient {
     const parsed = actionResultSchema(dataSchema).safeParse(await response.json());
     if (!parsed.success) throw new Error(`Room action failed with HTTP ${response.status}.`);
     const result = parsed.data as ActionResult<T>;
+    this.versions.set(roomId, result.roomVersion);
+    if (result.ok || result.error.code === "STALE_ROOM_STATE") await this.refresh(roomId);
+    return result;
+  }
+
+  private async deleteMutation(
+    roomId: string,
+    action: string,
+  ): Promise<ActionResult> {
+    if (!this.versions.has(roomId)) await this.getRoom(roomId);
+    const accessToken = await this.ensureAnonymousSession();
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/${action}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "If-Match": String(this.versions.get(roomId) ?? 0),
+      },
+    });
+    const parsed = actionResultSchema(z.null()).safeParse(await response.json());
+    if (!parsed.success) throw new Error(`Room action failed with HTTP ${response.status}.`);
+    const result = parsed.data as ActionResult;
     this.versions.set(roomId, result.roomVersion);
     if (result.ok || result.error.code === "STALE_ROOM_STATE") await this.refresh(roomId);
     return result;

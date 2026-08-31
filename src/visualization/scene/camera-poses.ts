@@ -373,7 +373,7 @@ export const WORKSPACE_LABEL: Record<WorkspaceId, string> = {
   constraints: "Constraints",
   proposals: "Proposals",
   issues: "Issues",
-  whiteboard: "Whiteboard",
+  whiteboard: "Sources",
   alignment: "Alignment",
   decision: "Decision",
 };
@@ -384,7 +384,7 @@ export const MOVING_LABEL: Record<WorkspaceId, string> = {
   constraints: "Moving to the constraints board",
   proposals: "Moving to the candidate board",
   issues: "Moving to the issues board",
-  whiteboard: "Moving to the whiteboard",
+  whiteboard: "Moving to the source files",
   alignment: "Moving to the alignment plinth",
   decision: "Moving to the decision pedestal",
 };

@@ -1,6 +1,8 @@
 import {
   addPositionInputSchema,
+  admitJoinRequestInputSchema,
   approveFinalDecisionInputSchema,
+  configureParticipantInputSchema,
   expressAlignmentInputSchema,
   claimSeatInputSchema,
   createRoomInputSchema,
@@ -21,7 +23,9 @@ import {
   type ActionErrorCode,
   type ActionResult,
   type AddPositionInput,
+  type AdmitJoinRequestInput,
   type ApproveFinalDecisionInput,
+  type ConfigureParticipantInput,
   type ExpressAlignmentInput,
   type ClaimSeatInput,
   type CreatedRoom,
@@ -195,32 +199,52 @@ export function listJoinRequests(repository: RoomRepository, roomId: string, act
   return repository.listJoinRequests(roomId, actor);
 }
 
-async function manageJoinRequest(
+async function ownerRoomForJoinRequestManagement(
   repository: RoomRepository,
   roomId: string,
-  input: ManageJoinRequestInput,
   context: MutationContext,
-  action: "admit" | "reject",
-): Promise<ActionResult<JoinRequest>> {
-  const parsed = manageJoinRequestInputSchema.safeParse(input);
-  if (!parsed.success) return failure("VALIDATION_ERROR", "Join request input is invalid.", context.expectedRoomVersion);
+): Promise<RoomState | ActionResult<never>> {
   const room = await prepareMutation(repository, roomId, context, ["input", "proposals", "deliberation", "voting", "approval"]);
   if ("ok" in room) return room;
   const self = room.participants.find((participant) => participant.id === room.selfParticipantId);
   if (!self || self.id !== room.ownerParticipantId || self.meetingRole !== "owner") {
     return failure("NOT_AUTHORIZED", "Only the current room owner can manage the waiting room.", room.version);
   }
-  return action === "admit"
-    ? repository.admitJoinRequest(roomId, parsed.data, context)
-    : repository.rejectJoinRequest(roomId, parsed.data, context);
+  return room;
 }
 
-export function admitJoinRequest(repository: RoomRepository, roomId: string, input: ManageJoinRequestInput, context: MutationContext) {
-  return manageJoinRequest(repository, roomId, input, context, "admit");
+/**
+ * A6: `input.role`/`input.decisionRole`, when supplied, let the owner
+ * assign an explicit human-readable role and decision authority in the
+ * same call the joiner is admitted -- the joiner's own requested role is
+ * requested metadata, never unquestioned authority. Neither field is
+ * required; omitting both preserves the previous behavior exactly (the
+ * joiner's own requested role, `contributor`).
+ */
+export async function admitJoinRequest(
+  repository: RoomRepository,
+  roomId: string,
+  input: AdmitJoinRequestInput,
+  context: MutationContext,
+): Promise<ActionResult<JoinRequest>> {
+  const parsed = admitJoinRequestInputSchema.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION_ERROR", "Admission input is invalid.", context.expectedRoomVersion);
+  const room = await ownerRoomForJoinRequestManagement(repository, roomId, context);
+  if ("ok" in room) return room;
+  return repository.admitJoinRequest(roomId, parsed.data, context);
 }
 
-export function rejectJoinRequest(repository: RoomRepository, roomId: string, input: ManageJoinRequestInput, context: MutationContext) {
-  return manageJoinRequest(repository, roomId, input, context, "reject");
+export async function rejectJoinRequest(
+  repository: RoomRepository,
+  roomId: string,
+  input: ManageJoinRequestInput,
+  context: MutationContext,
+): Promise<ActionResult<JoinRequest>> {
+  const parsed = manageJoinRequestInputSchema.safeParse(input);
+  if (!parsed.success) return failure("VALIDATION_ERROR", "Join request input is invalid.", context.expectedRoomVersion);
+  const room = await ownerRoomForJoinRequestManagement(repository, roomId, context);
+  if ("ok" in room) return room;
+  return repository.rejectJoinRequest(roomId, parsed.data, context);
 }
 
 const OWNER_LIFECYCLE_PHASES: RoomPhase[] = [
@@ -399,6 +423,45 @@ export async function setParticipantDecisionRole(
     );
   }
   return repository.setParticipantDecisionRole(roomId, parsed.data, context);
+}
+
+/**
+ * Owner-only. Updates an active human participant's human-readable role,
+ * decision authority, or both in one call (A6). Mirrors
+ * `setParticipantDecisionRole`'s owner-protection invariant when
+ * `decisionRole` is part of the update; the database enforces the rest
+ * (active-human-only target, `advisor` rejected, frozen-candidate
+ * rejection for a decision-role change) the same way every other
+ * owner-only mutation's real authorization lives server-side.
+ */
+export async function configureParticipant(
+  repository: RoomRepository,
+  roomId: string,
+  input: ConfigureParticipantInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = configureParticipantInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure(
+      "VALIDATION_ERROR",
+      "Participant configuration input is invalid.",
+      context.expectedRoomVersion,
+    );
+  }
+  const room = await requireOwnerRoom(repository, roomId, context);
+  if ("ok" in room) return room;
+  if (
+    parsed.data.participantId === room.ownerParticipantId &&
+    parsed.data.decisionRole != null &&
+    parsed.data.decisionRole !== "decision_maker"
+  ) {
+    return failure(
+      "NOT_AUTHORIZED",
+      "The current owner cannot cease being a decision maker.",
+      room.version,
+    );
+  }
+  return repository.configureParticipant(roomId, parsed.data, context);
 }
 
 export function getMeetingContext(

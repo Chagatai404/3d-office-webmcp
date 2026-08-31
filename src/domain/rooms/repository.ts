@@ -2,22 +2,33 @@ import type {
   ActionOrigin,
   ActionResult,
   AddPositionInput,
+  AdmitJoinRequestInput,
   ApproveFinalDecisionInput,
   ClaimSeatInput,
+  ConfigureParticipantInput,
   CreateRoomInput,
+  CreateMeetingSourceInput,
   DecisionRecord,
   ExpressAlignmentInput,
   FinalDecisionPreview,
   JoinRequest,
   JoinRequestResult,
   ManageJoinRequestInput,
+  MarkMeetingSourceFailedInput,
+  MarkMeetingSourceProcessedInput,
+  MeetingSourceIdInput,
+  MeetingSource,
+  MeetingSourceContent,
+  MeetingSourceSearchResults,
   RecordExpertAdviceOutcomeInput,
   RemoveParticipantInput,
+  ReadMeetingSourceContentInput,
   RequestJoinByInviteInput,
   RequestJoinByPasscodeInput,
   RaiseObjectionInput,
   ResolveObjectionInput,
   ProposeTradeoffInput,
+  SearchMeetingSourcesInput,
   RoomInvitePreview,
   RoomPhase,
   RoomState,
@@ -64,11 +75,47 @@ export interface RoomRepository {
   requestJoinByInvite(input: RequestJoinByInviteInput, actor: DomainActor): Promise<ActionResult<JoinRequestResult>>;
   getMyJoinRequest(joinRequestId: string, actor: DomainActor): Promise<ActionResult<JoinRequest>>;
   listJoinRequests(roomId: string, actor: DomainActor): Promise<ActionResult<JoinRequest[]>>;
-  admitJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext): Promise<ActionResult<JoinRequest>>;
+  admitJoinRequest(roomId: string, input: AdmitJoinRequestInput, context: MutationContext): Promise<ActionResult<JoinRequest>>;
   rejectJoinRequest(roomId: string, input: ManageJoinRequestInput, context: MutationContext): Promise<ActionResult<JoinRequest>>;
   claimSeat(
     roomId: string,
     input: ClaimSeatInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  listSources(roomId: string, actor: DomainActor): Promise<ActionResult<MeetingSource[]>>;
+  createSource(
+    roomId: string,
+    input: CreateMeetingSourceInput,
+    context: MutationContext,
+  ): Promise<ActionResult<MeetingSource>>;
+  readSourceContent(
+    roomId: string,
+    input: ReadMeetingSourceContentInput,
+    actor: DomainActor,
+  ): Promise<ActionResult<MeetingSourceContent>>;
+  searchSources(
+    roomId: string,
+    input: SearchMeetingSourcesInput,
+    actor: DomainActor,
+  ): Promise<ActionResult<MeetingSourceSearchResults>>;
+  markSourceProcessed(
+    roomId: string,
+    input: MarkMeetingSourceProcessedInput,
+    context: MutationContext,
+  ): Promise<ActionResult<MeetingSource>>;
+  markSourceFailed(
+    roomId: string,
+    input: MarkMeetingSourceFailedInput,
+    context: MutationContext,
+  ): Promise<ActionResult<MeetingSource>>;
+  shareSource(
+    roomId: string,
+    input: MeetingSourceIdInput,
+    context: MutationContext,
+  ): Promise<ActionResult<MeetingSource>>;
+  removeSource(
+    roomId: string,
+    input: MeetingSourceIdInput,
     context: MutationContext,
   ): Promise<ActionResult>;
   addPosition(
@@ -153,6 +200,12 @@ export interface RoomRepository {
   setParticipantDecisionRole(
     roomId: string,
     input: SetParticipantDecisionRoleInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+
+  configureParticipant(
+    roomId: string,
+    input: ConfigureParticipantInput,
     context: MutationContext,
   ): Promise<ActionResult>;
 

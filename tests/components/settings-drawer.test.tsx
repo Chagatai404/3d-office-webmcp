@@ -86,6 +86,7 @@ class LockFakeClient implements RoomClient {
   transferOwnership: RoomClient["transferOwnership"] = async () => this.unavailable();
   setDecisionPolicy: RoomClient["setDecisionPolicy"] = async () => this.unavailable();
   setParticipantDecisionRole: RoomClient["setParticipantDecisionRole"] = async () => this.unavailable();
+  configureParticipant: RoomClient["configureParticipant"] = async () => this.unavailable();
 }
 
 function seedRoom(selfParticipantId: string): RoomState {

@@ -23,7 +23,7 @@ git rev-parse HEAD
 
 Record the shared base SHA here before starting:
 
-- [ ] `BASE_SHA = ______________________________`
+- [x] `BASE_SHA = 67972adca6a8c154383a09494b064c19d493a40e` (matches `origin/main` at the time this slice started)
 
 At the time this plan was created, `main` already contained:
 
@@ -51,7 +51,7 @@ git pull origin main
 git switch -c feature/agent-first-ux
 ```
 
-- [ ] Developer A branch created from the recorded `BASE_SHA`.
+- [x] Developer A branch created from the recorded `BASE_SHA`. (This slice runs on `final-steps-branch-a`, not `feature/agent-protocol-core` -- it was already checked out at exactly `BASE_SHA` when work started, so it satisfies the same constraint under a different name.)
 - [ ] Developer B branch created from the same `BASE_SHA`.
 - [ ] Neither feature branch is created from the other feature branch.
 
@@ -170,13 +170,13 @@ Do not create another bootstrap implementation.
 
 ## Hosted Supabase/Vercel configuration
 
-- [ ] Hosted Supabase anonymous sign-ins are enabled.
-- [ ] Hosted Supabase migrations are current.
-- [ ] Vercel `NEXT_PUBLIC_SUPABASE_URL` points to the intended hosted Supabase project.
-- [ ] Vercel `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` matches that project.
-- [ ] Vercel `SUPABASE_SERVICE_ROLE_KEY` is present and server-only.
-- [ ] Vercel `NEXT_PUBLIC_APP_URL` is the deployed application origin.
-- [ ] No service-role/database secret is exposed through `NEXT_PUBLIC_*`.
+- [ ] Hosted Supabase anonymous sign-ins are enabled. (No tool available to me confirms this Auth setting directly -- confirm in the Supabase dashboard, or it will show up as a failure in the browser smoke test below.)
+- [x] Hosted Supabase migrations are current. (Verified via the Supabase MCP: `list_migrations` on the hosted `quoram` project (`ijujoenmxkrynexbxzcm`) returns exactly the same 13 versions/names as `supabase/migrations/*.sql` on disk, in order, nothing missing or extra.)
+- [ ] Vercel `NEXT_PUBLIC_SUPABASE_URL` points to the intended hosted Supabase project. (No Vercel tool available to me lists env var values -- confirm in the Vercel dashboard for project `3d-office-webmcp` / team `ca-tech1`.)
+- [ ] Vercel `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` matches that project. (Same limitation.)
+- [ ] Vercel `SUPABASE_SERVICE_ROLE_KEY` is present and server-only. (Same limitation for presence; server-only *usage* is independently confirmed by code -- see below.)
+- [ ] Vercel `NEXT_PUBLIC_APP_URL` is the deployed application origin. (Same limitation.)
+- [x] No service-role/database secret is exposed through `NEXT_PUBLIC_*`. (Confirmed at the code level: `SUPABASE_SERVICE_ROLE_KEY` is read only in `src/lib/supabase/server.ts`, a server-only module never bundled to the browser; grep confirms no `NEXT_PUBLIC_*`-prefixed service-role/secret variable exists anywhere in `src/`. This does not rule out a stray extra env var being set in the Vercel dashboard itself, which only a human with dashboard access can confirm.)
 
 ## Apply the existing production demo bootstrap
 
@@ -186,30 +186,24 @@ Use the already-committed file:
 supabase/production-demo-bootstrap.sql
 ```
 
-Apply it only to the intended hosted Supabase project:
+**Applied 2026-08-31, via the Supabase MCP's `execute_sql` against the hosted `quoram` project (`ijujoenmxkrynexbxzcm`) rather than `psql`/`REMOTE_DATABASE_URL`** -- an already-authenticated equivalent path to the same file content, run verbatim (the `begin`/`do $$...$$`/`commit` body unchanged), scoped to the same literal room id `'demo'`, with no schema/migration side effects. `REMOTE_DATABASE_URL` was never needed or handled.
 
-```bash
-psql "$REMOTE_DATABASE_URL" \
-  -v ON_ERROR_STOP=1 \
-  -f supabase/production-demo-bootstrap.sql
-```
-
-- [ ] `REMOTE_DATABASE_URL` was supplied only in the operator shell.
-- [ ] `REMOTE_DATABASE_URL` was not committed.
-- [ ] Full `supabase/seed.sql` was **not** run against hosted production.
-- [ ] Production demo bootstrap completed successfully.
+- [x] `REMOTE_DATABASE_URL` was supplied only in the operator shell. (N/A this run -- not used; see above.)
+- [x] `REMOTE_DATABASE_URL` was not committed. (N/A this run -- not used.)
+- [x] Full `supabase/seed.sql` was **not** run against hosted production. (Only the bootstrap file's own content was executed.)
+- [x] Production demo bootstrap completed successfully. (Verified immediately after: `select * from rooms where id = 'demo'` and the participants query both return the expected seeded state -- see next section.)
 
 ## Hosted smoke test
 
-Use a fresh/incognito browser.
+Use a fresh/incognito browser. **Everything below needs an actual browser and could not be verified through the tools available to me; the two items marked `[x]` were instead confirmed by direct read-only SQL against the hosted project immediately after applying the bootstrap, as the closest available proxy.**
 
 - [ ] `/room/demo` loads.
 - [ ] Anonymous session succeeds.
 - [ ] Founder/Product Lead seat is claimed.
-- [ ] Engineer simulation is present.
-- [ ] Product Designer simulation is present.
-- [ ] Growth simulation is present.
-- [ ] Security Expert is present as advisory/expert.
+- [x] Engineer simulation is present. (DB: `demo-engineer`, `kind: simulation`, active.)
+- [x] Product Designer simulation is present. (DB: `demo-designer`, `kind: simulation`, active.)
+- [x] Growth simulation is present. (DB: `demo-marketing` / "Growth Lead", `kind: simulation`, active.)
+- [x] Security Expert is present as advisory/expert. (DB: `demo-security`, `kind: expert`, `decision_role: advisor`, active.)
 - [ ] WebMCP meeting tools register.
 - [ ] Reset Demo works.
 - [ ] Reset returns the demo to a clean initial state.
@@ -242,10 +236,10 @@ Interpret before modifying more code:
 
 ### P0 exit gate
 
-- [ ] Hosted demo works from fresh incognito.
-- [ ] Reset works.
-- [ ] Normal create/join/realtime works.
-- [ ] No new production bootstrap implementation was created.
+- [ ] Hosted demo works from fresh incognito. (Blocking gap fixed -- the demo room now exists and is correctly seeded -- but the actual page load/WebMCP-registration/realtime behavior still needs a human with a real browser.)
+- [ ] Reset works. (Needs the browser pass above; the underlying `start_demo_scenario` function this reuses was exercised successfully by the bootstrap itself.)
+- [ ] Normal create/join/realtime works. (Unaffected by this change -- not independently re-verified this session.)
+- [x] No new production bootstrap implementation was created. (Ran the existing `supabase/production-demo-bootstrap.sql` verbatim; nothing new was written.)
 
 ---
 
@@ -261,12 +255,12 @@ A participant's agent should discover the meeting protocol through WebMCP immedi
 
 ### Tool-discovery behavior
 
-- [ ] Audit every legitimate meeting action and map it to a WebMCP tool.
-- [ ] Normal collaboration tools are not unnecessarily hidden merely because the current phase is different.
-- [ ] Calling a normal tool in the wrong phase returns a structured refusal explaining the current phase and next requirement.
-- [ ] Truly privileged tools remain authority-gated.
-- [ ] Tool descriptions clearly tell the agent when/why to use each capability.
-- [ ] Tool descriptions do not require the agent to inspect DOM/UI state.
+- [x] Audit every legitimate meeting action and map it to a WebMCP tool. (Every `RoomProvider` action now has a registered tool; `mark_my_input_ready` was the one gap -- see below.)
+- [x] Normal collaboration tools are not unnecessarily hidden merely because the current phase is different. (Unchanged from existing design -- each participant tool is gated only by its own phase, not by an unrelated one.)
+- [x] Calling a normal tool in the wrong phase returns a structured refusal explaining the current phase and next requirement. (Pre-existing `WRONG_PHASE`/`STALE_ROOM_STATE` refusals via `prepareMutation`; unchanged.)
+- [x] Truly privileged tools remain authority-gated. (Unchanged.)
+- [x] Tool descriptions clearly tell the agent when/why to use each capability. (Verified against the existing catalog; `mark_my_input_ready`'s new description follows the same pattern.)
+- [x] Tool descriptions do not require the agent to inspect DOM/UI state. (Unchanged.)
 
 ### Missing readiness tool
 
@@ -276,11 +270,11 @@ Implement:
 mark_my_input_ready
 ```
 
-- [ ] Tool is discoverable to active claimed human participants.
-- [ ] Tool calls the same canonical operation as the existing visible readiness UI.
-- [ ] Tool cannot mark another participant ready.
-- [ ] Server-side actor identity still derives from authenticated session.
-- [ ] Tool returns the resulting room version.
+- [x] Tool is discoverable to active claimed human participants. (`asClaimedInPhase("input")` in `src/webmcp/capability-context.ts`.)
+- [x] Tool calls the same canonical operation as the existing visible readiness UI. (Calls `markMyInputReady` from `src/domain/rooms/operations.ts`, the same operation the manual "Ready" control and `POST /api/rooms/:roomId/ready` use.)
+- [x] Tool cannot mark another participant ready. (No input schema at all -- the acting seat is derived server-side from `auth.uid()`.)
+- [x] Server-side actor identity still derives from authenticated session. (Unchanged SQL function.)
+- [x] Tool returns the resulting room version. (Via the shared `executeToolSafely`/`ActionResult` wrapper, same as every other tool.)
 
 ### Final approval tool naming
 
@@ -307,24 +301,24 @@ return HUMAN_CONFIRMATION_REQUIRED
 human reviews and confirms visibly
 ```
 
-- [ ] Existing autonomous approval bypass does not exist.
-- [ ] Human confirmation remains required.
-- [ ] Tool is available only to a legitimate required approver.
-- [ ] Old overlapping WebMCP name is removed/aliased in a way that does not create duplicate confusing tools.
-- [ ] Tests explicitly prove the agent cannot complete human confirmation itself.
+- [x] Existing autonomous approval bypass does not exist. (Unchanged: the tool still only ever returns `HUMAN_CONFIRMATION_REQUIRED`.)
+- [x] Human confirmation remains required. (Unchanged.)
+- [x] Tool is available only to a legitimate required approver. (Unchanged `isRequiredApprover` gate, just renamed.)
+- [x] Old overlapping WebMCP name is removed/aliased in a way that does not create duplicate confusing tools. (`request_final_decision_confirmation` renamed in place to `approve_final_decision` everywhere -- tool definition, capability table, tests, evals, Playwright spec, docs. No alias, no duplicate.)
+- [x] Tests explicitly prove the agent cannot complete human confirmation itself. (Pre-existing `participant-authority.test.ts` coverage -- "never asks the domain to treat a WebMCP call as human-confirmed", "opens the Decision workspace when requesting final decision confirmation" -- carried over under the new name.)
 
 ### A1 tests
 
-- [ ] Capability-matrix unit tests updated.
-- [ ] Tool-catalog tests updated.
-- [ ] `mark_my_input_ready` WebMCP test added.
-- [ ] `approve_final_decision` human-gate test added.
-- [ ] Stale captured tool references still fail server-side after authority/phase changes.
+- [x] Capability-matrix unit tests updated. (`tests/webmcp/registration.test.ts`.)
+- [x] Tool-catalog tests updated. (`tests/webmcp/registration.test.ts`, `tests/webmcp/prompt-injection.test.ts`, `tests/webmcp/tool-selection-evals.test.ts`, `tests/webmcp-evals/tool-selection.json`.)
+- [x] `mark_my_input_ready` WebMCP test added. (Registration/lifecycle coverage in `registration.test.ts`; authority/wiring coverage in `participant-authority.test.ts`; a discovery eval in `tool-selection.json`.)
+- [x] `approve_final_decision` human-gate test added. (Existing human-gate tests preserved under the new name; no behavior change.)
+- [x] Stale captured tool references still fail server-side after authority/phase changes. (Generic `participant-authority.test.ts` proof -- "forwards a domain refusal unchanged" -- covers every tool including the two touched here; unchanged mechanism.)
 
 ### A1 exit gate
 
-- [ ] A real browser agent can discover how to share input, mark ready, propose, deliberate, align, review, and request final approval from WebMCP alone.
-- [ ] No DOM inspection is necessary to discover those actions.
+- [ ] A real browser agent can discover how to share input, mark ready, propose, deliberate, align, review, and request final approval from WebMCP alone. (Structurally true; requires the manual Chrome WebMCP inspector pass in `docs/webmcp-demo.md` to confirm.)
+- [ ] No DOM inspection is necessary to discover those actions. (Same -- pending the manual pass above.)
 
 ---
 
@@ -351,53 +345,53 @@ What should I do next?
 
 ### Input phase
 
-- [ ] Phase goal included.
-- [ ] Each active human's readiness included.
-- [ ] Whether each participant has shared input is included.
-- [ ] `waitingFor` identifies participants not ready.
-- [ ] `canAdvance` is derived canonically.
-- [ ] Recommended next action is explicit.
+- [x] Phase goal included. (`phaseGoal`.)
+- [x] Each active human's readiness included. (`input.readiness[]`.)
+- [x] Whether each participant has shared input is included. (`readiness[].hasSharedInput`.)
+- [x] `waitingFor` identifies participants not ready.
+- [x] `canAdvance` is derived canonically. (Mirrors `advance_room_phase`'s exact joined/positioned/ready prerequisites for the `input -> proposals` transition -- see `supabase/migrations/20260830120000_owner_lifecycle_and_meeting_lock.sql`.)
+- [x] Recommended next action is explicit.
 
 ### Proposals phase
 
-- [ ] Active/candidate proposal status included.
-- [ ] Who proposed the current option is included.
-- [ ] Whether the phase has enough state to advance is included.
+- [x] Active/candidate proposal status included. (`proposals.hasActiveProposal`, `activeProposalId`, `activeProposalTitle`.)
+- [x] Who proposed the current option is included. (`proposals.proposedByParticipantId`.)
+- [x] Whether the phase has enough state to advance is included. (`canAdvance` = `hasActiveProposal`, matching the DB's only real gate for this transition.)
 
 ### Deliberation phase
 
-- [ ] Blocking concern count included.
-- [ ] Warning count included.
-- [ ] Concern ownership/raiser included.
-- [ ] `canAdvance` reflects unresolved blockers.
+- [x] Blocking concern count included. (`deliberation.blockingCount`.)
+- [x] Warning count included. (`deliberation.warningCount`.)
+- [x] Concern ownership/raiser included. (`deliberation.openConflicts[].raisedByName`/`raisedByActorId`/`raisedByActorType`.)
+- [x] `canAdvance` reflects unresolved blockers. (`blockingCount === 0`.)
 
 ### Alignment phase
 
-- [ ] Every active human is represented.
-- [ ] Shared/not-shared alignment status is explicit.
-- [ ] Current alignment choice is included when shared.
-- [ ] Missing alignments are explicit.
+- [x] Every active human is represented. (`alignment.alignment[]`, one entry per active human.)
+- [x] Shared/not-shared alignment status is explicit. (`alignment[].shared`.)
+- [x] Current alignment choice is included when shared. (`alignment[].choice`.)
+- [x] Missing alignments are explicit. (`alignment.missingParticipantIds`, also surfaced in `waitingFor`.) Note: per the product rule that alignment is informative and never mechanically gates a transition, `canAdvance` here is **not** false just because alignment is missing -- it mirrors `apply_room_phase_entry`'s real `voting -> approval` gate (active proposal, no open blocking conflict). `waitingFor` still names who hasn't shared, and `recommendedNextAction` says explicitly that this is a recommendation, not a hard block.
 
 ### Approval phase
 
-- [ ] Frozen decision hash included.
-- [ ] Required approvers included.
-- [ ] Completed approvers included.
-- [ ] Missing approvers included.
-- [ ] Human-confirmation requirement is explicit.
+- [x] Frozen decision hash included. (`approval.decisionHash`.)
+- [x] Required approvers included. (`approval.requiredApproverIds`.)
+- [x] Completed approvers included. (`approval.completedApproverIds`.)
+- [x] Missing approvers included. (`approval.missingApproverIds`, also in `waitingFor` by name.)
+- [x] Human-confirmation requirement is explicit. (`approval.humanConfirmationRequired: true`, always.)
 
 ### A2 tests
 
-- [ ] Coordination status tests for every phase.
-- [ ] Multi-participant readiness test.
-- [ ] Missing alignment test.
-- [ ] Missing approval test.
-- [ ] Removed participants do not count as pending work.
+- [x] Coordination status tests for every phase. (`tests/webmcp/coordination.test.ts`.)
+- [x] Multi-participant readiness test.
+- [x] Missing alignment test.
+- [x] Missing approval test.
+- [x] Removed participants do not count as pending work. (Explicit test; `activeHumans()` filters `status === "active"`.)
 
 ### A2 exit gate
 
-- [ ] An agent can always answer "what are we waiting for?" using one WebMCP read.
-- [ ] An agent never needs to navigate the 3D scene to determine whether the meeting advanced.
+- [x] An agent can always answer "what are we waiting for?" using one WebMCP read. (`get_coordination_status`, available in every phase incl. before a seat is claimed.)
+- [ ] An agent never needs to navigate the 3D scene to determine whether the meeting advanced. (Structurally true; pending the same manual Chrome WebMCP inspector pass noted under A1.)
 
 ---
 
@@ -421,31 +415,31 @@ Input:
 
 Return relevant canonical changes after the supplied observed room version:
 
-- [ ] participant joined/admitted;
-- [ ] participant removed;
-- [ ] role changed;
-- [ ] decision authority changed;
-- [ ] input/position shared;
-- [ ] readiness changed;
-- [ ] proposal created;
-- [ ] proposal revised/superseded;
-- [ ] concern raised;
-- [ ] concern resolved;
-- [ ] trade-off created;
-- [ ] alignment changed;
-- [ ] phase changed;
-- [ ] Security Expert finding raised/resolved/dispositioned;
-- [ ] decision candidate frozen;
-- [ ] approval recorded;
-- [ ] meeting finalized.
+- [x] participant joined/admitted; (`participant_joined` from `participant.seat_claimed`, `participant_admitted` from `join.admitted`.)
+- [x] participant removed; (`participant_removed` from `participant.removed`.)
+- [ ] role changed; (No such mutation exists in the codebase yet -- there is no operation that changes a human-readable `role` like "CTO" after admission. Nothing to map today; `ACTION_TYPE` in `src/domain/rooms/room-updates.ts` will need one row added once A6 introduces that operation. `decisionRole` changes, the other half of "role," are fully covered below.)
+- [x] decision authority changed; (`decision_role_changed` from `participant.decision_role_changed`; ownership transfer also covered as `ownership_transferred`.)
+- [x] input/position shared; (`input_shared` from `position.added`.)
+- [x] readiness changed; (`readiness_changed` from `participant.input_ready`.)
+- [x] proposal created; (`proposal_submitted` from `proposal.submitted`.)
+- [ ] proposal revised/superseded; (A revised proposal from `respond_to_concern` is created as a new `proposal.submitted` row referencing the original via `parentProposalId` -- it surfaces as another `proposal_submitted` update, and `tradeoff_proposed` covers the trade-off half of the same action. There is no distinct "superseded" audit action in the schema to project separately; left open rather than claiming coverage that does not exist.)
+- [x] concern raised; (`concern_raised` from `objection.raised`.)
+- [x] concern resolved; (`concern_resolved` from `conflict.resolved`.)
+- [x] trade-off created; (`tradeoff_proposed` from `tradeoff.proposed`.)
+- [x] alignment changed; (`alignment_changed` from `alignment.expressed`/`alignment.updated`.)
+- [x] phase changed; (`phase_changed` from `room.phase_advanced`/`demo.phase_advanced`.)
+- [x] Security Expert finding raised/resolved/dispositioned; (`expert_finding_raised`/`expert_finding_resolved`/`expert_finding_dispositioned`.)
+- [x] decision candidate frozen; (Carried on the same `phase_changed` update that enters `approval` -- `decisionHash` is populated from that event's own `result.decisionHash`, matching exactly what `apply_room_phase_entry` froze; not a separate audit action, so not a separate update type.)
+- [x] approval recorded; (`approval_recorded` from `approval.recorded`.)
+- [x] meeting finalized. (`meeting_finalized` from `decision.finalized`.)
 
 ### Implementation constraints
 
-- [ ] Use existing canonical room version/audit history.
-- [ ] Do not create a second event store.
-- [ ] Returned participant-authored text remains identified as untrusted room content.
-- [ ] Tool returns current room version.
-- [ ] Tool clearly indicates when no new updates exist.
+- [x] Use existing canonical room version/audit history. (`RoomState.activity`, already backed by `public.audit_events` -- no new table or column.)
+- [x] Do not create a second event store. (Confirmed: `computeRoomUpdates` only filters/labels `room.activity`.)
+- [x] Returned participant-authored text remains identified as untrusted room content. (Whole tool marked `untrustedContentHint: true`, same convention as `get_alignment`/`get_current_decision`/`get_waiting_participants`.)
+- [x] Tool returns current room version. (`data.currentRoomVersion` and the wrapper's own `roomVersion`.)
+- [x] Tool clearly indicates when no new updates exist. (`updateCount: 0`, `updates: []`, and an explicit "No new updates since version N." message.)
 
 ### Optional if time permits
 
@@ -455,26 +449,14 @@ Implement a bounded:
 wait_for_room_change
 ```
 
-Possible input:
-
-```json
-{
-  "afterVersion": 27,
-  "maxWaitSeconds": 15
-}
-```
-
-- [ ] Short bounded wait only.
-- [ ] No long-running/background agent infrastructure.
-- [ ] Timeout produces a normal "no change yet" response.
-- [ ] Result uses the same update projection as `get_room_updates`.
+- [ ] **Deferred.** Not implemented in this slice. The checklist's own cut list (§14) lists this as the first thing to cut if time is short, and it needs either an injectable clock/poll interval or a live Supabase stack to test correctly (a real multi-second `sleep` loop is not something to leave un-unit-tested) -- both are a reasonable follow-up, not a blocker for A3's exit gate below, which does not depend on it.
 
 ### A3 exit gate
 
-- [ ] Agent A acts and records room version.
-- [ ] Agent B acts.
-- [ ] Agent A requests updates since its previous version.
-- [ ] Agent A receives Agent B's relevant changes without DOM inspection.
+- [x] Agent A acts and records room version. (Demonstrated in `tests/webmcp/room-updates.test.ts`'s "returns Agent B's relevant change to Agent A" test.)
+- [x] Agent B acts.
+- [x] Agent A requests updates since its previous version. (`get_room_updates` with `sinceVersion`.)
+- [x] Agent A receives Agent B's relevant changes without DOM inspection. (Verified in the same test; broader manual two-agent verification still pending the live gate in §10.)
 
 ---
 
@@ -495,46 +477,48 @@ advance_discussion
 request_team_alignment
 ```
 
-- [ ] These actions are not owner-only merely because they progress the workflow.
-- [ ] Canonical prerequisites still determine success.
-- [ ] No participant can bypass missing readiness/blockers/alignment.
-- [ ] Actor identity remains authenticated and auditable.
+- [x] These actions are not owner-only merely because they progress the workflow. (`advance_room_phase` now derives the caller's own participant row and only requires `decision_role = decision_maker` for the `voting -> approval` transition; every other transition just requires an active claimed human. `supabase/migrations/20260831120000_procedural_progression_authority.sql`.)
+- [x] Canonical prerequisites still determine success. (The joined/positioned/ready count checks before `proposals`, the active-proposal check before `deliberation`, and `apply_room_phase_entry`'s active-proposal/no-blocking-conflict checks before `voting`/`approval` are byte-for-byte unchanged -- only the authorization gate above them changed.)
+- [x] No participant can bypass missing readiness/blockers/alignment. (Same prerequisite checks; proven in `tests/domain/procedural-progression-authority.test.ts`'s "refuses Proposals -> Deliberation without an active proposal even for a legitimate caller.")
+- [x] Actor identity remains authenticated and auditable. (`room.phase_advanced` audit events are still attributed to the real caller's own participant id, not the owner's -- proven in "attributes the phase-advance audit event to the calling contributor, not the owner.")
 
 ### Decision-maker actions
 
 `decisionRole = decision_maker` should control legitimate decision-review authority.
 
-- [ ] `review_final_decision` is allowed to an active legitimate decision maker when prerequisites are satisfied.
-- [ ] `approve_final_decision` is available only when caller is a required approver for the frozen candidate.
-- [ ] Final approval still requires visible human confirmation.
+- [x] `review_final_decision` is allowed to an active legitimate decision maker when prerequisites are satisfied. (Both at the DB layer -- `actor_decision_role <> 'decision_maker'` refusal -- and the WebMCP capability layer -- `capability-context.ts`'s `review_final_decision` predicate now checks `decisionRole === "decision_maker"` instead of `isOwner`.)
+- [x] `approve_final_decision` is available only when caller is a required approver for the frozen candidate. (Unchanged from A1 -- `isRequiredApprover` gate.)
+- [x] Final approval still requires visible human confirmation. (Unchanged -- `HUMAN_CONFIRMATION_REQUIRED` flow untouched by this slice.)
 
 ### Keep genuine owner administration owner-only
 
-- [ ] `get_waiting_participants`
-- [ ] `admit_participant`
-- [ ] `reject_participant`
-- [ ] `lock_meeting`
-- [ ] `unlock_meeting`
-- [ ] `remove_participant`
-- [ ] `transfer_ownership`
-- [ ] decision-policy mutation
-- [ ] participant authority/role assignment
-- [ ] enabling the organizational specialist/Security Expert
+- [x] `get_waiting_participants`
+- [x] `admit_participant`
+- [x] `reject_participant`
+- [x] `lock_meeting`
+- [x] `unlock_meeting`
+- [x] `remove_participant`
+- [x] `transfer_ownership`
+- [x] decision-policy mutation (`set_decision_policy`)
+- [x] participant authority/role assignment (`set_participant_decision_role`)
+- [x] enabling the organizational specialist/Security Expert (`enable_security_expert`)
+
+(All ten still use `is_room_organizer` / `asOwnerNotFinalized`, completely untouched by this migration -- proven in `registration.test.ts`'s "withholds genuinely owner-only administration from a non-owner claimed participant" and "still withholds true owner administration from a non-owner decision-maker.")
 
 ### A4 tests
 
-- [ ] Contributor cannot perform true owner administration.
-- [ ] Non-owner active human can initiate allowed procedural advancement.
-- [ ] Advancement fails when prerequisites are missing.
-- [ ] Decision maker can enter final decision review when valid.
-- [ ] Contributor cannot freeze/approve a decision when not authorized.
-- [ ] Stale tools remain safely rejected after authority changes.
+- [x] Contributor cannot perform true owner administration. (`registration.test.ts`.)
+- [x] Non-owner active human can initiate allowed procedural advancement. (`procedural-progression-authority.test.ts` against real Postgres, plus `registration.test.ts` at the WebMCP capability layer.)
+- [x] Advancement fails when prerequisites are missing. (Same file, "refuses Proposals -> Deliberation without an active proposal.")
+- [x] Decision maker can enter final decision review when valid. ("allows the same participant to enter Decision review once promoted to decision-maker.")
+- [x] Contributor cannot freeze/approve a decision when not authorized. ("refuses a contributor (no decision authority) entering Decision review.")
+- [x] Stale tools remain safely rejected after authority changes. (Structural, not newly tested this slice: registration only gates discovery, and every mutation still independently re-derives authority server-side on every call -- the same architecture A1's "stale captured tool references still fail server-side" already covers generically for every tool, this one included.)
 
 ### A4 exit gate
 
-- [ ] Being a contributor no longer blocks normal collaboration/progression unnecessarily.
-- [ ] Owner status remains meaningful for administration.
-- [ ] Decision-maker status remains meaningful for consequential decision actions.
+- [x] Being a contributor no longer blocks normal collaboration/progression unnecessarily. (Verified end to end against real Postgres.)
+- [x] Owner status remains meaningful for administration. (The ten owner-only actions above are completely untouched.)
+- [x] Decision-maker status remains meaningful for consequential decision actions. (Entering decision review now requires it, for anyone including the owner.)
 
 ---
 
@@ -545,20 +529,31 @@ Add/standardize structured failure states where appropriate.
 Required semantics:
 
 ```text
-WAITING_FOR_PARTICIPANTS
-WAITING_FOR_ALIGNMENT
-UNRESOLVED_BLOCKING_CONFLICT
-HUMAN_CONFIRMATION_REQUIRED
+WAITING_FOR_PARTICIPANTS   -- [x] added; see below
+WAITING_FOR_ALIGNMENT      -- [ ] deliberately not added; see below
+UNRESOLVED_BLOCKING_CONFLICT  -- already existed
+HUMAN_CONFIRMATION_REQUIRED   -- already existed
 ```
 
 Use existing codes where equivalent; add new canonical codes only when they materially improve agent understanding.
 
+`WAITING_FOR_PARTICIPANTS` replaces the generic `VALIDATION_ERROR` the three
+`input -> proposals` readiness prerequisites (joined / positioned / ready)
+previously returned -- a genuine, frequently-hit "waiting for people" state
+distinct from a malformed request. `WAITING_FOR_ALIGNMENT` is **not**
+wired to anything: alignment never mechanically gates any phase transition
+anywhere in this schema (confirmed by rereading `apply_room_phase_entry` --
+`voting -> approval` only checks for an active proposal and no open
+blocking conflict). Inventing a call site for `WAITING_FOR_ALIGNMENT` would
+misrepresent that invariant rather than clarify it, so this code was not
+added to `actionErrorCodeSchema` at all. `supabase/migrations/20260831130000_waiting_for_participants_semantics.sql`.
+
 ### Every refusal should explain
 
-- [ ] Why the action cannot happen.
-- [ ] What/who is still pending.
-- [ ] What the agent/user should do next.
-- [ ] Current room version.
+- [x] Why the action cannot happen. (Already true of every existing refusal; unchanged.)
+- [x] What/who is still pending. (New for the readiness prerequisites: `error.details.waitingParticipantIds` names exactly which required participants are still pending, instead of only a prose count.)
+- [x] What the agent/user should do next. (`recovery` text; unchanged pattern, still present on every `WAITING_FOR_PARTICIPANTS` refusal.)
+- [x] Current room version. (Every `ActionResult` failure already carries `roomVersion`; unchanged.)
 
 Example:
 
@@ -575,14 +570,14 @@ Example:
 
 If `ActionResult.error` needs JSON-safe `details`:
 
-- [ ] Developer A updates the canonical contract.
-- [ ] All parsers/tests updated.
-- [ ] Developer B does not duplicate the type.
+- [x] Developer A updates the canonical contract. (`ActionResult.error.details?: JsonValue` and the matching `actionResultSchema` field, `src/contracts/room.ts`.)
+- [x] All parsers/tests updated. (The repository's Zod parse is the single chokepoint -- `SupabaseRoomRepository`'s `actionResultSchema(...).parse(data)` -- so no separate parser needed updating. `action-feedback.tsx`'s exhaustive `Record<ActionErrorCode, string>` maps got the required new entries, caught by `tsc --noEmit`. New tests: `tests/contracts/room.test.ts`'s "A5: ActionResult.error.details", `tests/domain/waiting-for-participants.test.ts` proving the field survives a real Postgres round trip end to end.)
+- [x] Developer B does not duplicate the type. (Nothing UI-side redefines `ActionResult` or `ActionErrorCode`; `action-feedback.tsx` imports both from `@/contracts/room`.)
 
 ### A5 exit gate
 
-- [ ] A natural-language agent can correctly distinguish "I am not authorized" from "the team is not ready yet."
-- [ ] Failed phase progression never leaves the agent guessing.
+- [x] A natural-language agent can correctly distinguish "I am not authorized" from "the team is not ready yet." (`NOT_AUTHORIZED` and `WAITING_FOR_PARTICIPANTS` are now genuinely distinct codes for genuinely distinct situations, proven side by side in `tests/domain/procedural-progression-authority.test.ts`.)
+- [x] Failed phase progression never leaves the agent guessing. (Every readiness refusal now names exactly who is still pending, not just a count.)
 
 ---
 
@@ -610,12 +605,12 @@ Target owner intent:
 "Admit Deniz as CTO and give him decision authority."
 ```
 
-- [ ] Joiner's requested role is treated as requested metadata, not unquestioned authority.
-- [ ] Owner can assign/confirm the participant's human-readable role.
-- [ ] Owner can assign `decision_maker` or `contributor` where allowed.
-- [ ] Ownership is not implicitly transferred.
-- [ ] Expert/simulation actors cannot be promoted into human authority.
-- [ ] Changes are audited.
+- [x] Joiner's requested role is treated as requested metadata, not unquestioned authority. (`admit_join_request`'s new `p_role`/`p_decision_role` overrides, when supplied, always win over `request_row.role`/the previous hardcoded `contributor`. `supabase/migrations/20260831140000_explicit_role_and_decision_authority.sql`.)
+- [x] Owner can assign/confirm the participant's human-readable role. (At admission via `admit_participant`'s `role` field, or after admission via `configure_participant`'s `role` field.)
+- [x] Owner can assign `decision_maker` or `contributor` where allowed. (Same two paths; both reuse `assignableDecisionRoleSchema`, so `advisor` is never reachable through either.)
+- [x] Ownership is not implicitly transferred. (Proven explicitly: "does not implicitly transfer ownership when admitting a decision-maker" in `tests/domain/explicit-role-and-decision-authority.test.ts`.)
+- [x] Expert/simulation actors cannot be promoted into human authority. (`configure_participant` rejects any target with `kind <> 'human'` with `NOT_AUTHORIZED`; proven against a real enabled Security Expert participant in "refuses to configure the Security Expert.")
+- [x] Changes are audited. (`join.admitted`'s `sanitizedInput` now includes `role`/`decisionRole` when admitting; `configure_participant` writes its own `participant.configured` audit event with `role`/`decisionRole` from/to values.)
 
 ### WebMCP owner tool
 
@@ -624,7 +619,7 @@ Prefer one clear configuration capability rather than many ambiguous controls, i
 Possible tool:
 
 ```text
-configure_participant
+configure_participant   -- [x] implemented, exactly this name and these fields
 ```
 
 Possible fields:
@@ -635,68 +630,72 @@ role
 decisionRole
 ```
 
-- [ ] No arbitrary acting participant ID is accepted.
-- [ ] Caller authority is always derived server-side.
-- [ ] Ownership transfer remains a separate sensitive operation.
+- [x] No arbitrary acting participant ID is accepted. (`participantId` is always the *target*; the owner's own identity is always derived from `auth.uid()`, exactly like every other owner-only mutation in this codebase -- proven by the `forbidden` identity-field scan in `tests/webmcp/participant-authority.test.ts` covering the whole catalog, `configure_participant` included.)
+- [x] Caller authority is always derived server-side. (`is_room_organizer`-equivalent inline owner lookup in `configure_participant`, matching `set_participant_decision_role`'s exact pattern.)
+- [x] Ownership transfer remains a separate sensitive operation. (`transfer_ownership` untouched; `configure_participant` never writes `meeting_role` or `rooms.owner_participant_id`.)
+
+`set_participant_decision_role` was kept alongside `configure_participant` rather than removed: it already existed, is well-tested and documented, and `configure_participant` is a strict superset (decision role + role) rather than a competing, ambiguous alternative -- removing it would have been unnecessary churn for no discoverability cost (`configure_participant`'s description makes clear when to reach for it instead).
 
 ### A6 tests
 
-- [ ] Owner admits participant as CTO contributor.
-- [ ] Owner admits/configures participant as CTO decision maker.
-- [ ] Decision-maker status changes tool availability/authority correctly.
-- [ ] Non-owner cannot assign roles/decision authority.
-- [ ] Expert/simulation cannot become human decision maker through this path.
+- [x] Owner admits participant as CTO contributor. ("admits with the owner's explicit role and contributor decision role by default.")
+- [x] Owner admits/configures participant as CTO decision maker. (Both admission-time and post-admission-via-`configure_participant` paths tested.)
+- [x] Decision-maker status changes tool availability/authority correctly. (Already proven in A4's `procedural-progression-authority.test.ts`; A6 additionally proves a participant can be admitted *directly* as decision-maker in one call, without a separate promotion step.)
+- [x] Non-owner cannot assign roles/decision authority. ("refuses a non-owner caller" for `configure_participant`; admission's owner check is the same `ownerRoomForJoinRequestManagement` gate every join-request action already used.)
+- [x] Expert/simulation cannot become human decision maker through this path. ("refuses to configure the Security Expert.")
 
 ### A6 exit gate
 
-- [ ] Every human participant has an explicit visible role.
-- [ ] Every human participant has explicit decision authority.
-- [ ] Owner's agent can understand and perform legitimate authority delegation.
+- [x] Every human participant has an explicit visible role. (Was already true structurally -- `role` is a required, non-null column set at admission; A6 makes it the *owner's* explicit choice rather than only the joiner's self-report.)
+- [x] Every human participant has explicit decision authority. (Was already true structurally -- `decisionRole` defaults to `contributor`; A6 lets the owner set it explicitly, including at admission time.)
+- [x] Owner's agent can understand and perform legitimate authority delegation. ("Admit Deniz as CTO and give him decision authority" now maps to exactly one tool call.)
 
 ---
 
 ## A7 — Judge-Led Demo Behavior
 
+**Finding: this was already substantially built, in an earlier slice (the migration comments call it "Slice 6"), not something this pass had to construct from scratch.** `run_solo_demo_orchestration` reacts to the *actual text* of whichever proposal is active via `demo_proposal_text` (title+summary+rationale+expectedOutcomes, normalized) and regex predicates (`demo_is_ambitious_proposal`, `demo_needs_accessibility_objection`, `demo_threatens_deadline`, `demo_revision_is_acceptable`, all in `supabase/migrations/20260828190000_solo_demo_orchestration.sql`) -- never a hardcoded proposal id or a check against the seeded proposal specifically. This pass's job was to verify that claim rather than assume it, and it did not hold up as an *idle* claim -- see the new A7 exit-gate test below, which is the first thing in this repository to actually exercise a second, structurally different proposal end to end.
+
 ### Goal
 
 Keep deterministic participant constraints/reactions, but remove dependence on one fixed meeting script.
 
-Keep stable demo actors:
+Keep stable demo actors: (all confirmed present, unchanged, in the current `supabase/seed.sql` / `start_demo_scenario` fixture)
 
-- [ ] Founder / CEO or Product Lead human judge.
-- [ ] Engineer simulation.
-- [ ] Product Designer simulation.
-- [ ] Growth simulation.
-- [ ] Security Expert advisory actor.
+- [x] Founder / CEO or Product Lead human judge. (`demo-product`.)
+- [x] Engineer simulation. (`demo-engineer`.)
+- [x] Product Designer simulation. (`demo-designer`.)
+- [x] Growth simulation. (`demo-marketing`, "Marketing Lead"/Growth role.)
+- [x] Security Expert advisory actor. (`demo-security`, `kind: expert`, `decisionRole: advisor`.)
 
-Keep stable constraint domains:
+Keep stable constraint domains: (unchanged; each still has a dedicated regex predicate)
 
-- [ ] engineering capacity;
-- [ ] reuse/existing auth boundaries;
-- [ ] accessibility/interaction consistency;
-- [ ] launch timing;
-- [ ] privacy/security.
+- [x] engineering capacity; (`demo_is_ambitious_proposal` / `constraint-engineering-capacity`.)
+- [x] reuse/existing auth boundaries; (`demo_revision_is_acceptable`'s auth-preservation clause.)
+- [x] accessibility/interaction consistency; (`demo_needs_accessibility_objection` / `constraint-design-accessibility`.)
+- [x] launch timing; (`demo_threatens_deadline` / `constraint-marketing-date`.)
+- [x] privacy/security. (Security Expert's own deterministic classification, unchanged this slice.)
 
 ### Remove rigid meeting path
 
-- [ ] Judge can introduce a new proposal through normal WebMCP.
-- [ ] Simulations react to the actual active proposal/current state.
-- [ ] Security review analyzes the actual active proposal.
-- [ ] Demo does not require the original seeded proposal to be the only viable path.
-- [ ] Demo does not silently auto-finalize.
-- [ ] Human decision gate remains intact.
+- [x] Judge can introduce a new proposal through normal WebMCP. (`suggest_option`, unconditionally available in Proposals to any claimed participant -- no proposal-id gate anywhere in its path.)
+- [x] Simulations react to the actual active proposal/current state. (Confirmed by reading `demo_proposal_text`/the four predicate functions -- they operate on `p_proposal_id`'s live row content, not a literal id comparison -- and empirically: the new test's "safe" proposal, textually unrelated to the seeded one, correctly triggers zero objections.)
+- [x] Security review analyzes the actual active proposal. (`security_expert_classify` reads the active proposal's own text the same way, per `docs/webmcp-demo.md`'s existing description; unchanged this slice.)
+- [x] Demo does not require the original seeded proposal to be the only viable path. (Proven: the new test never touches `seed-proposal-onboarding-v1` at all -- an entirely judge-authored proposal runs the full protocol to finalization.)
+- [x] Demo does not silently auto-finalize. (`run_solo_demo_orchestration`'s loop unconditionally stops -- `return action_success('Demo scenario is stable.', ...)` -- the instant `current_phase in ('approval', 'finalized')`; it never calls `approve_participant_final_decision` itself.)
+- [x] Human decision gate remains intact. (Same mechanism as every other room: `approve_participant_final_decision` requires `p_human_confirmed = true`, which only a real UI confirmation click sets -- nothing demo-specific bypasses it.)
 
 ### Keep reliability
 
-- [ ] Simulation reactions remain deterministic/rule-based enough for a judge demo.
-- [ ] Demo remains resettable.
-- [ ] Reset produces a clean judge-ready state.
-- [ ] No hidden fake UI state is introduced.
+- [x] Simulation reactions remain deterministic/rule-based enough for a judge demo. (Regex predicates + `demo_reactions`'s unique `(room_id, reaction_key)` idempotency guard, both unchanged.)
+- [x] Demo remains resettable. (`start_demo_scenario` / "Reset demo", unchanged.)
+- [x] Reset produces a clean judge-ready state. (Unchanged; re-verified by this slice's new test's own `beforeAll` reset.)
+- [x] No hidden fake UI state is introduced. (Nothing added this slice touches the UI layer at all -- A7 was a verification pass, not a UI change.)
 
 ### A7 exit gate
 
-- [ ] Two materially different judge-created proposals can both run through the protocol.
-- [ ] The demo no longer depends on memorizing the old exact prompt sequence.
+- [x] Two materially different judge-created proposals can both run through the protocol. (`tests/domain/supabase-operations.test.ts`'s existing "runs an idempotent solo-judge scenario" -- an ambitious rebuild proposal that triggers all three objections and needs the canned compromise revision -- alongside this slice's new `tests/domain/judge-led-demo-flexibility.test.ts` -- a deliberately unrelated, low-risk proposal that triggers *zero* objections and needs no revision at all. Both reach a finalized decision.)
+- [x] The demo no longer depends on memorizing the old exact prompt sequence. (Structurally true from the above; the human-facing prompt-script side of this claim is B5's territory, not Developer A's.)
 
 ---
 
@@ -712,54 +711,56 @@ It must derive from canonical finalized decision state.
 
 ### Required report content
 
-- [ ] meeting title;
-- [ ] meeting brief;
-- [ ] executive summary;
-- [ ] final decision;
-- [ ] rationale;
-- [ ] participant names;
-- [ ] participant human-readable roles;
-- [ ] meeting/decision authority;
-- [ ] key inputs;
-- [ ] constraints;
-- [ ] proposals considered;
-- [ ] concerns raised;
-- [ ] resolved concerns;
-- [ ] accepted trade-offs;
-- [ ] alignment;
-- [ ] dissent/warnings;
-- [ ] Security Expert advice/dispositions;
-- [ ] action items;
-- [ ] owners;
-- [ ] deadlines;
-- [ ] decision hash;
-- [ ] finalized timestamp;
-- [ ] concise provenance/audit summary.
+All fields live on `MeetingReport` (`src/contracts/room.ts`), computed by `computeMeetingReport` (`src/domain/rooms/report.ts`) from a finalized `RoomState` plus its `DecisionRecord`:
+
+- [x] meeting title; (`title`, from `room.title`.)
+- [x] meeting brief; (`brief`, from `room.brief`.)
+- [x] executive summary; (`executiveSummary` -- a deterministic template built only from the structured fields already in the report, never freeform/generated prose, so it's byte-for-byte reproducible from the same finalized state.)
+- [x] final decision; (`finalDecision: { title, summary }`.)
+- [x] rationale; (`rationale`.)
+- [x] participant names; (`participants[].name`, the full roster -- `room.participants` unchanged, active and removed alike.)
+- [x] participant human-readable roles; (`participants[].role`.)
+- [x] meeting/decision authority; (`participants[].meetingRole`/`decisionRole`, plus room-level `decisionPolicy`.)
+- [x] key inputs; (`keyInputs`, from `room.positions`.)
+- [x] constraints; (`constraints`, from `room.constraints`.)
+- [x] proposals considered; (`proposalsConsidered`, the full `room.proposals`, not only the winning one.)
+- [x] concerns raised; (`concernsRaised`, the full `room.conflicts`.)
+- [x] resolved concerns; (`resolvedConcerns`, the `status === "resolved"` subset.)
+- [x] accepted trade-offs; (`acceptedTradeoffs`, from `record.decision`.)
+- [x] alignment; (`alignment`, from `record.decision.alignments`.)
+- [x] dissent/warnings; (`dissent` and `unresolvedWarnings`, from `record.decision`.)
+- [x] Security Expert advice/dispositions; (`expertAdvice`, from `record.decision`.)
+- [x] action items; (`actionItems`.)
+- [x] owners; (`owners`.)
+- [x] deadlines; (`deadlines`.)
+- [x] decision hash; (`decisionHash`.)
+- [x] finalized timestamp; (`finalizedAt`.)
+- [x] concise provenance/audit summary. (`provenanceSummary: { totalEvents, byAction }` -- an event-count-by-action summary, deliberately not the full line-by-line trail; that stays available from the pre-existing `get_decision_record`/`DecisionRecord.provenance` for anyone who wants it.)
 
 ### WebMCP
 
 Expose:
 
 ```text
-get_final_report
+get_final_report   -- [x] implemented, exactly this name
 ```
 
-- [ ] Available to every active participant after finalization.
-- [ ] Report returned to different participants is semantically identical.
-- [ ] Decision hash is identical for every participant.
-- [ ] Participant-authored content remains correctly marked/untrusted where appropriate.
+- [x] Available to every active participant after finalization. (Same capability rule as the pre-existing `get_decision_record`: `inRoom(c) && c.isFinalized`.)
+- [x] Report returned to different participants is semantically identical. (Proven against real Postgres: `tests/domain/meeting-report.test.ts`'s "is byte-for-byte identical whichever finalized participant computes it" -- not just semantically equal, `toEqual` exact.)
+- [x] Decision hash is identical for every participant. (Same test.)
+- [x] Participant-authored content remains correctly marked/untrusted where appropriate. (Whole tool marked `untrustedContentHint: true`, same convention as every other tool that can surface participant-authored text.)
 
 ### A8 tests
 
-- [ ] Report cannot be read before finalization.
-- [ ] Final report includes dissent.
-- [ ] Final report includes expert advice.
-- [ ] Final report includes approvals/authority.
-- [ ] Two participants receive the same final decision hash/report basis.
+- [x] Report cannot be read before finalization. (WebMCP-layer: capability registration + "forwards the underlying WRONG_PHASE refusal unchanged before finalization" in `tests/webmcp/report.test.ts`. Domain-layer, against real Postgres: "refuses to compute a report before finalization" in `tests/domain/meeting-report.test.ts`.)
+- [x] Final report includes dissent. (Both the fixture-level and real-Postgres tests assert `report.dissent.length > 0` on a room where a participant actually recorded a `concern`-choice alignment.)
+- [x] Final report includes expert advice. (Fixture-level test asserts `expertAdvice` carries the resolved Security Expert finding through unchanged; real-Postgres coverage of Security Expert findings specifically already exists in `tests/domain/security-expert.test.ts` and `computeMeetingReport` just passes `record.decision.expertAdvice` through unchanged, so there is nothing report-specific left to prove there beyond the pass-through itself.)
+- [x] Final report includes approvals/authority. ("includes dissent, approvals/authority, and resolved concerns once finalized" in `tests/domain/meeting-report.test.ts`.)
+- [x] Two participants receive the same final decision hash/report basis. (Same "byte-for-byte identical" test as above.)
 
 ### A8 exit gate
 
-- [ ] Agents no longer reconstruct the final meeting outcome by combining many separate reads.
+- [x] Agents no longer reconstruct the final meeting outcome by combining many separate reads. (One `get_final_report` call now carries everything the checklist's own required-content list asks for.)
 
 ---
 
@@ -782,30 +783,30 @@ WebMCP   UI     PDF
 Target:
 
 ```text
-GET /api/rooms/:roomId/report.pdf
+GET /api/rooms/:roomId/report.pdf   -- [x] implemented, exactly this path
 ```
 
-- [ ] Authenticated access required.
-- [ ] Caller must have legitimate room access.
-- [ ] Finalized room required.
-- [ ] Response content type is `application/pdf`.
-- [ ] Suggested filename is stable and human-readable.
-- [ ] PDF contains the important report sections.
-- [ ] Decision hash appears in PDF.
-- [ ] No service credentials leak into browser code.
-- [ ] PDF generation dependency, if required, is added only by Developer A.
+- [x] Authenticated access required. (`authenticateRoomRequest` -- 401 with no/invalid bearer token, same helper every other route uses.)
+- [x] Caller must have legitimate room access. (`getFinalDecisionRecord`'s own RLS-backed `repository.getRoom` check -- an unrelated caller gets the same `VALIDATION_ERROR: Room not found` a nonexistent room would, never a distinct "forbidden" signal that would leak room existence.)
+- [x] Finalized room required. (`getFinalDecisionRecord` returns `WRONG_PHASE` -- mapped to HTTP 409 by the existing `actionResponse` helper -- before finalization; no separate check needed.)
+- [x] Response content type is `application/pdf`.
+- [x] Suggested filename is stable and human-readable. (A slug of the room title, e.g. `pdf-export-end-to-end-decision-report.pdf` -- deterministic from the title, never a random/opaque id.)
+- [x] PDF contains the important report sections. (Title, executive summary, final decision + rationale, meeting brief/policy, participants & authority, key inputs, constraints, proposals considered, concerns, accepted trade-offs, alignment, dissent/warnings, Security Expert advice, action items/owners/deadlines, approvals, and the provenance summary -- see `src/domain/rooms/report-pdf.ts`.)
+- [x] Decision hash appears in PDF. (Rendered both under the title and again in a closing "Provenance" line; proven by decompressing and hex-decoding the actual PDF content stream, not just checking the raw bytes -- `pdf-lib` Flate-compresses content and encodes drawn text as PDF hex-string literals, so a naive raw-byte substring check would have been a false negative. See `tests/webmcp/report-pdf.test.ts`'s `extractDecompressedText` helper.)
+- [x] No service credentials leak into browser code. (Server-only Route Handler; uses the caller's own bearer token via `createAuthenticatedServerClient`, exactly like every other route -- no service-role key touches this path at all.)
+- [x] PDF generation dependency, if required, is added only by Developer A. (`pdf-lib` -- pure JS/TS, no native bindings, MIT-licensed, works in the same Node runtime as every other route handler. Added by this session, which owns `package.json`/the lockfile per the ownership rules.)
 
 ### A9 tests
 
-- [ ] Unauthorized caller cannot download.
-- [ ] Non-finalized room cannot download final report.
-- [ ] Finalized participant can download.
-- [ ] PDF is non-empty/valid.
-- [ ] PDF report decision hash matches `get_final_report`.
+- [x] Unauthorized caller cannot download. (No bearer token -> 401; proven against real Postgres/auth in `tests/domain/report-pdf-route.test.ts`.)
+- [x] Non-finalized room cannot download final report. (409 `WRONG_PHASE`, same file.)
+- [x] Finalized participant can download. (200, `application/pdf`, same file -- for *both* the owner and the other admitted participant, not just one.)
+- [x] PDF is non-empty/valid. (`%PDF-` header + byte length checks in both the fixture-level renderer tests and the real-Postgres route test.)
+- [x] PDF report decision hash matches `get_final_report`. (The route test captures the exact `decisionHash` from the live `finalDecisionPreview` used to approve/finalize, then asserts the served PDF's decompressed content contains that exact string -- for both participants.)
 
 ### A9 exit gate
 
-- [ ] Every participant can obtain the same finalized report as an exportable PDF.
+- [x] Every participant can obtain the same finalized report as an exportable PDF. (Proven end to end against real Postgres: two independently admitted participants both download a 200 PDF containing the identical decision hash.)
 
 ---
 
@@ -1035,16 +1036,30 @@ Review this exact decision before approving.
 [ Approve decision ]
 ```
 
-- [ ] Camera/workspace moves to the Decision review surface when appropriate.
-- [ ] Exact frozen decision is visible.
-- [ ] Decision hash/identity is available in a non-intrusive way.
-- [ ] Human confirmation control is explicit.
-- [ ] Copy explains that human confirmation is deliberate.
-- [ ] UI does not imply the agent/WebMCP failed.
+- [x] Camera/workspace moves to the Decision review surface when appropriate.
+- [x] Exact frozen decision is visible.
+- [x] Decision hash/identity is available in a non-intrusive way.
+- [x] Human confirmation control is explicit.
+- [x] Copy explains that human confirmation is deliberate.
+- [x] UI does not imply the agent/WebMCP failed.
+
+Delivered as:
+
+- `MeetingShellProvider` gained `openDecisionReviewForHuman()` / `agentPreparedDecision`.
+  The WebMCP confirmation bridge's `{ kind: "decision" }` event now calls that
+  instead of a bare `goToWorkspace("decision")`, so the room knows *why* it moved.
+- The Decision workspace shows a hand-off card — "Your agent prepared the final
+  decision… the last step is deliberately yours" — styled as accent, never as
+  the error treatment. Tested against a blocklist of failure words.
+- The tick reads "I reviewed this decision" with the bound short hash beneath it;
+  the full hash stays available on hover and in the report's provenance.
+- A standing note under the button: an agent can prepare the exact decision,
+  recording it takes the person's own confirmation.
+- The notice clears once the person confirms, or when they walk elsewhere.
 
 ### B6 exit gate
 
-- [ ] Judge understands why one human click remains after agent-driven meeting progression.
+- [x] Judge understands why one human click remains after agent-driven meeting progression.
 
 ---
 
@@ -1072,16 +1087,39 @@ Security advice
 View detailed provenance
 ```
 
-- [ ] Finalized room automatically exposes the report experience.
-- [ ] Every participant sees the same decision outcome.
-- [ ] Report uses canonical `MeetingReport` after rebase.
-- [ ] No second frontend-only report model is introduced.
-- [ ] Download PDF action points to the authenticated A9 endpoint.
-- [ ] Provenance is available but not allowed to overwhelm the primary report.
+- [x] Finalized room automatically exposes the report experience.
+- [x] Every participant sees the same decision outcome.
+- [ ] Report uses canonical `MeetingReport` after rebase. **Blocked on A8.**
+- [x] No second frontend-only report model is introduced.
+- [x] Download PDF action points to the authenticated A9 endpoint. **Endpoint pending A9.**
+- [x] Provenance is available but not allowed to overwhelm the primary report.
+
+Delivered as `src/components/room/final-report.tsx`:
+
+- The Decision surface *becomes* the report once `phase === "finalized"` — the
+  same pedestal, the artifact it now holds. A finalized room fetches the record
+  by itself; nobody has to know to press anything.
+- Sections in reading order: Decision · Why we chose it · Key constraints ·
+  Concerns addressed · Trade-offs · Team alignment · Owners & actions ·
+  Security advice · Download PDF · View detailed provenance (a closed
+  `<details>`).
+- Every value is read out of the server's `DecisionRecord` plus canonical
+  `RoomState`. No frontend report interface exists, so the A8 swap is a change
+  of source, not of sections. The old "Load persisted final record" button and
+  `DecisionRecordView` are gone — the report replaced both.
+- Dissent and unresolved warnings are rendered as part of the record, not
+  tidied away.
+
+**Two follow-ups after Developer A merges:**
+
+1. swap `getDecisionRecord()` for the canonical `MeetingReport` (A8) and drop
+   the small local lookups (constraints by id, resolved objections);
+2. `GET /api/rooms/:roomId/report.pdf` does not exist yet, so the Download PDF
+   link 404s until A9 lands. The link is correct and needs no change.
 
 ### B7 exit gate
 
-- [ ] Finalized meeting ends in a clear shared artifact, not a technical state dump.
+- [x] Finalized meeting ends in a clear shared artifact, not a technical state dump.
 
 ---
 
@@ -1100,17 +1138,39 @@ Decision      -> decision review surface
 Finalized     -> report / memory surface
 ```
 
-- [ ] No manual free-fly requirement.
-- [ ] Stable camera pose per workspace.
-- [ ] Camera transitions remain eased.
-- [ ] Reduced-motion behavior preserved.
-- [ ] Agent activity may be represented visually but is not authoritative.
-- [ ] Pending participants/readiness can be understood without tiny 3D text.
-- [ ] DOM remains the readable/control layer.
+- [x] No manual free-fly requirement.
+- [x] Stable camera pose per workspace.
+- [x] Camera transitions remain eased.
+- [x] Reduced-motion behavior preserved.
+- [x] Agent activity may be represented visually but is not authoritative.
+- [x] Pending participants/readiness can be understood without tiny 3D text.
+- [x] DOM remains the readable/control layer.
+
+Delivered as:
+
+- `PHASE_WORKSPACE` (`src/components/shell/phase-workspace.ts`) makes the
+  mapping above real, and `usePhaseFollow` moves the room when the canonical
+  phase changes. Three rules keep it from being a hijack: the first snapshot
+  never moves, an unchanged phase never moves, and an open drawer wins (the
+  owner mid-admission is not dragged away).
+- Input maps to the table rather than to a board: input is the phase whose
+  subject is the people. Finalized maps to the same decision pedestal approval
+  does — one place, one artifact.
+- Seats now carry a raised marker for anyone the room is waiting on
+  (`PendingMarker`). Silhouette, not text: "three markers up" is countable from
+  the room pose. Only *pending* is ever marked — there is no "done" token,
+  because in Proposals and Deliberation the room is short of a thing rather
+  than a person, and a clean table is the honest picture there.
+- The marker reads `deriveCoordinationStatus(room).waitingParticipantIds`, the
+  same derivation the DOM roster and the coordination strip read, so a chair
+  can never disagree with the sentence above it.
+- Camera behaviour is untouched: still the named poses in `CAMERA_POSES`, still
+  eased by `CameraController`, still an instant cut under reduced motion, and
+  still no orbit/pan/WASD anywhere in the scene.
 
 ### B8 exit gate
 
-- [ ] 3D makes the meeting easier to understand without becoming necessary for protocol comprehension.
+- [x] 3D makes the meeting easier to understand without becoming necessary for protocol comprehension.
 
 ---
 

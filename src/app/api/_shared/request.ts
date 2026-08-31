@@ -13,6 +13,7 @@ export async function authenticateRoomRequest(request: Request) {
   if (error || !data.user) return null;
   return {
     userId: data.user.id,
+    client,
     repository: new SupabaseRoomRepository(client),
   };
 }

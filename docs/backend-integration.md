@@ -181,13 +181,62 @@ write. Once finalized, every room mutation returns `ALREADY_FINALIZED`.
 
 Readiness and production phase progression are regular room mutations. A
 claimed human can call `mark_my_input_ready` only during `input`, only for their
-own seat, and only after publishing a position. The owner-only
-`advance_room_phase` route moves through `input → proposals → deliberation →
-voting → approval`, enforcing joined/position/ready prerequisites before
-`proposals`, and, since Slice 4, only an active proposal plus no unresolved
-blocking conflict before `approval` -- see "Alignment and policy-aware
-finalization" below for what changed and why. Demo and production phase
-functions share that entry logic through `apply_room_phase_entry`.
+own seat, and only after publishing a position. The `advance_room_phase` route
+moves through `input → proposals → deliberation → voting → approval`,
+enforcing joined/position/ready prerequisites before `proposals`, and, since
+Slice 4, only an active proposal plus no unresolved blocking conflict before
+`approval` -- see "Alignment and policy-aware finalization" below for what
+changed and why. Demo and production phase functions share that entry logic
+through `apply_room_phase_entry`.
+
+**Authority (A4, `20260831120000_procedural_progression_authority.sql`):**
+`advance_room_phase` is no longer uniformly owner-gated -- meeting
+administration, meeting progression, and decision authority are three
+different things. Any active, claimed human participant may drive
+`input → proposals`, `proposals → deliberation`, and `deliberation → voting`
+(the transitions `advance_discussion`/`request_team_alignment` use); only
+`voting → approval` (`review_final_decision`) requires the caller's own
+`decision_role` to be `decision_maker`. The current owner is always a
+decision-maker (`set_participant_decision_role` never lets the owner be
+demoted), so this is a superset of "owner may always review," not a
+narrowing. Every prerequisite above is completely unchanged -- this only
+widens *who* may attempt a transition, never *when* it can succeed. Genuine
+meeting administration (admission, removal, lock/unlock, ownership transfer,
+decision-policy/decision-role assignment, enabling the Security Expert)
+still requires `is_room_organizer` and is untouched.
+
+**Waiting semantics (A5, `20260831130000_waiting_for_participants_semantics.sql`):**
+the three `input -> proposals` readiness prerequisites above return the
+canonical `WAITING_FOR_PARTICIPANTS` code instead of a generic
+`VALIDATION_ERROR`, carrying exactly which required participants are still
+pending in `error.details.waitingParticipantIds` -- a JSON-safe array of
+participant ids, computed directly from the same join/position/ready checks,
+never a second approximation of them. `action_failure`'s new optional
+`details jsonb` parameter (and `ActionResult.error.details` in
+`src/contracts/room.ts`) is available to any refusal that wants it; nothing
+else was changed to use it. `WAITING_FOR_ALIGNMENT`, also named in the
+sprint checklist, is deliberately not wired to anything -- alignment never
+mechanically gates a transition anywhere in this schema, so there is no
+real call site for it without contradicting that invariant.
+
+**Explicit role and decision-authority assignment (A6,
+`20260831140000_explicit_role_and_decision_authority.sql`):** admission no
+longer treats the joiner's self-reported `role` as unquestioned authority.
+`admit_join_request` (and `resolve_join_request`, which it delegates to)
+now accept optional `p_role`/`p_decision_role` overrides, so an owner's
+agent can express "admit Deniz as CTO and give him decision authority" in
+one call; supplying neither preserves the exact previous behavior (the
+joiner's own requested role, `contributor`). Post-admission,
+`configure_participant` is the single capability for changing an existing
+active human's role, decision role, or both -- reusing
+`set_participant_decision_role`'s exact invariants (the owner can never
+cease being a decision-maker, `advisor` can never be assigned to a human,
+a decision-role change is rejected once a candidate is frozen) but *not*
+applying the frozen-candidate restriction to a role-only change, since a
+job-title string carries no decision-hash-relevant authority.
+`set_participant_decision_role` itself is unchanged and still the
+canonical decision-role-only mutation; `configure_participant` is additive,
+not a replacement.
 
 Participant alignment is upserted by participant and proposal (see below);
 it is informative, and by itself never gates a phase transition. The approval
@@ -516,8 +565,10 @@ as deprecated in both the column comment and this file.
 - `POST /api/rooms/:roomId/ownership` (owner-only)
 - `POST /api/rooms/:roomId/decision-policy` (owner-only)
 - `POST /api/rooms/:roomId/decision-role` (owner-only)
+- `POST /api/rooms/:roomId/participants/configure` (owner-only; A6, role and/or decision role in one call)
+- `GET /api/rooms/:roomId/report.pdf` (any legitimate room member, finalized rooms only; A9 -- `MeetingReport` rendered to PDF via `pdf-lib`, see `src/domain/rooms/report-pdf.ts`)
 - `GET /api/rooms/:roomId/join-requests` (owner-only)
-- `POST /api/rooms/:roomId/join-requests/admit` (owner-only)
+- `POST /api/rooms/:roomId/join-requests/admit` (owner-only; accepts optional `role`/`decisionRole` overrides, A6)
 - `POST /api/rooms/:roomId/join-requests/reject` (owner-only)
 - `POST /api/rooms/:roomId/positions`
 - `POST /api/rooms/:roomId/proposals`
@@ -589,18 +640,28 @@ The current catalog is split by intent:
 - compact reads: `get_meeting_context`, `get_current_decision`,
   `get_my_attention_items`, `get_open_issues`, `get_alignment`, and finalized
   `get_decision_record`;
-- participant goals: `share_my_context`, `suggest_option`, `raise_concern`,
-  `respond_to_concern`, `resolve_my_concern`, `express_my_alignment`;
-- owner goals: waiting-room management, lock/unlock, responsible phase
-  progression, decision-policy and decision-role configuration, participant
-  removal preparation, and ownership-transfer preparation;
-- final authority: `request_final_decision_confirmation` only for a current
-  missing required approver.
+- participant goals: `share_my_context`, `mark_my_input_ready`, `suggest_option`,
+  `raise_concern`, `respond_to_concern`, `resolve_my_concern`, `express_my_alignment`;
+- owner goals: waiting-room management (`admit_participant` accepts optional
+  `role`/`decisionRole` overrides, A6), lock/unlock, decision-policy and
+  decision-role configuration, `configure_participant` (role/decision-role
+  configuration in one call, A6), participant removal preparation, and
+  ownership-transfer preparation;
+- final authority: `approve_final_decision` only for a current
+  missing required approver;
+- final outcome: `get_final_report` (A8) once finalized -- the single
+  canonical `MeetingReport` (`src/domain/rooms/report.ts`), computed from
+  `DecisionRecord` plus room-level context (title, brief, full roster,
+  inputs, constraints, every proposal considered), never a second
+  reconstruction. Identical for every participant who reads it. The same
+  `MeetingReport` is what `GET /api/rooms/:roomId/report.pdf` (A9) renders
+  to PDF -- one canonical projection feeding WebMCP, the eventual report UI
+  (B7), and the PDF export, exactly as the sprint checklist's own
+  `DecisionRecord -> MeetingReport -> {WebMCP, UI, PDF}` diagram describes.
 
 The retired WebMCP-facing names `add_my_position`, `submit_proposal`,
-`raise_objection`, `cast_my_vote`, and `approve_final_decision` are not
-registered. Internal domain terminology remains where it is part of the
-canonical persistence model.
+`raise_objection`, and `cast_my_vote` are not registered. Internal domain
+terminology remains where it is part of the canonical persistence model.
 
 Read tools put participant-authored prose under `untrustedRoomContent` where a
 trusted/untrusted split is useful, and every tool that may surface participant

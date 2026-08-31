@@ -19,6 +19,8 @@ const DEFAULT_RECOVERY: Record<ActionErrorCode, string> = {
     "This action is not available in the room's current phase.",
   STALE_ROOM_STATE:
     "The room changed before this action completed. Review the latest state and retry if the action is still appropriate.",
+  WAITING_FOR_PARTICIPANTS:
+    "Not everyone required has finished their part yet. Check who is still pending and follow up with them.",
   UNRESOLVED_BLOCKING_CONFLICT:
     "A blocking objection is still open. Resolve it before continuing.",
   HUMAN_CONFIRMATION_REQUIRED:
@@ -42,6 +44,7 @@ const ERROR_TITLE: Record<ActionErrorCode, string> = {
   NOT_AUTHORIZED: "Not authorized",
   WRONG_PHASE: "Not available in this phase",
   STALE_ROOM_STATE: "The room moved on",
+  WAITING_FOR_PARTICIPANTS: "Waiting on other participants",
   UNRESOLVED_BLOCKING_CONFLICT: "Blocking objection open",
   HUMAN_CONFIRMATION_REQUIRED: "Human confirmation required",
   DECISION_CHANGED: "The decision changed",

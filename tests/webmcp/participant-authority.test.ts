@@ -13,11 +13,13 @@ vi.mock("@/domain/rooms/operations", () => ({
   admitJoinRequest: vi.fn(),
   advanceRoomPhase: vi.fn(),
   approveParticipantFinalDecision: vi.fn(),
+  configureParticipant: vi.fn(),
   expressMyAlignment: vi.fn(),
   getFinalDecisionRecord: vi.fn(),
   getMeetingContext: vi.fn(),
   listJoinRequests: vi.fn(),
   lockMeeting: vi.fn(),
+  markMyInputReady: vi.fn(),
   previewFinalDecision: vi.fn(),
   proposeParticipantTradeoff: vi.fn(),
   raiseParticipantObjection: vi.fn(),
@@ -39,22 +41,25 @@ const confirmationBridge = await import("@/webmcp/confirmation-bridge");
 /** Tools gated by the `asClaimedParticipant` second gate -- see room-tools.ts. */
 const PARTICIPANT_GATED_TOOL_NAMES = [
   "share_my_context",
+  "mark_my_input_ready",
   "suggest_option",
   "raise_concern",
   "respond_to_concern",
   "resolve_my_concern",
   "express_my_alignment",
-  "request_final_decision_confirmation",
+  "approve_final_decision",
+  "request_source_upload",
 ];
 
 const DOMAIN_OPERATION_BY_TOOL = {
   share_my_context: operations.addParticipantPosition,
+  mark_my_input_ready: operations.markMyInputReady,
   suggest_option: operations.submitParticipantProposal,
   raise_concern: operations.raiseParticipantObjection,
   respond_to_concern: operations.proposeParticipantTradeoff,
   resolve_my_concern: operations.resolveParticipantObjection,
   express_my_alignment: operations.expressMyAlignment,
-  request_final_decision_confirmation: operations.approveParticipantFinalDecision,
+  approve_final_decision: operations.approveParticipantFinalDecision,
 } as const;
 
 function allPropertyNames(value: unknown): string[] {
@@ -103,7 +108,7 @@ describe("WebMCP participant/owner authority", () => {
     for (const [name, tool] of Object.entries(catalog())) {
       const participantIds = allPropertyNames(tool.inputSchema).filter((field) => field === "participantId");
       expect(participantIds, name).toEqual(
-        ["set_participant_decision_role", "remove_participant", "transfer_ownership"].includes(name)
+        ["set_participant_decision_role", "configure_participant", "remove_participant", "transfer_ownership"].includes(name)
           ? ["participantId"]
           : [],
       );
@@ -137,7 +142,7 @@ describe("WebMCP participant/owner authority", () => {
     const alignment = await executeTool(tools.express_my_alignment!, {
       proposalId: "proposal-1", choice: "support", comment: null, participantId: "demo-designer",
     }) as { error: { code: string } };
-    const confirmation = await executeTool(tools.request_final_decision_confirmation!, {
+    const confirmation = await executeTool(tools.approve_final_decision!, {
       decisionHash: "hash", actorId: "demo-designer",
     }) as { error: { code: string } };
 
@@ -188,7 +193,12 @@ describe("WebMCP participant/owner authority", () => {
     for (const [name, operation] of Object.entries(DOMAIN_OPERATION_BY_TOOL)) {
       await executeTool(tools[name]!, VALID_MUTATION_TOOL_INPUTS[name]);
       expect(operation, name).toHaveBeenCalledOnce();
-      const [, roomId, , forwardedContext] = vi.mocked(operation).mock.calls[0]!;
+      // The mutation context is always the last argument -- most operations
+      // also take an `input` argument between `roomId` and it, but
+      // `mark_my_input_ready` takes no domain input at all.
+      const call = vi.mocked(operation).mock.calls[0]!;
+      const [, roomId] = call;
+      const forwardedContext = call[call.length - 1];
       expect(roomId, name).toBe("room-under-test");
       expect(forwardedContext, name).toEqual(mutationContext);
       expect(forwardedContext, name).not.toHaveProperty("humanConfirmed");
@@ -201,7 +211,7 @@ describe("WebMCP participant/owner authority", () => {
       mutationContext: () => Promise.resolve({ actor: { authUserId: "auth-user-1", origin: "webmcp" as const }, expectedRoomVersion: 12 }),
     });
 
-    await executeTool(catalog(context).request_final_decision_confirmation!, VALID_MUTATION_TOOL_INPUTS.request_final_decision_confirmation);
+    await executeTool(catalog(context).approve_final_decision!, VALID_MUTATION_TOOL_INPUTS.approve_final_decision);
 
     const [, , input, forwardedContext] = vi.mocked(operations.approveParticipantFinalDecision).mock.calls[0]!;
     expect(input).toEqual({ decisionHash: "decision-hash-1" });
@@ -214,8 +224,14 @@ describe("WebMCP participant/owner authority", () => {
       error: { code: "HUMAN_CONFIRMATION_REQUIRED", message: "Confirm visibly." },
       roomVersion: 12,
     } as never);
-    await executeTool(catalog().request_final_decision_confirmation!, VALID_MUTATION_TOOL_INPUTS.request_final_decision_confirmation);
+    await executeTool(catalog().approve_final_decision!, VALID_MUTATION_TOOL_INPUTS.approve_final_decision);
     expect(confirmationBridge.requestUiConfirmation).toHaveBeenCalledWith({ kind: "decision" });
+  });
+
+  it("opens the source workspace without uploading a file itself", async () => {
+    const result = await executeTool(catalog().request_source_upload!, {}) as { error: { code: string } };
+    expect(result.error.code).toBe("HUMAN_CONFIRMATION_REQUIRED");
+    expect(confirmationBridge.requestUiConfirmation).toHaveBeenCalledWith({ kind: "sources", action: "upload" });
   });
 
   it("does not open confirmation UI when the decision hash is stale or unauthorized", async () => {
@@ -224,7 +240,7 @@ describe("WebMCP participant/owner authority", () => {
       error: { code: "DECISION_CHANGED", message: "The hash changed." },
       roomVersion: 13,
     } as never);
-    await executeTool(catalog().request_final_decision_confirmation!, VALID_MUTATION_TOOL_INPUTS.request_final_decision_confirmation);
+    await executeTool(catalog().approve_final_decision!, VALID_MUTATION_TOOL_INPUTS.approve_final_decision);
     expect(confirmationBridge.requestUiConfirmation).not.toHaveBeenCalled();
   });
 
@@ -344,6 +360,43 @@ describe("WebMCP participant/owner authority", () => {
     await executeTool(catalog().set_participant_decision_role!, VALID_MUTATION_TOOL_INPUTS.set_participant_decision_role);
     expect(operations.setDecisionPolicy).toHaveBeenCalledOnce();
     expect(operations.setParticipantDecisionRole).toHaveBeenCalledOnce();
+  });
+
+  describe("A6: explicit role and decision-authority assignment", () => {
+    it("forwards admit_participant's role/decisionRole through to the domain unchanged", async () => {
+      await executeTool(catalog().admit_participant!, {
+        joinRequestId: "join-request-1", role: "CTO", decisionRole: "decision_maker",
+      });
+      expect(operations.admitJoinRequest).toHaveBeenCalledOnce();
+      const [, , input] = vi.mocked(operations.admitJoinRequest).mock.calls[0]!;
+      expect(input).toEqual({ joinRequestId: "join-request-1", role: "CTO", decisionRole: "decision_maker" });
+    });
+
+    it("admits with the joiner's own role and contributor when role/decisionRole are null", async () => {
+      await executeTool(catalog().admit_participant!, {
+        joinRequestId: "join-request-1", role: null, decisionRole: null,
+      });
+      const [, , input] = vi.mocked(operations.admitJoinRequest).mock.calls[0]!;
+      expect(input).toEqual({ joinRequestId: "join-request-1", role: null, decisionRole: null });
+    });
+
+    it("wires configure_participant to the domain operation with only the target as an id field", async () => {
+      await executeTool(catalog().configure_participant!, {
+        participantId: "participant-engineer", role: "CTO", decisionRole: "decision_maker",
+      });
+      expect(operations.configureParticipant).toHaveBeenCalledOnce();
+      const [, , input] = vi.mocked(operations.configureParticipant).mock.calls[0]!;
+      expect(input).toEqual({ participantId: "participant-engineer", role: "CTO", decisionRole: "decision_maker" });
+    });
+
+    it("rejects configure_participant with both role and decisionRole null before reaching the domain", async () => {
+      const result = await executeTool(catalog().configure_participant!, {
+        participantId: "participant-engineer", role: null, decisionRole: null,
+      }) as { ok: boolean; error: { code: string } };
+      expect(result.ok).toBe(false);
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+      expect(operations.configureParticipant).not.toHaveBeenCalled();
+    });
   });
 
   it("forwards a domain refusal unchanged, proving no WebMCP-layer bypass (stale-reference proof)", async () => {

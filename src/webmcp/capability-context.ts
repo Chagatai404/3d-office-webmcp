@@ -104,6 +104,12 @@ type Predicate = (ctx: WebMcpCapabilityContext) => boolean;
 const inRoom: Predicate = (c) => c.route === "room";
 const asClaimedInPhase = (phase: RoomPhase): Predicate => (c) => inRoom(c) && c.hasClaimedSeat && c.phase === phase;
 const asOwnerNotFinalized: Predicate = (c) => inRoom(c) && c.isOwner && !c.isFinalized;
+/**
+ * Meeting administration != meeting progression != decision authority (A4).
+ * Procedural progression -- moving the room forward, not deciding anything
+ * -- is open to any active claimed human, never owner-gated.
+ */
+const asClaimedNotFinalized: Predicate = (c) => inRoom(c) && c.hasClaimedSeat && !c.isFinalized;
 
 /**
  * One predicate per tool name -- the audit point brief §35 asks for. Adding
@@ -116,21 +122,43 @@ export const TOOL_AVAILABILITY: Record<string, Predicate> = {
   // historical rationale, preserved here): an agent that can read the room
   // can explain it before its human has a seat.
   get_meeting_context: inRoom,
+  get_coordination_status: inRoom,
+  get_room_updates: inRoom,
   get_current_decision: (c) => inRoom(c) && c.phase !== null && c.phase !== "input",
   get_my_attention_items: (c) => inRoom(c) && c.hasClaimedSeat && !c.isFinalized,
   get_open_issues: (c) => inRoom(c) && c.phase === "deliberation",
   get_alignment: (c) => inRoom(c) && c.phase === "voting",
   get_decision_record: (c) => inRoom(c) && c.isFinalized,
+  get_final_report: (c) => inRoom(c) && c.isFinalized,
+  get_meeting_sources: inRoom,
+  read_meeting_source: inRoom,
+  search_meeting_sources: inRoom,
+  summarize_meeting_sources: inRoom,
 
   // Participant writes -- always require a claimed seat.
+  request_source_upload: asClaimedInPhase("input"),
   share_my_context: asClaimedInPhase("input"),
+  mark_my_input_ready: asClaimedInPhase("input"),
   suggest_option: asClaimedInPhase("proposals"),
   raise_concern: asClaimedInPhase("deliberation"),
   respond_to_concern: asClaimedInPhase("deliberation"),
   resolve_my_concern: asClaimedInPhase("deliberation"),
   express_my_alignment: asClaimedInPhase("voting"),
-  request_final_decision_confirmation: (c) =>
+  approve_final_decision: (c) =>
     inRoom(c) && c.hasClaimedSeat && c.phase === "approval" && c.isRequiredApprover,
+
+  // Procedural progression -- any active claimed human, not owner-gated.
+  advance_discussion: (c) =>
+    asClaimedNotFinalized(c) && (c.phase === "input" || (c.phase === "proposals" && c.hasActiveProposal)),
+  request_team_alignment: (c) =>
+    asClaimedNotFinalized(c) && c.phase === "deliberation" && c.hasActiveProposal && !c.hasOpenBlockingConcern,
+  // Decision-review entry requires decision authority, not meeting
+  // ownership. The owner always qualifies (never demotable from
+  // decision_maker -- see setParticipantDecisionRole), but so does any
+  // other active decision-maker.
+  review_final_decision: (c) =>
+    asClaimedNotFinalized(c) && c.decisionRole === "decision_maker" &&
+    c.phase === "voting" && c.hasActiveProposal && !c.hasOpenBlockingConcern,
 
   // Owner-only.
   get_waiting_participants: asOwnerNotFinalized,
@@ -138,14 +166,15 @@ export const TOOL_AVAILABILITY: Record<string, Predicate> = {
   reject_participant: asOwnerNotFinalized,
   lock_meeting: (c) => asOwnerNotFinalized(c) && !c.isLocked,
   unlock_meeting: (c) => asOwnerNotFinalized(c) && c.isLocked,
-  advance_discussion: (c) =>
-    asOwnerNotFinalized(c) && (c.phase === "input" || (c.phase === "proposals" && c.hasActiveProposal)),
-  request_team_alignment: (c) =>
-    asOwnerNotFinalized(c) && c.phase === "deliberation" && c.hasActiveProposal && !c.hasOpenBlockingConcern,
-  review_final_decision: (c) =>
-    asOwnerNotFinalized(c) && c.phase === "voting" && c.hasActiveProposal && !c.hasOpenBlockingConcern,
   set_decision_policy: (c) => asOwnerNotFinalized(c) && !c.candidateFrozen,
   set_participant_decision_role: (c) => asOwnerNotFinalized(c) && !c.candidateFrozen,
+  // Unlike set_participant_decision_role, a role-only configuration never
+  // touches decision authority, so it isn't withheld once a candidate is
+  // frozen -- the database itself only rejects the decisionRole half of an
+  // update in that state (A6). Registration can't know in advance which
+  // half of a not-yet-written call an agent will use, so it stays available
+  // whenever the owner could configure *either* field.
+  configure_participant: asOwnerNotFinalized,
   remove_participant: asOwnerNotFinalized,
   transfer_ownership: asOwnerNotFinalized,
 
@@ -179,12 +208,14 @@ export function getAvailableWebMcpToolNames(ctx: WebMcpCapabilityContext): strin
  */
 export const MUTATION_TOOL_NAMES: ReadonlySet<string> = new Set([
   "share_my_context",
+  "mark_my_input_ready",
   "suggest_option",
   "raise_concern",
   "respond_to_concern",
   "resolve_my_concern",
   "express_my_alignment",
-  "request_final_decision_confirmation",
+  "approve_final_decision",
+  "request_source_upload",
   "admit_participant",
   "reject_participant",
   "lock_meeting",
@@ -194,6 +225,7 @@ export const MUTATION_TOOL_NAMES: ReadonlySet<string> = new Set([
   "review_final_decision",
   "set_decision_policy",
   "set_participant_decision_role",
+  "configure_participant",
   "remove_participant",
   "transfer_ownership",
   "enable_security_expert",

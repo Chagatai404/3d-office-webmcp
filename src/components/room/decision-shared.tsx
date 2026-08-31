@@ -2,13 +2,12 @@
 
 import type {
   Conflict,
-  DecisionRecord,
   FinalDecisionCandidate,
   FinalDecisionPreview,
   Proposal,
   RoomState,
 } from "@/contracts/room";
-import { ALIGNMENT_CHOICE_LABEL, formatActionName, formatTime } from "./room-labels";
+import { shortDecisionHash } from "./coordination";
 
 const DECISION_POLICY_LABEL: Record<RoomState["decisionPolicy"], string> = {
   owner_decides: "Responsible owner decides",
@@ -56,16 +55,6 @@ export function ExpertAdviceList({
  * the room's own workspace boards — Proposals, Issues, Vote, Decision — each
  * with its own camera focus, instead of one panel covering all four.
  */
-
-export const PROPOSAL_DRAFT = {
-  title: "Two-week accessible onboarding scope",
-  summary:
-    "Ship a narrower onboarding update that improves time to first value while keeping accessibility review in scope.",
-  rationale:
-    "This meets the launch goal without expanding engineering capacity or weakening design quality.",
-  expectedOutcomes:
-    "New users reach first value faster\nAccessibility review is completed before release\nCampaign timing remains credible",
-};
 
 export const TRADEOFF_DRAFT = {
   description:
@@ -134,12 +123,25 @@ export function ConflictList({
   return (
     <ul className="decision-list">
       {conflicts.map((conflict) => (
-        <li key={conflict.id} className="decision-list-item" data-board-item={conflict.id}>
+        <li
+          key={conflict.id}
+          className={
+            conflict.severity === "blocking"
+              ? "decision-list-item decision-list-item-blocking"
+              : "decision-list-item"
+          }
+          data-board-item={conflict.id}
+        >
           <div className="decision-card-head">
-            <span className={`tag ${conflict.severity === "blocking" ? "tag-risk" : ""}`}>
-              {conflict.status} {conflict.severity}
+            {/* A blocker and a warning are different kinds of thing, so they
+                are different words as well as different colours: nobody
+                should have to read a shade to know whether the room is
+                stuck. */}
+            <span className={conflict.severity === "blocking" ? "tag tag-risk" : "tag tag-warning"}>
+              {conflict.severity === "blocking" ? "Blocking" : "Warning"}
+              {conflict.status === "resolved" ? " · resolved" : ""}
             </span>
-            <span>{participantLabel(room, conflict.raisedByActorId)}</span>
+            <span>Raised by {participantLabel(room, conflict.raisedByActorId)}</span>
           </div>
           <p>{conflict.reason}</p>
           {conflict.resolutionNote ? (
@@ -187,7 +189,13 @@ export function DecisionPreviewView({
     <article className="decision-card decision-preview">
       <div className="decision-card-head">
         <strong>{preview.proposal.title}</strong>
-        <code data-testid="decision-hash">{preview.decisionHash}</code>
+        {/* The hash is identity, not reading matter: enough of it on screen to
+            compare two participants' screens by eye, all of it one hover (or
+            one `title` read) away, and the whole thing under the report's
+            provenance. */}
+        <code data-testid="decision-hash" title={preview.decisionHash}>
+          {shortDecisionHash(preview.decisionHash)}
+        </code>
       </div>
       <p>
         <span className="tag" data-testid="decision-policy">
@@ -235,59 +243,6 @@ export function DecisionPreviewView({
           </dd>
         </div>
       </dl>
-    </article>
-  );
-}
-
-export function DecisionRecordView({
-  room,
-  record,
-}: {
-  room: RoomState;
-  record: DecisionRecord;
-}) {
-  return (
-    <article className="decision-card decision-preview">
-      <div className="decision-card-head">
-        <strong>{record.decision.proposal.title}</strong>
-        <code>{record.decision.decisionHash}</code>
-      </div>
-      <p>
-        <span className="tag">{DECISION_POLICY_LABEL[record.decision.decisionPolicy]}</span>
-      </p>
-      <p>Finalized {formatTime(record.finalizedAt)}</p>
-      <p>{record.decision.rationale}</p>
-      <DecisionList
-        title="Accepted tradeoffs"
-        entries={record.acceptedTradeoffs.map(
-          (tradeoff) => `${tradeoff.description} - ${tradeoff.expectedEffect}`,
-        )}
-      />
-      <DecisionList title="Dissent" entries={record.decision.dissent} empty="No dissent recorded." />
-      <ExpertAdviceList advice={record.decision.expertAdvice} />
-      <DecisionList
-        title="Alignment"
-        entries={record.alignments.map(
-          (alignment) =>
-            `${participantLabel(room, alignment.participantId)}: ${ALIGNMENT_CHOICE_LABEL[alignment.choice]}${
-              alignment.comment ? ` - ${alignment.comment}` : ""
-            }`,
-        )}
-      />
-      <DecisionList
-        title="Approvals"
-        entries={record.approvals.map(
-          (approval) =>
-            `${participantLabel(room, approval.participantId)} approved ${approval.decisionHash}`,
-        )}
-      />
-      <DecisionList
-        title="Provenance"
-        entries={record.provenance.map(
-          (event) =>
-            `${participantLabel(room, event.actorId)} via ${event.origin}: ${formatActionName(event.action)}`,
-        )}
-      />
     </article>
   );
 }

@@ -20,13 +20,19 @@ import type {
   FinalDecisionPreview,
   JoinRequest,
   ManageJoinRequestInput,
+  MeetingSource,
+  MeetingSourceContent,
+  MeetingSourceSearchResults,
+  MeetingSourceVisibility,
   Participant,
   ProposeTradeoffInput,
   RaiseObjectionInput,
+  ReadMeetingSourceContentInput,
   RemoveParticipantInput,
   ResolveObjectionInput,
   RoomPhase,
   RoomState,
+  SearchMeetingSourcesInput,
   SetDecisionPolicyInput,
   SetParticipantDecisionRoleInput,
   StartDemoScenarioInput,
@@ -52,6 +58,32 @@ import {
  */
 export interface RoomActions {
   claimSeat(input: ClaimSeatInput): Promise<ActionResult>;
+
+  uploadMeetingSource(input: {
+    file: File;
+    title?: string;
+    visibility: MeetingSourceVisibility;
+  }): Promise<ActionResult<MeetingSource>>;
+
+  listMeetingSources(): Promise<ActionResult<MeetingSource[]>>;
+
+  readMeetingSourceContent(
+    input: ReadMeetingSourceContentInput,
+  ): Promise<ActionResult<MeetingSourceContent>>;
+
+  searchMeetingSources(
+    input: SearchMeetingSourcesInput,
+  ): Promise<ActionResult<MeetingSourceSearchResults>>;
+
+  shareMeetingSource(sourceId: string): Promise<ActionResult<MeetingSource>>;
+
+  removeMeetingSource(sourceId: string): Promise<ActionResult>;
+
+  /** Retry a failed source by re-extracting text from a re-selected file. */
+  retryMeetingSource(
+    sourceId: string,
+    file: File,
+  ): Promise<ActionResult<MeetingSource>>;
 
   addMyPosition(
     input: AddPositionInput,
@@ -140,6 +172,34 @@ export interface RoomContextValue {
 
 const RoomContext =
   createContext<RoomContextValue | null>(null);
+
+interface SourceUploadClient {
+  uploadMeetingSource(
+    roomId: string,
+    input: {
+      file: File;
+      title?: string;
+      visibility: MeetingSourceVisibility;
+    },
+  ): Promise<ActionResult<MeetingSource>>;
+  retryMeetingSource(
+    roomId: string,
+    sourceId: string,
+    file: File,
+  ): Promise<ActionResult<MeetingSource>>;
+}
+
+function unsupportedSourceAction<T>(roomVersion: number): ActionResult<T> {
+  return {
+    ok: false,
+    error: {
+      code: "VALIDATION_ERROR",
+      message: "Meeting source files are not available in this client.",
+      recovery: "Reload the room with the API-backed client and try again.",
+    },
+    roomVersion,
+  };
+}
 
 export function useRoom(): RoomContextValue {
   const value = useContext(RoomContext);
@@ -236,6 +296,45 @@ export function RoomProvider({
       claimSeat: (input) =>
         client.claimSeat(roomId, input),
 
+      uploadMeetingSource: (input) => {
+        const sourceClient = client as typeof client & Partial<SourceUploadClient>;
+        return sourceClient.uploadMeetingSource
+          ? sourceClient.uploadMeetingSource(roomId, input)
+          : Promise.resolve(unsupportedSourceAction<MeetingSource>(room?.version ?? 0));
+      },
+
+      listMeetingSources: () =>
+        client.listMeetingSources
+          ? client.listMeetingSources(roomId)
+          : Promise.resolve(unsupportedSourceAction<MeetingSource[]>(room?.version ?? 0)),
+
+      readMeetingSourceContent: (input) =>
+        client.readMeetingSourceContent
+          ? client.readMeetingSourceContent(roomId, input)
+          : Promise.resolve(unsupportedSourceAction<MeetingSourceContent>(room?.version ?? 0)),
+
+      searchMeetingSources: (input) =>
+        client.searchMeetingSources
+          ? client.searchMeetingSources(roomId, input)
+          : Promise.resolve(unsupportedSourceAction<MeetingSourceSearchResults>(room?.version ?? 0)),
+
+      shareMeetingSource: (sourceId) =>
+        client.shareMeetingSource
+          ? client.shareMeetingSource(roomId, sourceId)
+          : Promise.resolve(unsupportedSourceAction<MeetingSource>(room?.version ?? 0)),
+
+      removeMeetingSource: (sourceId) =>
+        client.removeMeetingSource
+          ? client.removeMeetingSource(roomId, sourceId)
+          : Promise.resolve(unsupportedSourceAction(room?.version ?? 0)),
+
+      retryMeetingSource: (sourceId, file) => {
+        const sourceClient = client as typeof client & Partial<SourceUploadClient>;
+        return sourceClient.retryMeetingSource
+          ? sourceClient.retryMeetingSource(roomId, sourceId, file)
+          : Promise.resolve(unsupportedSourceAction<MeetingSource>(room?.version ?? 0));
+      },
+
       addMyPosition: (input) =>
         client.addMyPosition(roomId, input),
 
@@ -289,7 +388,7 @@ export function RoomProvider({
       setDecisionPolicy: (input) => client.setDecisionPolicy(roomId, input),
       setParticipantDecisionRole: (input) => client.setParticipantDecisionRole(roomId, input),
     }),
-    [client, roomId],
+    [client, room?.version, roomId],
   );
 
   /**

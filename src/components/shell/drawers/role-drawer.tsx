@@ -1,6 +1,12 @@
 "use client";
 
 import { useRoom } from "@/components/room/room-provider";
+import {
+  DECISION_ROLE_LABEL,
+  DECISION_ROLE_NOTE,
+  MEETING_ROLE_LABEL,
+  MEETING_ROLE_NOTE,
+} from "@/components/room/room-labels";
 import { useShell } from "../shell-provider";
 import { DrawerShell } from "./drawer-shell";
 
@@ -14,10 +20,19 @@ export function RoleDrawer() {
       {self ? (
         <div className="drawer-role-seat">
           <span className="drawer-role-seat-label">Your seat</span>
-          <p className="drawer-role-seat-value">
-            {self.role}
-            {` · ${self.meetingRole.replace("_", " ")} · ${self.decisionRole.replace("_", " ")}`}
-          </p>
+          {/* Three separate facts, said separately. The enum values behind
+              them (`owner`, `decision_maker`) never reach the screen. */}
+          <p className="drawer-role-seat-value">{self.role}</p>
+          <dl className="drawer-role-authority">
+            <div>
+              <dt>{MEETING_ROLE_LABEL[self.meetingRole]}</dt>
+              <dd>{MEETING_ROLE_NOTE[self.meetingRole]}</dd>
+            </div>
+            <div>
+              <dt>{DECISION_ROLE_LABEL[self.decisionRole]}</dt>
+              <dd>{DECISION_ROLE_NOTE[self.decisionRole]}</dd>
+            </div>
+          </dl>
         </div>
       ) : (
         <p className="panel-empty">Claim a seat to see what your role can do here.</p>
@@ -30,8 +45,8 @@ export function RoleDrawer() {
         <li>✓ Share one alignment, changeable until the phase closes</li>
         <li>
           {self?.decisionRole === "decision_maker"
-            ? "✓ Holds explicit decision authority"
-            : "○ Contributes without final decision authority"}
+            ? "✓ Review and confirm the final decision"
+            : "○ Shape the decision, but not confirm it"}
         </li>
         <li>✕ Nothing on anyone else&apos;s behalf, ever</li>
       </ul>

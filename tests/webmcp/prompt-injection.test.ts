@@ -24,7 +24,24 @@ describe("WebMCP prompt-injection hardening", () => {
   it("returns malicious room content verbatim, as inert data, never re-interpreted", async () => {
     const room = buildRoomStateFixture({
       brief: INJECTION_STRINGS[0]!,
-      positions: [{ id: "position-1", participantId: "participant-engineer", summary: INJECTION_STRINGS[1]!, category: "quality", priority: "high", createdAt: "2026-08-30T00:00:00.000Z" }],
+      positions: [{ id: "position-1", participantId: "participant-engineer", summary: INJECTION_STRINGS[1]!, category: "quality", priority: "high", referencedSourceIds: [], createdAt: "2026-08-30T00:00:00.000Z" }],
+      sources: [{
+        id: "source-1",
+        roomId: "room-under-test",
+        uploadedByParticipantId: "participant-engineer",
+        visibility: "shared_room",
+        title: INJECTION_STRINGS[2]!,
+        filename: "attack.md",
+        mimeType: "text/markdown",
+        byteSize: 128,
+        sha256: "a".repeat(64),
+        status: "ready",
+        errorMessage: null,
+        summary: INJECTION_STRINGS[3]!,
+        createdAt: "2026-08-30T00:00:00.000Z",
+        processedAt: "2026-08-30T00:00:00.000Z",
+        removedAt: null,
+      }],
     });
     const context = fakeRoomWebMcpContext({ room });
     const result = await executeTool(createRoomWebMcpTools(context).get_meeting_context!, {}) as {
@@ -32,6 +49,11 @@ describe("WebMCP prompt-injection hardening", () => {
     };
     expect(result.data.untrustedRoomContent.brief).toBe(INJECTION_STRINGS[0]);
     expect(result.data.untrustedRoomContent.positions[0]!.summary).toBe(INJECTION_STRINGS[1]);
+    const sources = await executeTool(createRoomWebMcpTools(context).get_meeting_sources!, {}) as {
+      data: { untrustedRoomContent: { sources: Array<{ title: string; summary: string }> } };
+    };
+    expect(sources.data.untrustedRoomContent.sources[0]!.title).toBe(INJECTION_STRINGS[2]);
+    expect(sources.data.untrustedRoomContent.sources[0]!.summary).toBe(INJECTION_STRINGS[3]);
   });
 
   it("never changes which tools are registered based on room content", () => {
@@ -70,10 +92,17 @@ describe("WebMCP prompt-injection hardening", () => {
     const tools = { ...createRoomWebMcpTools(context), ...createAttentionWebMcpTool(context) };
     for (const name of [
       "get_meeting_context",
+      "get_coordination_status",
+      "get_room_updates",
       "get_current_decision",
       "get_open_issues",
       "get_alignment",
       "get_decision_record",
+      "get_final_report",
+      "get_meeting_sources",
+      "read_meeting_source",
+      "search_meeting_sources",
+      "summarize_meeting_sources",
       "get_my_attention_items",
       "get_waiting_participants",
       "share_my_context",
@@ -82,7 +111,7 @@ describe("WebMCP prompt-injection hardening", () => {
       "respond_to_concern",
       "resolve_my_concern",
       "express_my_alignment",
-      "request_final_decision_confirmation",
+      "approve_final_decision",
     ]) {
       expect(tools[name]?.annotations?.untrustedContentHint, name).toBe(true);
     }

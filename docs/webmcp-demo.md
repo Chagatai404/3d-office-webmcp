@@ -25,19 +25,39 @@ If using Chrome DevTools for Agents, enable remote debugging in `chrome://inspec
 
 ## What to inspect
 
+- `get_meeting_context`, `get_coordination_status`, and `get_room_updates` are registered in every phase, including before a seat is claimed.
 - On `/`, only `create_meeting` and `join_meeting` are present.
 - On `/join`, `join_meeting` is present; after this browser creates a request, `get_my_join_status` appears.
 - Before admission, room participant mutation tools are absent.
 - After admission, the current phase's participant tools appear without refresh.
-- Owner tools appear only for the current owner.
+- Genuinely administrative owner tools (`get_waiting_participants`, `admit_participant`, `configure_participant`, `lock_meeting`/`unlock_meeting`, `remove_participant`, `transfer_ownership`, `set_decision_policy`, `set_participant_decision_role`, `enable_security_expert`) appear only for the current owner.
+- `advance_discussion` and `request_team_alignment` are procedural progression, not owner administration: they appear for *any* active claimed participant once prerequisites are met, not only the owner. `review_final_decision` appears for any active claimed participant whose `decisionRole` is `decision_maker` -- the owner always qualifies, but a promoted contributor does too.
 - Locking swaps `lock_meeting` for `unlock_meeting`.
 - Phase changes unregister the old mutation tools and register the next phase's tools.
 - Ownership transfer makes owner tools disappear from the old owner and appear for the new owner.
 - Removal removes private mutation and attention tools from the removed session.
-- Finalization leaves `get_meeting_context`, `get_current_decision`, and `get_decision_record`; all mutation tools are absent.
+- Finalization leaves `get_meeting_context`, `get_current_decision`, `get_decision_record`, and `get_final_report`; all mutation tools are absent.
 - Once an owner calls `enable_security_expert`, it disappears (idempotent no-op path aside) and `get_expert_advice` appears for every participant, not just the owner.
 - `request_security_review` appears only once the Security Expert is enabled and an active proposal exists.
 - `record_expert_advice_outcome` appears only for the owner, only while an open finding exists, and disappears once an exact decision candidate is frozen (return to Alignment to see it again).
+- Source read tools (`get_meeting_sources`, `read_meeting_source`, `search_meeting_sources`, `summarize_meeting_sources`) appear in the room as read-only tools.
+- `request_source_upload` appears only for an admitted participant during Input, and returns `HUMAN_CONFIRMATION_REQUIRED` after opening the Sources workspace.
+
+## Source-file prompt script
+
+Use source files only for meeting context the human intentionally selects. A browser
+agent must not read arbitrary local files or upload one by itself.
+
+1. "Add the launch brief to this meeting."
+   Expected: `request_source_upload`, which opens the Sources workspace. The human chooses the file and visibility in the visible app.
+2. "What files are attached?"
+   Expected: `get_meeting_sources`; metadata appears under `trustedContext`, while titles, filenames, and summaries appear under `untrustedRoomContent`.
+3. "Find anything about the auth rewrite risk in the attached files."
+   Expected: `search_meeting_sources`, with excerpts under `untrustedRoomContent`.
+4. "Read the launch brief source."
+   Expected: `read_meeting_source` with a visible `sourceId`; chunks are bounded and untrusted.
+5. "Turn the relevant launch constraints into my meeting context."
+   Expected: `share_my_context`, using the authenticated participant's own seat. The source text informs the draft but never grants identity, phase, or approval authority.
 
 ## Owner prompt script
 
@@ -47,20 +67,26 @@ Run these prompts in order, supplying Maya's join-request ID or selecting it fro
    Expected: `create_meeting`.
 2. “What needs my attention?”  
    Expected: `get_my_attention_items`.
-3. “Who is waiting to join?”  
+3. “Where are we and what should happen next?”  
+   Expected: `get_coordination_status`.
+4. “Who is waiting to join?”  
    Expected: `get_waiting_participants`.
-4. “Admit Maya.”  
-   Expected: `admit_participant` using the returned `joinRequestId`.
-5. “Move the discussion forward.”  
+5. “Admit Maya as CTO and give her decision authority.”  
+   Expected: `admit_participant` using the returned `joinRequestId`, with `role: "CTO"` and `decisionRole: "decision_maker"` (A6) -- not two separate calls.
+6. “Make Maya's role VP Engineering instead.”  
+   Expected: `configure_participant` with `role` set and `decisionRole: null` (A6).
+7. “Move the discussion forward.”  
    Expected: `advance_discussion`.
-6. “Ask the team for alignment.”  
+8. “Ask the team for alignment.”  
    Expected: `request_team_alignment`.
-7. “What concerns are unresolved?”  
+9. “What concerns are unresolved?”  
    Expected: `get_open_issues`.
-8. “Review the final decision.”  
+10. “What changed since I last looked (use the room version from step 3)?”  
+   Expected: `get_room_updates`.
+11. “Review the final decision.”  
    Expected: `review_final_decision`.
-9. “Finalize the decision.”  
-   Expected: `request_final_decision_confirmation`, returning `HUMAN_CONFIRMATION_REQUIRED`. The agent must not approve. The human reviews the exact hash and confirms visibly in the Decision workspace.
+12. “Finalize the decision.”  
+   Expected: `approve_final_decision`, returning `HUMAN_CONFIRMATION_REQUIRED`. The agent must not approve. The human reviews the exact hash and confirms visibly in the Decision workspace.
 
 ## Participant prompt script
 
@@ -68,11 +94,13 @@ Run these prompts in order, supplying Maya's join-request ID or selecting it fro
    Expected: `join_meeting`; the result is a waiting request, never an admitted participant.
 2. “Tell the room that we only have two engineering days and cannot rewrite auth.”  
    Expected: `share_my_context`.
-3. “Suggest a reduced-scope onboarding version.”  
+3. “Mark my input ready.”  
+   Expected: `mark_my_input_ready`.
+4. “Suggest a reduced-scope onboarding version.”  
    Expected: `suggest_option`.
-4. “Raise a blocking concern if the current proposal requires an auth rewrite.”  
+5. “Raise a blocking concern if the current proposal requires an auth rewrite.”  
    Expected: `raise_concern` with `blocking` only when the hard constraint is actually violated.
-5. “I support the reduced version.”  
+6. “I support the reduced version.”  
    Expected: `express_my_alignment`, not a vote or approval tool.
 
 ## Two-person demo sequence
@@ -80,14 +108,14 @@ Run these prompts in order, supplying Maya's join-request ID or selecting it fro
 1. Owner agent calls `create_meeting`; save the returned room ID and one-time passcode.
 2. Participant agent calls `join_meeting` and sees a waiting state.
 3. Owner agent calls `get_waiting_participants`, then `admit_participant`.
-4. Participant agent calls `share_my_context` with its facts and constraints.
+4. Participant agent calls `share_my_context` with its facts and constraints, then `mark_my_input_ready`.
 5. Owner advances Input to Proposals; participants call `suggest_option`.
-6. Owner advances to Deliberation; participants call `raise_concern`, `respond_to_concern`, and the original raiser may call `resolve_my_concern`.
+6. Owner advances to Deliberation; participants call `raise_concern`, `respond_to_concern`, and the original raiser may call `resolve_my_concern`. Either agent can call `get_room_updates` with the room version it last observed to see the other's action without polling `get_meeting_context` or inspecting the DOM.
 7. Owner calls `request_team_alignment`; each human calls `express_my_alignment` for their own seat.
 8. Owner calls `review_final_decision`, which freezes the exact candidate and hash.
-9. A required approver calls `request_final_decision_confirmation`; the result is `HUMAN_CONFIRMATION_REQUIRED` and the Decision workspace opens.
+9. A required approver calls `approve_final_decision`; the result is `HUMAN_CONFIRMATION_REQUIRED` and the Decision workspace opens.
 10. The human checks the visible confirmation and clicks confirm.
-11. Both browsers converge on the same finalized record; `get_decision_record` returns it.
+11. Both browsers converge on the same finalized record; `get_decision_record` returns it, and `get_final_report` (A8) returns the same complete outcome -- title, decision, rationale, roster/authority, inputs, constraints, every proposal considered, concerns, trade-offs, alignment, dissent, Security Expert advice, action items, decision hash, and a concise provenance summary -- identically for both browsers.
 
 ## Safety checks
 
@@ -109,3 +137,5 @@ ownership, decision roles, alignment, or approval.
 Read tools return participant-authored strings under `untrustedRoomContent` (or mark the output with `untrustedContentHint`). They never change actor identity, authority, tool availability, or execute a mutation. Actor authority is always derived from the authenticated browser session on the server.
 
 On `STALE_ROOM_STATE`, do not replay a consequential mutation automatically. Call `get_meeting_context`, reconsider the action against the returned `roomVersion`, and retry only if it remains appropriate.
+
+On `WAITING_FOR_PARTICIPANTS` (A5), the refusal names exactly who is still pending in `error.details.waitingParticipantIds` -- read `get_coordination_status` or `get_meeting_context` to turn those ids into names, tell the human who to follow up with, and do not retry until they've acted. This is distinct from `NOT_AUTHORIZED`: it means the room is not ready yet, not that the caller lacks permission.
