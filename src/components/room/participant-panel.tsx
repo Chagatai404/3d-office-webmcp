@@ -9,7 +9,14 @@ import {
 } from "@/webmcp/confirmation-bridge";
 import { ActionFeedback } from "./action-feedback";
 import { useRoom } from "./room-provider";
-import { ALIGNMENT_CHOICE_LABEL } from "./room-labels";
+import {
+  ALIGNMENT_CHOICE_LABEL,
+  DECISION_ROLE_LABEL,
+  DECISION_ROLE_NOTE,
+  MEETING_ROLE_LABEL,
+  MEETING_ROLE_NOTE,
+  PARTICIPANT_KIND_LABEL,
+} from "./room-labels";
 import type { VisualParticipant } from "@/visualization/room-view-model";
 
 type PendingAction =
@@ -25,6 +32,14 @@ type PendingAction =
  * controls (remove / make owner) are rendered inline, only for the current
  * owner, and never on the owner's own row -- a non-owner never sees them at
  * all rather than seeing them disabled.
+ *
+ * Each row says three separate things in three separate places, because they
+ * are three separate things: who the person is in the organisation (CEO,
+ * CTO), what they may do to the meeting (Owner, Participant), and whether
+ * they may decide its outcome (Decision maker, Contributor). None of them is
+ * printed as its internal enum value, and the Security Expert's row carries
+ * no alignment or approval state at all -- an advisory actor that appears to
+ * have an empty approval slot reads as one that could fill it.
  */
 export function ParticipantPanel() {
   const { room, self, visualization, actions } = useRoom();
@@ -120,70 +135,98 @@ export function ParticipantPanel() {
                   {participant.isSelf ? (
                     <span className="tag tag-self">You</span>
                   ) : null}
-                  {participant.meetingRole === "owner" ? (
-                    <span className="tag tag-owner">Owner</span>
-                  ) : null}
                 </span>
                 <span className="participant-role">{participant.role}</span>
               </div>
 
+              {/* An advisory actor has no administrative or decision
+                  authority to state. Printing "Participant · Advisor" beside
+                  the Security Expert's name suggests a seat at the table it
+                  does not have; the advisory line below says what it is. */}
+              {participant.kind === "expert" ? null : (
+                <div className="participant-authority">
+                  <span
+                    className={
+                      participant.meetingRole === "owner" ? "tag tag-owner" : "tag"
+                    }
+                    title={MEETING_ROLE_NOTE[participant.meetingRole]}
+                  >
+                    {MEETING_ROLE_LABEL[participant.meetingRole]}
+                  </span>
+                  {canManage ? (
+                    <label className="decision-role-select">
+                      Decision authority
+                      <select
+                        value={participant.decisionRole === "decision_maker" ? "decision_maker" : "contributor"}
+                        disabled={roleBusyId === participant.id}
+                        onChange={(event) =>
+                          void changeDecisionRole(
+                            participant.id,
+                            event.target.value as AssignableDecisionRole,
+                          )
+                        }
+                      >
+                        <option value="decision_maker">
+                          {DECISION_ROLE_LABEL.decision_maker}
+                        </option>
+                        <option value="contributor">{DECISION_ROLE_LABEL.contributor}</option>
+                      </select>
+                    </label>
+                  ) : (
+                    <span
+                      className={
+                        participant.decisionRole === "decision_maker" ? "tag" : "tag tag-muted"
+                      }
+                      title={DECISION_ROLE_NOTE[participant.decisionRole]}
+                    >
+                      {DECISION_ROLE_LABEL[participant.decisionRole]}
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div className="participant-tags">
                 <span className="tag">Seat {participant.seatIndex + 1}</span>
                 {participant.kind === "expert" ? (
-                  <span className="tag tag-expert">Security Expert · Advisory</span>
+                  <span className="tag tag-expert">{PARTICIPANT_KIND_LABEL.expert}</span>
                 ) : participant.kind === "simulation" ? (
-                  <span className="tag tag-simulation">Simulated participant</span>
+                  <span className="tag tag-simulation">{PARTICIPANT_KIND_LABEL.simulation}</span>
                 ) : (
-                  <span className="tag">Human</span>
-                )}
-                {canManage ? (
-                  <label className="decision-role-select">
-                    Decision authority
-                    <select
-                      value={participant.decisionRole === "decision_maker" ? "decision_maker" : "contributor"}
-                      disabled={roleBusyId === participant.id}
-                      onChange={(event) =>
-                        void changeDecisionRole(
-                          participant.id,
-                          event.target.value as AssignableDecisionRole,
-                        )
-                      }
-                    >
-                      <option value="decision_maker">Decision maker</option>
-                      <option value="contributor">Contributor</option>
-                    </select>
-                  </label>
-                ) : participant.decisionRole === "decision_maker" ? (
-                  <span className="tag">Decision maker</span>
-                ) : (
-                  <span className="tag tag-muted">{participant.decisionRole}</span>
+                  <span className="tag">{PARTICIPANT_KIND_LABEL.human}</span>
                 )}
               </div>
 
-              <dl className="participant-state">
-                <div>
-                  <dt>Constraints</dt>
-                  <dd>{constraintCounts.get(participant.id) ?? 0}</dd>
-                </div>
-                <div>
-                  <dt>Alignment</dt>
-                  <dd>
-                    {participant.alignment
-                      ? ALIGNMENT_CHOICE_LABEL[participant.alignment]
-                      : "Not shared yet"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Approval</dt>
-                  <dd>
-                    {!participant.isRequiredApprover
-                      ? "Not required"
-                      : participant.hasApprovedCurrentDecision
-                        ? "Approved"
-                        : "Not approved"}
-                  </dd>
-                </div>
-              </dl>
+              {participant.kind === "expert" ? (
+                <p className="participant-advisory">
+                  Advises the room on the option currently on the table. Never aligns, never
+                  approves, and can never hold the meeting.
+                </p>
+              ) : (
+                <dl className="participant-state">
+                  <div>
+                    <dt>Shared with the room</dt>
+                    <dd>{constraintCounts.get(participant.id) ?? 0}</dd>
+                  </div>
+                  <div>
+                    <dt>Alignment</dt>
+                    <dd>
+                      {participant.alignment
+                        ? ALIGNMENT_CHOICE_LABEL[participant.alignment]
+                        : "Waiting"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Approval</dt>
+                    <dd>
+                      {!participant.isRequiredApprover
+                        ? "Not required"
+                        : participant.hasApprovedCurrentDecision
+                          ? "Approved"
+                          : "Not confirmed yet"}
+                    </dd>
+                  </div>
+                </dl>
+              )}
 
               {canManage ? (
                 <div className="participant-owner-controls">

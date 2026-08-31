@@ -11,7 +11,7 @@ const engineer = { id: "participant-engineer", name: "Maya", role: "Engineer", k
 const finalProposal = {
   id: "proposal-1", participantId: "participant-engineer", title: "Reduced scope onboarding",
   summary: "Ship the smallest complete onboarding scope.", rationale: "Fits the deadline.",
-  expectedOutcomes: ["Launch on time"], referencedConstraintIds: [], parentProposalId: null,
+  expectedOutcomes: ["Launch on time"], referencedConstraintIds: [], referencedSourceIds: [], parentProposalId: null,
   status: "accepted" as const, createdAt: "2026-08-30T00:00:00.000Z",
 };
 
@@ -31,6 +31,7 @@ function buildDecisionRecordFixture(overrides: Partial<DecisionRecord["decision"
     deadlines: [{ label: "Launch", dueAt: "2026-09-15T00:00:00.000Z" }],
     actionItems: [{ id: "action-1", text: "Update onboarding copy.", ownerParticipantId: "participant-engineer", dueAt: null }],
     dissent: ["Maya noted residual risk in the reduced timeline."],
+    sourceProvenance: [],
     requiredApprovalParticipantIds: ["participant-owner"],
     expertAdvice: [{
       expertKey: "security" as const, findingId: "finding-1", proposalId: "proposal-1", category: "behavioral_tracking",
@@ -87,8 +88,8 @@ describe("computeMeetingReport", () => {
       title: "Should we ship AI onboarding?",
       brief: "Decide whether to ship AI-assisted onboarding.",
       participants: [owner, engineer],
-      positions: [{ id: "position-1", participantId: "participant-engineer", summary: "Capacity is tight.", category: "capacity", priority: "high", createdAt: "2026-08-30T00:00:00.000Z" }],
-      constraints: [{ id: "constraint-1", participantId: "participant-engineer", category: "capacity", text: "No auth rewrite.", priority: "critical", createdAt: "2026-08-30T00:00:00.000Z" }],
+      positions: [{ id: "position-1", participantId: "participant-engineer", summary: "Capacity is tight.", category: "capacity", priority: "high", referencedSourceIds: [], createdAt: "2026-08-30T00:00:00.000Z" }],
+      constraints: [{ id: "constraint-1", participantId: "participant-engineer", category: "capacity", text: "No auth rewrite.", priority: "critical", referencedSourceIds: [], createdAt: "2026-08-30T00:00:00.000Z" }],
       proposals: [finalProposal],
       conflicts: [
         { id: "conflict-1", proposalId: "proposal-1", constraintId: "constraint-1", raisedByActorType: "participant", raisedByActorId: "participant-engineer", severity: "blocking", reason: "Too broad.", status: "resolved", resolvedByActorType: "participant", resolvedByActorId: "participant-engineer", resolutionNote: "Scope reduced.", createdAt: "2026-08-30T00:00:00.000Z", resolvedAt: "2026-08-30T00:05:00.000Z" },

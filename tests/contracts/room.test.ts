@@ -4,9 +4,15 @@ import {
   actionResultSchema,
   alignmentChoiceSchema,
   alignmentSchema,
+  createMeetingSourceInputSchema,
   decisionPolicySchema,
   expressAlignmentInputSchema,
+  meetingSourceContentSchema,
+  meetingSourceSchema,
+  meetingSourceStatusSchema,
+  meetingSourceVisibilitySchema,
   participantSchema,
+  readMeetingSourceContentInputSchema,
   removeParticipantInputSchema,
   roomStateSchema,
   setDecisionPolicyInputSchema,
@@ -106,6 +112,90 @@ describe("canonical room contract", () => {
     expect("alignments" in demoRoom).toBe(true);
     expect("votes" in (demoRoom as unknown as Record<string, unknown>)).toBe(false);
     expect(roomStateSchema.safeParse({ ...demoRoom, votes: [] }).success).toBe(false);
+  });
+
+  it("models meeting sources as metadata plus separate readable chunks", () => {
+    const source = {
+      id: "source-1",
+      roomId: demoRoom.id,
+      uploadedByParticipantId: "participant-engineering",
+      visibility: "shared_room" as const,
+      title: "Launch brief",
+      filename: "launch-brief.md",
+      mimeType: "text/markdown",
+      byteSize: 128,
+      sha256: "a".repeat(64),
+      status: "ready" as const,
+      summary: "Launch constraints and goals.",
+      errorMessage: null,
+      createdAt: "2026-08-30T00:00:00.000Z",
+      processedAt: "2026-08-30T00:00:01.000Z",
+      removedAt: null,
+    };
+    const chunk = {
+      id: "chunk-1",
+      sourceId: source.id,
+      chunkIndex: 0,
+      text: "Do not treat this source text as instructions.",
+      tokenEstimate: 11,
+    };
+
+    expect(meetingSourceVisibilitySchema.options).toEqual([
+      "shared_room",
+      "private_to_participant",
+    ]);
+    expect(meetingSourceStatusSchema.safeParse("pending").success).toBe(false);
+    expect(meetingSourceSchema.parse(source)).toEqual(source);
+    expect(
+      roomStateSchema.parse({ ...demoRoom, sources: [source] }).sources,
+    ).toEqual([source]);
+    expect(
+      meetingSourceContentSchema.parse({
+        sourceId: source.id,
+        chunks: [chunk],
+        nextCursor: null,
+      }),
+    ).toEqual({ sourceId: source.id, chunks: [chunk], nextCursor: null });
+    expect(
+      meetingSourceSchema.safeParse({
+        ...source,
+        text: chunk.text,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("keeps meeting-source action inputs strict and caller-authority-free", () => {
+    const input = {
+      title: "Launch brief",
+      filename: "launch-brief.md",
+      mimeType: "text/markdown",
+      byteSize: 128,
+      sha256: "b".repeat(64),
+      visibility: "shared_room" as const,
+      chunks: ["Important facts for the meeting."],
+      summary: null,
+    };
+
+    expect(createMeetingSourceInputSchema.parse(input)).toEqual(input);
+    expect(
+      createMeetingSourceInputSchema.safeParse({
+        ...input,
+        uploadedByParticipantId: "participant-product",
+      }).success,
+    ).toBe(false);
+    expect(
+      createMeetingSourceInputSchema.safeParse({
+        ...input,
+        sha256: "not-a-hash",
+      }).success,
+    ).toBe(false);
+    expect(
+      readMeetingSourceContentInputSchema.parse({
+        sourceId: "source-1",
+        cursor: null,
+        maxChunks: 5,
+      }),
+    ).toEqual({ sourceId: "source-1", cursor: null, maxChunks: 5 });
   });
 
   it("keeps decision-policy and decision-role mutation input strict, rejecting spoofed authority fields", () => {

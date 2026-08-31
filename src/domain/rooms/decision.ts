@@ -19,6 +19,7 @@ export function decisionCandidateFromPreview(
     deadlines: preview.deadlines,
     actionItems: preview.actionItems,
     dissent: preview.dissent,
+    sourceProvenance: preview.sourceProvenance,
     requiredApprovalParticipantIds: preview.requiredApprovalParticipantIds,
     expertAdvice: preview.expertAdvice,
   };
@@ -42,6 +43,7 @@ export function normalizeDecisionCandidate(
       ...candidate.proposal,
       expectedOutcomes: [...candidate.proposal.expectedOutcomes].sort(),
       referencedConstraintIds: [...candidate.proposal.referencedConstraintIds].sort(),
+      referencedSourceIds: [...candidate.proposal.referencedSourceIds].sort(),
     },
     acceptedTradeoffs: [...candidate.acceptedTradeoffs]
       .map((tradeoff) => ({
@@ -62,6 +64,9 @@ export function normalizeDecisionCandidate(
     ),
     actionItems: [...candidate.actionItems].sort(byId),
     dissent: [...candidate.dissent].sort(),
+    sourceProvenance: [...candidate.sourceProvenance].sort((left, right) =>
+      left.sourceId.localeCompare(right.sourceId),
+    ),
     requiredApprovalParticipantIds: [
       ...candidate.requiredApprovalParticipantIds,
     ].sort(),

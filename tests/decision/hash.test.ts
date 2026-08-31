@@ -17,6 +17,7 @@ function candidate(): FinalDecisionCandidate {
       rationale: "Fits capacity and accessibility constraints.",
       expectedOutcomes: ["Accessible navigation", "Faster first value"],
       referencedConstraintIds: ["constraint-2", "constraint-1"],
+      referencedSourceIds: ["source-2", "source-1"],
       parentProposalId: "proposal-1",
       status: "candidate",
       createdAt,
@@ -68,6 +69,22 @@ function candidate(): FinalDecisionCandidate {
     deadlines: [],
     actionItems: [],
     dissent: [],
+    sourceProvenance: [
+      {
+        sourceId: "source-2",
+        uploadedByParticipantId: "designer",
+        visibility: "shared_room",
+        sha256: "b".repeat(64),
+        status: "ready",
+      },
+      {
+        sourceId: "source-1",
+        uploadedByParticipantId: "engineer",
+        visibility: "shared_room",
+        sha256: "a".repeat(64),
+        status: "ready",
+      },
+    ],
     requiredApprovalParticipantIds: ["engineer", "designer"],
     expertAdvice: [],
   };
@@ -79,6 +96,7 @@ describe("canonical final decision hashing", () => {
     const second = {
       requiredApprovalParticipantIds: ["designer", "engineer"],
       dissent: [],
+      sourceProvenance: [...first.sourceProvenance].reverse(),
       expertAdvice: [],
       actionItems: [],
       deadlines: [],
@@ -95,6 +113,7 @@ describe("canonical final decision hashing", () => {
         ...first.proposal,
         expectedOutcomes: [...first.proposal.expectedOutcomes].reverse(),
         referencedConstraintIds: [...first.proposal.referencedConstraintIds].reverse(),
+        referencedSourceIds: [...first.proposal.referencedSourceIds].reverse(),
       },
     } satisfies FinalDecisionCandidate;
 
@@ -120,6 +139,15 @@ describe("canonical final decision hashing", () => {
     }],
     ["decision policy", (value: FinalDecisionCandidate) => {
       value.decisionPolicy = "equal_authority_consensus";
+    }],
+    ["cited source ids", (value: FinalDecisionCandidate) => {
+      value.proposal.referencedSourceIds = ["source-9"];
+    }],
+    ["source provenance hash", (value: FinalDecisionCandidate) => {
+      value.sourceProvenance[0]!.sha256 = "f".repeat(64);
+    }],
+    ["source provenance membership", (value: FinalDecisionCandidate) => {
+      value.sourceProvenance = value.sourceProvenance.slice(0, 1);
     }],
   ])("changes when approval-sensitive %s changes", async (_name, mutate) => {
     const baseline = candidate();

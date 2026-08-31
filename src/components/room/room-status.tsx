@@ -3,8 +3,9 @@
 import { useState } from "react";
 import type { ActionResult, Participant, RoomPhase } from "@/contracts/room";
 import { ActionFeedback } from "./action-feedback";
+import { CoordinationStatus } from "./coordination-status";
 import { useRoom } from "./room-provider";
-import { PHASE_FOCUS, PHASE_LABEL, PHASE_ORDER } from "./room-labels";
+import { PHASE_LABEL, PHASE_ORDER } from "./room-labels";
 
 /**
  * Where the room is in its six phases, and who you are inside it.
@@ -90,41 +91,16 @@ export function RoomStatusPanel() {
         })}
       </ol>
 
-      <p className="phase-focus">{PHASE_FOCUS[room.phase]}</p>
+      {/* The same coordination story the protocol tells, for everyone in the
+          room rather than the owner alone: a contributor should never have to
+          ask the owner who the room is waiting for. */}
+      <CoordinationStatus />
 
       {isOwner ? (
         <div className="organizer-panel" aria-labelledby="organizer-heading">
           <h3 className="panel-subheading" id="organizer-heading">
             Owner phase controls
           </h3>
-
-          <ul className="waiting-list">
-            {room.participants.map((participant) => (
-              <li key={participant.id} className="waiting-row">
-                <div className="participant-identity">
-                  <span className="participant-name">
-                    {participant.name}
-                    {participant.id === room.ownerParticipantId ? (
-                      <span className="tag">Owner</span>
-                    ) : null}
-                  </span>
-                  <span className="participant-role">{participant.role}</span>
-                </div>
-
-                <div className="waiting-statuses">
-                  <StatusPill
-                    label="Joined"
-                    active={participant.isClaimed}
-                  />
-                  <StatusPill
-                    label="Position published"
-                    active={participantPositionIds.has(participant.id)}
-                  />
-                  <StatusPill label="Ready" active={participant.isReady} />
-                </div>
-              </li>
-            ))}
-          </ul>
 
           <div className="phase-control-group" aria-label="Owner phase controls">
             <PhaseAdvanceButton
@@ -175,30 +151,6 @@ export function RoomStatusPanel() {
         </div>
       ) : null}
     </section>
-  );
-}
-
-function StatusPill({
-  label,
-  active,
-  muted = false,
-}: {
-  label: string;
-  active: boolean;
-  muted?: boolean;
-}) {
-  return (
-    <span
-      className={
-        active
-          ? "status-pill status-pill-active"
-          : muted
-            ? "status-pill status-pill-muted"
-            : "status-pill"
-      }
-    >
-      {label}
-    </span>
   );
 }
 

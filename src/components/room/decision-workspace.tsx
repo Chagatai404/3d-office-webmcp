@@ -3,12 +3,14 @@
 import { useState } from "react";
 import type {
   ActionResult,
-  DecisionRecord,
   FinalDecisionPreview,
   RoomState,
 } from "@/contracts/room";
+import { useShell } from "@/components/shell/shell-provider";
 import { ActionFeedback } from "./action-feedback";
-import { DecisionPreviewView, DecisionRecordView } from "./decision-shared";
+import { shortDecisionHash } from "./coordination";
+import { DecisionPreviewView } from "./decision-shared";
+import { FinalReport } from "./final-report";
 import { useRoom } from "./room-provider";
 
 const DECISION_POLICY_LABEL: Record<RoomState["decisionPolicy"], string> = {
@@ -34,15 +36,25 @@ const DECISION_POLICY_LABEL: Record<RoomState["decisionPolicy"], string> = {
  * `owner_decides`, the owner) changes underneath it.
  */
 export function DecisionWorkspace() {
+  const { room } = useRoom();
+
+  /*
+   * The decision pedestal holds the review while the decision is being made,
+   * and the record once it has been. One place in the room, one artifact: a
+   * finalized meeting does not send anyone somewhere new to find out what was
+   * decided, and there is no second surface that could disagree with this one.
+   */
+  return room.phase === "finalized" ? <FinalReport /> : <DecisionReview />;
+}
+
+function DecisionReview() {
   const { room, self, actions } = useRoom();
+  const { agentPreparedDecision, clearDecisionHandoff } = useShell();
 
   const [previewResult, setPreviewResult] = useState<ActionResult<FinalDecisionPreview> | null>(null);
   const [approvalResult, setApprovalResult] = useState<ActionResult<unknown> | null>(null);
-  const [recordResult, setRecordResult] = useState<ActionResult<DecisionRecord> | null>(null);
-
   const [previewPending, setPreviewPending] = useState(false);
   const [approvalPending, setApprovalPending] = useState(false);
-  const [recordPending, setRecordPending] = useState(false);
 
   const [confirmedDecisionHash, setConfirmedDecisionHash] = useState<string | null>(null);
   const [loadedPreview, setLoadedPreview] = useState<FinalDecisionPreview | null>(null);
@@ -90,15 +102,8 @@ export function DecisionWorkspace() {
     const result = await actions.approveFinalDecision({ decisionHash });
     setApprovalPending(false);
     setApprovalResult(result);
-  }
-
-  async function handleRecordClick() {
-    if (recordPending) return;
-
-    setRecordPending(true);
-    const result = await actions.getDecisionRecord();
-    setRecordPending(false);
-    setRecordResult(result);
+    // The hand-off notice asked for exactly this. It has been answered.
+    if (result.ok) clearDecisionHandoff();
   }
 
   return (
@@ -110,6 +115,23 @@ export function DecisionWorkspace() {
       <h2 className="panel-heading" id="decision-heading">
         Decision
       </h2>
+
+      {/* B6: an agent that stops here has not failed, and the room must not
+          look like it has. The tool returned `HUMAN_CONFIRMATION_REQUIRED`,
+          the shell brought the person to this surface, and this says why in
+          the person's own language rather than leaving a refusal code to be
+          read as a bug. */}
+      {agentPreparedDecision ? (
+        <aside className="decision-handoff" role="status" data-testid="agent-decision-handoff">
+          <strong className="decision-handoff-title">
+            Your agent prepared the final decision.
+          </strong>
+          <p>
+            Review this exact decision before approving. Your agent went as far as it is allowed
+            to go — the last step is deliberately yours, and no agent can take it for you.
+          </p>
+        </aside>
+      ) : null}
 
       <section className="decision-section" aria-labelledby="policy-heading" data-testid="policy-panel">
         <h3 className="panel-subheading" id="policy-heading">
@@ -160,7 +182,18 @@ export function DecisionWorkspace() {
                       setConfirmedDecisionHash(event.target.checked ? decisionHash : null)
                     }
                   />
-                  <span>I reviewed and confirm this exact decision hash.</span>
+                  <span>
+                    I reviewed this decision
+                    {/* The confirmation is bound to one exact frozen decision,
+                        and it says which — quietly, beside the tick, rather
+                        than as a hash a person is asked to read aloud. */}
+                    {decisionHash ? (
+                      <small className="decision-confirm-hash">
+                        Bound to {shortDecisionHash(decisionHash)}. If the plan changes, this
+                        confirmation is void.
+                      </small>
+                    ) : null}
+                  </span>
                 </label>
                 <button
                   className="button decision-action"
@@ -179,6 +212,10 @@ export function DecisionWorkspace() {
                         ? "Make final decision"
                         : "Approve this decision"}
                 </button>
+                <p className="panel-note" data-testid="human-confirmation-note">
+                  This one step stays with a person on purpose. An agent can prepare the exact
+                  decision and bring it here; recording it takes your own confirmation.
+                </p>
               </>
             ) : (
               <p className="panel-note">
@@ -194,31 +231,6 @@ export function DecisionWorkspace() {
         <ActionFeedback result={approvalResult} />
       </section>
 
-      <section
-        className="decision-section"
-        aria-labelledby="record-heading"
-        data-testid="decision-record-panel"
-      >
-        <h3 className="panel-subheading" id="record-heading">
-          Immutable decision record
-        </h3>
-        <button
-          className="button-quiet"
-          type="button"
-          disabled={room.phase !== "finalized" || recordPending}
-          onClick={handleRecordClick}
-        >
-          {recordPending ? "Loading record..." : "Load persisted final record"}
-        </button>
-        <ActionFeedback result={recordResult} />
-        {recordResult?.ok ? (
-          <DecisionRecordView room={room} record={recordResult.data} />
-        ) : (
-          <p className="panel-note">
-            The record is fetched from the server after finalization, not rebuilt from local UI state.
-          </p>
-        )}
-      </section>
     </section>
   );
 }

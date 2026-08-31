@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { AlignmentWorkspace } from "@/components/room/alignment-workspace";
+import { CoordinationStatus } from "@/components/room/coordination-status";
 import { DecisionWorkspace } from "@/components/room/decision-workspace";
 import { IssuesWorkspace } from "@/components/room/issues-workspace";
 import { MeetingBrief } from "@/components/room/meeting-brief";
@@ -132,6 +133,11 @@ export function WorkspacePanel() {
         >
           ✕
         </button>
+        {/* One line of coordination above every workspace: whichever surface
+            someone opened, "who are we waiting for" is answered without
+            leaving it. */}
+        <CoordinationStatus variant="strip" />
+
         <div className="workspace-stage-body" ref={bodyRef}>
           {content}
         </div>

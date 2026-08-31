@@ -23,7 +23,7 @@ describe("computeCoordinationStatus", () => {
       const room = buildRoomStateFixture({
         phase: "input",
         participants: [owner, engineer],
-        positions: [{ id: "position-1", participantId: "participant-engineer", summary: "s", category: null, priority: null, createdAt: "2026-08-30T00:00:00.000Z" }],
+        positions: [{ id: "position-1", participantId: "participant-engineer", summary: "s", category: null, priority: null, referencedSourceIds: [], createdAt: "2026-08-30T00:00:00.000Z" }],
       });
       const status = computeCoordinationStatus(room);
       expect(status.input).not.toBeNull();
@@ -72,7 +72,7 @@ describe("computeCoordinationStatus", () => {
         phase: "proposals",
         participants: [owner, engineer],
         activeProposalId: "proposal-1",
-        proposals: [{ id: "proposal-1", participantId: "participant-engineer", title: "Reduced scope", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], parentProposalId: null, status: "candidate", createdAt: "2026-08-30T00:00:00.000Z" }],
+        proposals: [{ id: "proposal-1", participantId: "participant-engineer", title: "Reduced scope", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], referencedSourceIds: [], parentProposalId: null, status: "candidate", createdAt: "2026-08-30T00:00:00.000Z" }],
       });
       const status = computeCoordinationStatus(room);
       expect(status.proposals).toEqual({
@@ -148,10 +148,10 @@ describe("computeCoordinationStatus", () => {
 
   describe("approval phase", () => {
     const preview = {
-      proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], parentProposalId: null, status: "candidate" as const, createdAt: "2026-08-30T00:00:00.000Z" },
+      proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], referencedSourceIds: [], parentProposalId: null, status: "candidate" as const, createdAt: "2026-08-30T00:00:00.000Z" },
       rationale: "r", acceptedTradeoffs: [], unresolvedWarnings: [], alignments: [],
       decisionPolicy: "owner_decides" as const, owners: [], deadlines: [], actionItems: [], dissent: [],
-      expertAdvice: [], decisionHash: "hash-1", approvals: [],
+      expertAdvice: [], sourceProvenance: [], decisionHash: "hash-1", approvals: [],
     };
 
     it("names missing required approvers and cannot advance until every one approves", () => {

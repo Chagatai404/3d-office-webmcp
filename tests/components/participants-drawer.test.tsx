@@ -20,6 +20,7 @@ class WaitingRoomFakeClient implements RoomClient {
   state: RoomState;
   requests: JoinRequest[];
   resolvedIds: string[] = [];
+  readonly decisionRoleCalls: Parameters<RoomClient["setParticipantDecisionRole"]>[1][] = [];
   removedParticipantIds: string[] = [];
   transferredToParticipantIds: string[] = [];
   private readonly listeners = new Set<Listener>();
@@ -99,8 +100,37 @@ class WaitingRoomFakeClient implements RoomClient {
   };
 
   setDecisionPolicy: RoomClient["setDecisionPolicy"] = async () => this.unavailable();
-  setParticipantDecisionRole: RoomClient["setParticipantDecisionRole"] = async () => this.unavailable();
+
+  setParticipantDecisionRole: RoomClient["setParticipantDecisionRole"] = async (_roomId, input) => {
+    this.decisionRoleCalls.push(input);
+    const target = this.state.participants.find(
+      (participant) => participant.id === input.participantId,
+    );
+    if (target) target.decisionRole = input.decisionRole;
+    this.state.version += 1;
+    this.publish();
+    return { ok: true, data: null, roomVersion: this.state.version, message: "Decision role set." };
+  };
   configureParticipant: RoomClient["configureParticipant"] = async () => this.unavailable();
+
+  /** What the server does after an admission, arriving on the subscription. */
+  seatAdmittedParticipant(id: string, name: string, role: string) {
+    this.state.participants.push({
+      id,
+      name,
+      role,
+      kind: "human",
+      meetingRole: "participant",
+      decisionRole: "contributor",
+      isClaimed: true,
+      isReady: false,
+      status: "active",
+      removedAt: null,
+      createdAt: "2026-08-30T00:00:02.000Z",
+    });
+    this.state.version += 1;
+    this.publish();
+  }
 
   transferOwnership: RoomClient["transferOwnership"] = async (_roomId, input) => {
     this.transferredToParticipantIds.push(input.participantId);
@@ -193,9 +223,18 @@ describe("owner waiting room", () => {
     await mount(client);
     await tick();
 
-    expect(container.textContent).toContain("Jane");
+    expect(container.textContent).toContain("Jane wants to join");
+    // B4: the role they typed is shown as a request, and decision authority
+    // is an explicit, separate choice that starts at Contributor.
+    expect(container.textContent).toContain("Requested role");
     expect(container.textContent).toContain("Designer");
-    expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Admit")).toBe(true);
+    expect(container.textContent).toContain("Decision authority");
+    const authority = [
+      ...container.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+    ];
+    expect(authority.map((input) => input.value)).toEqual(["contributor", "decision_maker"]);
+    expect(authority.find((input) => input.checked)?.value).toBe("contributor");
+    expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Admit participant")).toBe(true);
     expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Reject")).toBe(true);
   });
 
@@ -219,14 +258,62 @@ describe("owner waiting room", () => {
     await tick();
 
     const admitButton = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Admit",
+      (button) => button.textContent === "Admit participant",
     );
-    if (!admitButton) throw new Error("Admit button missing.");
+    if (!admitButton) throw new Error("Admit participant button missing.");
     await act(async () => { admitButton.click(); });
     await tick();
 
     expect(client.resolvedIds).toEqual(["join-request-1"]);
     expect(container.textContent).toContain("No one is waiting.");
+  });
+
+  it("admits as a contributor without touching decision authority", async () => {
+    const client = new WaitingRoomFakeClient(seedRoom("participant-product"), [
+      { ...waitingRequest },
+    ]);
+    await mount(client);
+    await tick();
+
+    await act(async () => {
+      buttonsNamed("Admit participant")[0]!.click();
+    });
+    await tick();
+
+    expect(client.resolvedIds).toEqual(["join-request-1"]);
+    expect(client.decisionRoleCalls).toEqual([]);
+  });
+
+  it("grants the decision authority the owner chose once the admitted person exists", async () => {
+    const client = new WaitingRoomFakeClient(seedRoom("participant-product"), [
+      { ...waitingRequest },
+    ]);
+    await mount(client);
+    await tick();
+
+    const decisionMaker = [
+      ...container.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
+    ].find((input) => input.value === "decision_maker");
+    if (!decisionMaker) throw new Error("Decision maker choice missing.");
+    await act(async () => { decisionMaker.click(); });
+
+    await act(async () => {
+      buttonsNamed("Admit participant")[0]!.click();
+    });
+    await tick();
+
+    // Admission and authority are two canonical operations today: nothing
+    // can be granted until the new participant is actually in the snapshot.
+    expect(client.decisionRoleCalls).toEqual([]);
+
+    await act(async () => {
+      client.seatAdmittedParticipant("participant-jane", "Jane", "Designer");
+    });
+    await tick();
+
+    expect(client.decisionRoleCalls).toEqual([
+      { participantId: "participant-jane", decisionRole: "decision_maker" },
+    ]);
   });
 });
 
@@ -353,5 +440,73 @@ describe("owner membership controls", () => {
     // membership controls are rendered for this session.
     expect(buttonsNamed("Remove")).toHaveLength(0);
     expect(buttonsNamed("Make owner")).toHaveLength(0);
+  });
+});
+
+describe("participant role presentation", () => {
+  function roomWithExpert(): RoomState {
+    const seed = seedRoom("participant-engineering");
+    seed.participants.push({
+      id: "participant-security",
+      name: "Security Expert",
+      role: "Security review",
+      kind: "expert",
+      meetingRole: "participant",
+      decisionRole: "advisor",
+      isClaimed: true,
+      isReady: false,
+      status: "active",
+      removedAt: null,
+      createdAt: "2026-08-30T00:00:00.000Z",
+    });
+    return seed;
+  }
+
+  it("says who someone is, what they may run, and whether they may decide", async () => {
+    const client = new WaitingRoomFakeClient(roomWithExpert(), []);
+    await mount(client);
+    await tick();
+
+    const ownerRow = [...container.querySelectorAll(".participant-row")].find((row) =>
+      row.textContent?.includes("Maya Okonkwo"),
+    );
+    expect(ownerRow?.textContent).toContain("Product Manager");
+    expect(ownerRow?.textContent).toContain("Owner");
+    expect(ownerRow?.textContent).toContain("Decision maker");
+
+    const simulationRow = [...container.querySelectorAll(".participant-row")].find((row) =>
+      row.textContent?.includes("Lina Duarte"),
+    );
+    expect(simulationRow?.textContent).toContain("Simulated teammate");
+    expect(simulationRow?.textContent).toContain("Participant");
+    expect(simulationRow?.textContent).toContain("Advisor");
+  });
+
+  it("never prints an internal enum value as the copy a person reads", async () => {
+    const client = new WaitingRoomFakeClient(roomWithExpert(), []);
+    await mount(client);
+    await tick();
+
+    expect(container.textContent).not.toContain("decision_maker");
+    expect(container.textContent).not.toContain("meetingRole");
+    expect(container.textContent).not.toContain("decisionRole");
+  });
+
+  it("gives the Security Expert no alignment or approval state to appear to hold", async () => {
+    const client = new WaitingRoomFakeClient(roomWithExpert(), []);
+    await mount(client);
+    await tick();
+
+    const expertRow = [...container.querySelectorAll(".participant-row")].find((row) =>
+      row.textContent?.includes("Security Expert"),
+    );
+    expect(expertRow?.textContent).toContain("Advisory");
+    expect(expertRow?.textContent).toContain("Never aligns, never approves");
+    expect(expertRow?.querySelector(".participant-state")).toBeNull();
+
+    // And the owner's controls never reach an advisory actor: it can never
+    // be promoted into human decision authority through this panel.
+    expect(expertRow?.querySelector("select")).toBeNull();
+    expect(expertRow?.querySelector("button")).toBeNull();
   });
 });

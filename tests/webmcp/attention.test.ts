@@ -72,9 +72,10 @@ describe("computeAttentionItems", () => {
 
   function frozenPreview(requiredIds: string[], missingIds: string[], policy: "owner_decides" | "equal_authority_consensus") {
     return {
-      proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], parentProposalId: null, status: "candidate" as const, createdAt: "2026-08-30T00:00:00.000Z" },
+      proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], referencedSourceIds: [], parentProposalId: null, status: "candidate" as const, createdAt: "2026-08-30T00:00:00.000Z" },
       rationale: "r", acceptedTradeoffs: [], unresolvedWarnings: [], alignments: [],
       decisionPolicy: policy, owners: [], deadlines: [], actionItems: [], dissent: [],
+      sourceProvenance: [],
       expertAdvice: [],
       requiredApprovalParticipantIds: requiredIds, decisionHash: "hash-1", approvals: [],
       missingApprovalParticipantIds: missingIds,

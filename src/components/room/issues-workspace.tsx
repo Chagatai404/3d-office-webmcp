@@ -17,6 +17,7 @@ export function IssuesWorkspace() {
   );
   const openConflictIds = useMemo(() => openConflicts.map((conflict) => conflict.id), [openConflicts]);
   const blockingOpenCount = openConflicts.filter((conflict) => conflict.severity === "blocking").length;
+  const warningOpenCount = openConflicts.length - blockingOpenCount;
 
   const [objectionResult, setObjectionResult] = useState<ActionResult<unknown> | null>(null);
   const [tradeoffResult, setTradeoffResult] = useState<ActionResult<unknown> | null>(null);
@@ -99,8 +100,28 @@ export function IssuesWorkspace() {
       <h2 className="panel-heading" id="issues-heading">
         Issues
       </h2>
+      {/* Blocking and warning are counted separately and said in words: a
+          room with three warnings and no blockers is not stuck, and a single
+          number cannot tell anyone which of the two they are looking at. */}
+      <p
+        className={blockingOpenCount > 0 ? "issues-tally issues-tally-blocked" : "issues-tally"}
+        data-testid="issues-tally"
+      >
+        <span className="issues-tally-primary">
+          {blockingOpenCount === 0
+            ? "Nothing blocking"
+            : `${blockingOpenCount} blocking objection${blockingOpenCount === 1 ? "" : "s"}`}
+        </span>
+        <span className="issues-tally-secondary">
+          {warningOpenCount === 0
+            ? "no open warnings"
+            : `${warningOpenCount} open warning${warningOpenCount === 1 ? "" : "s"}, not blocking`}
+        </span>
+      </p>
       <p className="panel-note">
-        Blocking objections open: {blockingOpenCount}. Alignment cannot open until they are settled.
+        {blockingOpenCount === 0
+          ? "Alignment can open. Warnings travel with the decision instead of stopping it."
+          : "Alignment opens once every blocking objection is settled."}
       </p>
 
       <form
@@ -265,8 +286,8 @@ export function IssuesWorkspace() {
                 className="decision-list-item"
                 data-board-item={conflict.id}
               >
-                <span className={`tag ${conflict.severity === "blocking" ? "tag-risk" : ""}`}>
-                  {conflict.status} {conflict.severity}
+                <span className={conflict.severity === "blocking" ? "tag tag-risk" : "tag tag-warning"}>
+                  {conflict.severity === "blocking" ? "Blocking" : "Warning"}
                 </span>
                 <p>{conflict.reason}</p>
                 <label htmlFor={`${fieldId}-${conflict.id}-resolution`}>Resolution note</label>

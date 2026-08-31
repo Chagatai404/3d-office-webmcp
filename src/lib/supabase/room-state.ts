@@ -35,18 +35,19 @@ export async function loadRoomState(
   if (!roomResult.data) return null;
   const room = roomRowSchema.parse(roomResult.data);
 
-  const [participants, positions, constraints, proposals, conflicts, tradeoffs, alignments, approvals, activity, expertFindings] =
+  const [participants, positions, constraints, proposals, conflicts, tradeoffs, alignments, approvals, activity, expertFindings, sources] =
     await Promise.all([
       client.from("participants").select("id,user_id,name,role,kind,meeting_role,decision_role,required_for_approval,ready_at,status,removed_at,created_at").eq("room_id", roomId).order("seat_order"),
-      client.from("positions").select("id,participant_id,summary,category,priority,created_at").eq("room_id", roomId).order("created_at"),
-      client.from("constraints").select("id,participant_id,category,text,priority,created_at").eq("room_id", roomId).order("created_at"),
-      client.from("proposals").select("id,participant_id,title,summary,rationale,expected_outcomes,referenced_constraint_ids,parent_proposal_id,status,created_at").eq("room_id", roomId).order("created_at"),
+      client.from("positions").select("id,participant_id,summary,category,priority,referenced_source_ids,created_at").eq("room_id", roomId).order("created_at"),
+      client.from("constraints").select("id,participant_id,category,text,priority,referenced_source_ids,created_at").eq("room_id", roomId).order("created_at"),
+      client.from("proposals").select("id,participant_id,title,summary,rationale,expected_outcomes,referenced_constraint_ids,referenced_source_ids,parent_proposal_id,status,created_at").eq("room_id", roomId).order("created_at"),
       client.from("conflicts").select("id,proposal_id,constraint_id,raised_by_actor_type,raised_by_actor_id,severity,reason,status,resolved_by_actor_type,resolved_by_actor_id,resolution_note,created_at,resolved_at").eq("room_id", roomId).order("created_at"),
       client.from("tradeoffs").select("id,conflict_ids,created_by_actor_type,created_by_actor_id,description,expected_effect,resulting_proposal_id,created_at").eq("room_id", roomId).order("created_at"),
       client.from("alignments").select("proposal_id,participant_id,choice,comment,updated_at").eq("room_id", roomId).order("updated_at"),
       client.from("approvals").select("participant_id,decision_hash,approved_at").eq("room_id", roomId).order("approved_at"),
       client.from("audit_events").select("id,actor_type,actor_id,origin,action,entity_type,entity_id,sanitized_input,result,previous_room_version,resulting_room_version,confirmation_required,created_at").eq("room_id", roomId).order("created_at"),
       client.from("expert_findings").select("id,expert_participant_id,expert_key,proposal_id,category,title,summary,recommendation,status,resolution_rationale,created_at,resolved_at").eq("room_id", roomId).order("created_at"),
+      client.from("meeting_sources").select("id,room_id,uploaded_by_participant_id,visibility,title,filename,mime_type,byte_size,sha256,status,summary,error_message,created_at,processed_at,removed_at").eq("room_id", roomId).order("created_at"),
     ]);
 
   const participantRows = requireRows(participants) as Array<Record<string, unknown>>;
@@ -120,17 +121,22 @@ export async function loadRoomState(
     })),
     positions: (requireRows(positions) as Array<Record<string, unknown>>).map((row) => ({
       id: row.id, participantId: row.participant_id, summary: row.summary,
-      category: row.category, priority: row.priority, createdAt: row.created_at,
+      category: row.category, priority: row.priority,
+      referencedSourceIds: row.referenced_source_ids ?? [],
+      createdAt: row.created_at,
     })),
     constraints: (requireRows(constraints) as Array<Record<string, unknown>>).map((row) => ({
       id: row.id, participantId: row.participant_id, category: row.category,
-      text: row.text, priority: row.priority, createdAt: row.created_at,
+      text: row.text, priority: row.priority,
+      referencedSourceIds: row.referenced_source_ids ?? [],
+      createdAt: row.created_at,
     })),
     proposals: (requireRows(proposals) as Array<Record<string, unknown>>).map((row) => ({
       id: row.id, participantId: row.participant_id, title: row.title,
       summary: row.summary, rationale: row.rationale,
       expectedOutcomes: row.expected_outcomes,
       referencedConstraintIds: row.referenced_constraint_ids,
+      referencedSourceIds: row.referenced_source_ids ?? [],
       parentProposalId: row.parent_proposal_id, status: row.status, createdAt: row.created_at,
     })),
     conflicts: (requireRows(conflicts) as Array<Record<string, unknown>>).map((row) => ({
@@ -167,6 +173,23 @@ export async function loadRoomState(
       title: row.title, summary: row.summary, recommendation: row.recommendation,
       status: row.status, resolutionRationale: row.resolution_rationale,
       createdAt: row.created_at, resolvedAt: row.resolved_at,
+    })),
+    sources: (requireRows(sources) as Array<Record<string, unknown>>).map((row) => ({
+      id: row.id,
+      roomId: row.room_id,
+      uploadedByParticipantId: row.uploaded_by_participant_id,
+      visibility: row.visibility,
+      title: row.title,
+      filename: row.filename,
+      mimeType: row.mime_type,
+      byteSize: row.byte_size,
+      sha256: row.sha256,
+      status: row.status,
+      summary: row.summary,
+      errorMessage: row.error_message ?? null,
+      createdAt: row.created_at,
+      processedAt: row.processed_at,
+      removedAt: row.removed_at,
     })),
   });
 }

@@ -3,10 +3,21 @@
 import { useId, useMemo, useState, useSyncExternalStore } from "react";
 import type { ActionResult, AddPositionInput } from "@/contracts/room";
 import { ActionFeedback } from "./action-feedback";
+import { AgentPromptExamples } from "./agent-prompt-examples";
+import { CoordinationStatus } from "./coordination-status";
 import { useRoom } from "./room-provider";
 
 /**
- * Positions and their constraints, plus the one mutation this milestone owns.
+ * What each person wants the meeting to know, and the one mutation this
+ * workspace owns.
+ *
+ * The primary surface is deliberately one question and one box. It used to
+ * open on a summary field, a category field, a priority select and two
+ * pre-filled constraint rows — which is the shape of the `AddPositionInput`
+ * DTO, not the shape of a thought. The structured fields still exist, and
+ * still submit exactly the same canonical input; they are behind "Add
+ * structured detail" so someone who wants them can reach them and a
+ * first-time judge never has to.
  *
  * BACKEND CONTRACT:
  * `addMyPosition` carries no participant identity. The server derives the
@@ -19,28 +30,6 @@ interface ConstraintDraft {
   text: string;
   priority: string;
 }
-
-/** Pre-filled with the Engineer's seeded scenario so the demo is one click. */
-const INITIAL_DRAFT = {
-  summary:
-    "Delivery capacity for the next two weeks is limited, so the scope has to fit what one engineer can ship safely.",
-  category: "capacity",
-  priority: "high",
-  constraints: [
-    {
-      key: "draft-1",
-      category: "capacity",
-      text: "Implementation capacity is roughly one engineer for two weeks.",
-      priority: "high",
-    },
-    {
-      key: "draft-2",
-      category: "architecture",
-      text: "No authentication rewrite as part of this change.",
-      priority: "high",
-    },
-  ] satisfies ConstraintDraft[],
-};
 
 const EMPTY_CONSTRAINT: Omit<ConstraintDraft, "key"> = {
   category: "",
@@ -83,13 +72,12 @@ export function PositionsPanel() {
     () => "checking",
   );
 
-  const [summary, setSummary] = useState(INITIAL_DRAFT.summary);
-  const [category, setCategory] = useState(INITIAL_DRAFT.category);
-  const [priority, setPriority] = useState(INITIAL_DRAFT.priority);
-  const [constraints, setConstraints] = useState<ConstraintDraft[]>(
-    INITIAL_DRAFT.constraints,
-  );
-  const [nextKey, setNextKey] = useState(3);
+  const [summary, setSummary] = useState("");
+  const [category, setCategory] = useState("");
+  const [priority, setPriority] = useState("");
+  const [citedSourceIds, setCitedSourceIds] = useState<string[]>([]);
+  const [constraints, setConstraints] = useState<ConstraintDraft[]>([]);
+  const [nextKey, setNextKey] = useState(1);
   const [pending, setPending] = useState(false);
   const [readyPending, setReadyPending] = useState(false);
   const [result, setResult] = useState<ActionResult<unknown> | null>(null);
@@ -104,6 +92,10 @@ export function PositionsPanel() {
       .length;
   }, [room.positions, self]);
   const hasPublishedPosition = selfPositionCount > 0;
+  const citableSources = useMemo(
+    () => room.sources.filter((source) => source.status === "ready"),
+    [room.sources],
+  );
   const isReadyForDeliberation = self?.isReady ?? false;
   const canMarkReady =
     self !== null &&
@@ -112,13 +104,13 @@ export function PositionsPanel() {
     !isReadyForDeliberation;
   const readyDisabledReason = self
     ? room.phase !== "input"
-      ? "Readiness is only collected during the input phase."
+      ? "The meeting is past the point where readiness is collected."
       : !hasPublishedPosition
-        ? "Publish at least one position before marking your input ready."
+        ? "Share something with the meeting before marking your input ready."
         : isReadyForDeliberation
-          ? "Your canonical room snapshot already shows you are ready."
+          ? "The room already shows you as ready."
           : null
-    : "Claim a seat before marking input ready.";
+    : "Claim a seat before marking your input ready.";
 
   function updateConstraint(
     key: string,
@@ -150,16 +142,25 @@ export function PositionsPanel() {
     event.preventDefault();
     if (pending) return;
 
+    const citedThatStillExist = citedSourceIds.filter((id) =>
+      citableSources.some((source) => source.id === id),
+    );
     const input: AddPositionInput = {
       summary: summary.trim(),
       category: toNullable(category),
       priority: toNullable(priority),
+      ...(citedThatStillExist.length > 0
+        ? { referencedSourceIds: citedThatStillExist }
+        : {}),
       constraints: constraints
         .filter((constraint) => constraint.text.trim() !== "")
         .map((constraint) => ({
           category: constraint.category.trim() || "general",
           text: constraint.text.trim(),
           priority: toNullable(constraint.priority),
+          ...(citedThatStillExist.length > 0
+            ? { referencedSourceIds: citedThatStillExist }
+            : {}),
         })),
     };
 
@@ -174,6 +175,7 @@ export function PositionsPanel() {
       setSummary("");
       setCategory("");
       setPriority("");
+      setCitedSourceIds([]);
       setConstraints([]);
     }
   }
@@ -190,11 +192,11 @@ export function PositionsPanel() {
   return (
     <section className="panel-block" aria-labelledby="positions-heading">
       <h2 className="panel-heading" id="positions-heading">
-        Positions &amp; constraints
+        What the team has shared
       </h2>
 
       {room.positions.length === 0 ? (
-        <p className="panel-empty">No positions have been published yet.</p>
+        <p className="panel-empty">Nobody has shared anything with the meeting yet.</p>
       ) : (
         <ul className="position-list">
           {room.positions.map((position) => {
@@ -220,6 +222,18 @@ export function PositionsPanel() {
                   ) : null}
                 </p>
                 <p className="position-summary">{position.summary}</p>
+                {position.referencedSourceIds.length > 0 ? (
+                  <p className="position-sources">
+                    From:{" "}
+                    {position.referencedSourceIds
+                      .map(
+                        (id) =>
+                          room.sources.find((source) => source.id === id)?.title ??
+                          "a removed source",
+                      )
+                      .join(", ")}
+                  </p>
+                ) : null}
                 {owned.length > 0 ? (
                   <ul className="constraint-list">
                     {owned.map((constraint) => (
@@ -250,8 +264,8 @@ export function PositionsPanel() {
       )}
 
       <form className="position-form" onSubmit={handleSubmit}>
-        <h3 className="panel-subheading">
-          {self ? `Publish your position as ${self.role}` : "Publish a position"}
+        <h3 className="panel-subheading input-question">
+          What should the team know from you?
         </h3>
 
         <div className="agent-guide" aria-labelledby="agent-guide-heading">
@@ -269,135 +283,181 @@ export function PositionsPanel() {
               </h4>
               <p>
                 {self
-                  ? `Actions from this browser agent are recorded only for your ${self.role} participant session.`
+                  ? `Anything your agent does here is recorded as ${self.name}, and only as ${self.name}.`
                   : "Claim a seat before asking a browser agent to act for you."}
               </p>
             </div>
           </div>
-          <blockquote className="agent-prompt">
-            Read this meeting and help me express my engineering constraints.
-          </blockquote>
+          <AgentPromptExamples compact />
         </div>
 
-        <label htmlFor={`${fieldId}-summary`}>Position summary</label>
+        <label className="visually-hidden" htmlFor={`${fieldId}-summary`}>
+          What should the team know from you?
+        </label>
         <textarea
           id={`${fieldId}-summary`}
           name="summary"
-          rows={3}
+          className="input-primary-field"
+          rows={4}
           value={summary}
           required
+          placeholder="In your own words — what matters to you about this decision, and what you can and cannot live with."
           onChange={(event) => setSummary(event.target.value)}
         />
 
-        <div className="form-row">
-          <div>
-            <label htmlFor={`${fieldId}-category`}>Category</label>
-            <input
-              id={`${fieldId}-category`}
-              name="category"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor={`${fieldId}-priority`}>Priority</label>
-            <select
-              id={`${fieldId}-priority`}
-              name="priority"
-              value={priority}
-              onChange={(event) => setPriority(event.target.value)}
-            >
-              <option value="">Unset</option>
-              {PRIORITY_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <button className="button" type="submit" disabled={!canSubmit || pending}>
+          {pending ? "Sharing…" : "Share with meeting"}
+        </button>
 
-        <fieldset className="constraint-fieldset">
-          <legend>Constraints published with this position</legend>
-          {constraints.length === 0 ? (
-            <p className="panel-empty">No constraints attached.</p>
-          ) : null}
-          {constraints.map((constraint, index) => (
-            <div className="constraint-draft" key={constraint.key}>
-              <div className="form-row">
-                <div>
-                  <label htmlFor={`${fieldId}-${constraint.key}-category`}>
-                    Constraint {index + 1} category
+        {/* The structured shape the domain actually stores. Kept, because a
+            person filling this in by hand deserves the same expressiveness an
+            agent has — but never the first thing anyone sees. */}
+        <details className="advanced-fields">
+          <summary>Add structured detail (optional)</summary>
+
+          <div className="advanced-fields-body">
+            <p className="panel-note">
+              Only if it helps. Everything below is optional, and the room reads your words above
+              either way.
+            </p>
+
+            <div className="form-row">
+              <div>
+                <label htmlFor={`${fieldId}-category`}>Topic</label>
+                <input
+                  id={`${fieldId}-category`}
+                  name="category"
+                  value={category}
+                  placeholder="capacity, timing, security…"
+                  onChange={(event) => setCategory(event.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor={`${fieldId}-priority`}>How strongly you hold it</label>
+                <select
+                  id={`${fieldId}-priority`}
+                  name="priority"
+                  value={priority}
+                  onChange={(event) => setPriority(event.target.value)}
+                >
+                  <option value="">Unset</option>
+                  {PRIORITY_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {citableSources.length > 0 ? (
+              <fieldset className="constraint-fieldset">
+                <legend>Sources that informed this</legend>
+                <p className="panel-note">
+                  Link the attached files this came from. Recorded as provenance
+                  only — it never gives a file a say in the decision.
+                </p>
+                {citableSources.map((source) => {
+                  const checked = citedSourceIds.includes(source.id);
+                  return (
+                    <label key={source.id} className="source-cite-option">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) =>
+                          setCitedSourceIds((current) =>
+                            event.target.checked
+                              ? [...current, source.id]
+                              : current.filter((id) => id !== source.id),
+                          )
+                        }
+                      />
+                      <span>{source.title}</span>
+                    </label>
+                  );
+                })}
+              </fieldset>
+            ) : null}
+
+            <fieldset className="constraint-fieldset">
+              <legend>Hard limits the room must respect</legend>
+              {constraints.length === 0 ? (
+                <p className="panel-empty">None attached.</p>
+              ) : null}
+              {constraints.map((constraint, index) => (
+                <div className="constraint-draft" key={constraint.key}>
+                  <div className="form-row">
+                    <div>
+                      <label htmlFor={`${fieldId}-${constraint.key}-category`}>
+                        Limit {index + 1} topic
+                      </label>
+                      <input
+                        id={`${fieldId}-${constraint.key}-category`}
+                        value={constraint.category}
+                        onChange={(event) =>
+                          updateConstraint(
+                            constraint.key,
+                            "category",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor={`${fieldId}-${constraint.key}-priority`}>
+                        How strongly
+                      </label>
+                      <select
+                        id={`${fieldId}-${constraint.key}-priority`}
+                        value={constraint.priority}
+                        onChange={(event) =>
+                          updateConstraint(
+                            constraint.key,
+                            "priority",
+                            event.target.value,
+                          )
+                        }
+                      >
+                        <option value="">Unset</option>
+                        {PRIORITY_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <label htmlFor={`${fieldId}-${constraint.key}-text`}>
+                    Limit {index + 1}
                   </label>
                   <input
-                    id={`${fieldId}-${constraint.key}-category`}
-                    value={constraint.category}
+                    id={`${fieldId}-${constraint.key}-text`}
+                    value={constraint.text}
                     onChange={(event) =>
-                      updateConstraint(
-                        constraint.key,
-                        "category",
-                        event.target.value,
-                      )
+                      updateConstraint(constraint.key, "text", event.target.value)
                     }
                   />
-                </div>
-                <div>
-                  <label htmlFor={`${fieldId}-${constraint.key}-priority`}>
-                    Priority
-                  </label>
-                  <select
-                    id={`${fieldId}-${constraint.key}-priority`}
-                    value={constraint.priority}
-                    onChange={(event) =>
-                      updateConstraint(
-                        constraint.key,
-                        "priority",
-                        event.target.value,
-                      )
-                    }
+                  <button
+                    className="button-quiet"
+                    type="button"
+                    onClick={() => removeConstraintRow(constraint.key)}
                   >
-                    <option value="">Unset</option>
-                    {PRIORITY_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
+                    Remove limit {index + 1}
+                  </button>
                 </div>
-              </div>
-              <label htmlFor={`${fieldId}-${constraint.key}-text`}>
-                Constraint {index + 1} description
-              </label>
-              <input
-                id={`${fieldId}-${constraint.key}-text`}
-                value={constraint.text}
-                onChange={(event) =>
-                  updateConstraint(constraint.key, "text", event.target.value)
-                }
-              />
-              <button
-                className="button-quiet"
-                type="button"
-                onClick={() => removeConstraintRow(constraint.key)}
-              >
-                Remove constraint {index + 1}
+              ))}
+              <button className="button-quiet" type="button" onClick={addConstraintRow}>
+                Add a hard limit
               </button>
-            </div>
-          ))}
-          <button className="button-quiet" type="button" onClick={addConstraintRow}>
-            Add another constraint
-          </button>
-        </fieldset>
-
-        <button className="button" type="submit" disabled={!canSubmit || pending}>
-          {pending ? "Publishing…" : "Publish position to the room"}
-        </button>
+            </fieldset>
+          </div>
+        </details>
 
         {!canSubmit ? (
           <p className="panel-note">
             {self
-              ? "Positions are only accepted during the input phase."
-              : "Claim a seat to publish a position."}{" "}
+              ? "The meeting is past the point where new input is collected."
+              : "Claim a seat to share something with the meeting."}{" "}
             Hidden and disabled controls are a convenience. The server decides
             what is actually permitted.
           </p>
@@ -408,8 +468,10 @@ export function PositionsPanel() {
 
       <div className="ready-box" aria-labelledby="ready-heading">
         <h3 className="panel-subheading" id="ready-heading">
-          Input readiness
+          Where the room is
         </h3>
+
+        <CoordinationStatus />
 
         {isReadyForDeliberation ? (
           <p className="ready-state" role="status">

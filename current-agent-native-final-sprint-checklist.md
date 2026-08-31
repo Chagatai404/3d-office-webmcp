@@ -1036,16 +1036,30 @@ Review this exact decision before approving.
 [ Approve decision ]
 ```
 
-- [ ] Camera/workspace moves to the Decision review surface when appropriate.
-- [ ] Exact frozen decision is visible.
-- [ ] Decision hash/identity is available in a non-intrusive way.
-- [ ] Human confirmation control is explicit.
-- [ ] Copy explains that human confirmation is deliberate.
-- [ ] UI does not imply the agent/WebMCP failed.
+- [x] Camera/workspace moves to the Decision review surface when appropriate.
+- [x] Exact frozen decision is visible.
+- [x] Decision hash/identity is available in a non-intrusive way.
+- [x] Human confirmation control is explicit.
+- [x] Copy explains that human confirmation is deliberate.
+- [x] UI does not imply the agent/WebMCP failed.
+
+Delivered as:
+
+- `MeetingShellProvider` gained `openDecisionReviewForHuman()` / `agentPreparedDecision`.
+  The WebMCP confirmation bridge's `{ kind: "decision" }` event now calls that
+  instead of a bare `goToWorkspace("decision")`, so the room knows *why* it moved.
+- The Decision workspace shows a hand-off card — "Your agent prepared the final
+  decision… the last step is deliberately yours" — styled as accent, never as
+  the error treatment. Tested against a blocklist of failure words.
+- The tick reads "I reviewed this decision" with the bound short hash beneath it;
+  the full hash stays available on hover and in the report's provenance.
+- A standing note under the button: an agent can prepare the exact decision,
+  recording it takes the person's own confirmation.
+- The notice clears once the person confirms, or when they walk elsewhere.
 
 ### B6 exit gate
 
-- [ ] Judge understands why one human click remains after agent-driven meeting progression.
+- [x] Judge understands why one human click remains after agent-driven meeting progression.
 
 ---
 
@@ -1073,16 +1087,39 @@ Security advice
 View detailed provenance
 ```
 
-- [ ] Finalized room automatically exposes the report experience.
-- [ ] Every participant sees the same decision outcome.
-- [ ] Report uses canonical `MeetingReport` after rebase.
-- [ ] No second frontend-only report model is introduced.
-- [ ] Download PDF action points to the authenticated A9 endpoint.
-- [ ] Provenance is available but not allowed to overwhelm the primary report.
+- [x] Finalized room automatically exposes the report experience.
+- [x] Every participant sees the same decision outcome.
+- [ ] Report uses canonical `MeetingReport` after rebase. **Blocked on A8.**
+- [x] No second frontend-only report model is introduced.
+- [x] Download PDF action points to the authenticated A9 endpoint. **Endpoint pending A9.**
+- [x] Provenance is available but not allowed to overwhelm the primary report.
+
+Delivered as `src/components/room/final-report.tsx`:
+
+- The Decision surface *becomes* the report once `phase === "finalized"` — the
+  same pedestal, the artifact it now holds. A finalized room fetches the record
+  by itself; nobody has to know to press anything.
+- Sections in reading order: Decision · Why we chose it · Key constraints ·
+  Concerns addressed · Trade-offs · Team alignment · Owners & actions ·
+  Security advice · Download PDF · View detailed provenance (a closed
+  `<details>`).
+- Every value is read out of the server's `DecisionRecord` plus canonical
+  `RoomState`. No frontend report interface exists, so the A8 swap is a change
+  of source, not of sections. The old "Load persisted final record" button and
+  `DecisionRecordView` are gone — the report replaced both.
+- Dissent and unresolved warnings are rendered as part of the record, not
+  tidied away.
+
+**Two follow-ups after Developer A merges:**
+
+1. swap `getDecisionRecord()` for the canonical `MeetingReport` (A8) and drop
+   the small local lookups (constraints by id, resolved objections);
+2. `GET /api/rooms/:roomId/report.pdf` does not exist yet, so the Download PDF
+   link 404s until A9 lands. The link is correct and needs no change.
 
 ### B7 exit gate
 
-- [ ] Finalized meeting ends in a clear shared artifact, not a technical state dump.
+- [x] Finalized meeting ends in a clear shared artifact, not a technical state dump.
 
 ---
 
@@ -1101,17 +1138,39 @@ Decision      -> decision review surface
 Finalized     -> report / memory surface
 ```
 
-- [ ] No manual free-fly requirement.
-- [ ] Stable camera pose per workspace.
-- [ ] Camera transitions remain eased.
-- [ ] Reduced-motion behavior preserved.
-- [ ] Agent activity may be represented visually but is not authoritative.
-- [ ] Pending participants/readiness can be understood without tiny 3D text.
-- [ ] DOM remains the readable/control layer.
+- [x] No manual free-fly requirement.
+- [x] Stable camera pose per workspace.
+- [x] Camera transitions remain eased.
+- [x] Reduced-motion behavior preserved.
+- [x] Agent activity may be represented visually but is not authoritative.
+- [x] Pending participants/readiness can be understood without tiny 3D text.
+- [x] DOM remains the readable/control layer.
+
+Delivered as:
+
+- `PHASE_WORKSPACE` (`src/components/shell/phase-workspace.ts`) makes the
+  mapping above real, and `usePhaseFollow` moves the room when the canonical
+  phase changes. Three rules keep it from being a hijack: the first snapshot
+  never moves, an unchanged phase never moves, and an open drawer wins (the
+  owner mid-admission is not dragged away).
+- Input maps to the table rather than to a board: input is the phase whose
+  subject is the people. Finalized maps to the same decision pedestal approval
+  does — one place, one artifact.
+- Seats now carry a raised marker for anyone the room is waiting on
+  (`PendingMarker`). Silhouette, not text: "three markers up" is countable from
+  the room pose. Only *pending* is ever marked — there is no "done" token,
+  because in Proposals and Deliberation the room is short of a thing rather
+  than a person, and a clean table is the honest picture there.
+- The marker reads `deriveCoordinationStatus(room).waitingParticipantIds`, the
+  same derivation the DOM roster and the coordination strip read, so a chair
+  can never disagree with the sentence above it.
+- Camera behaviour is untouched: still the named poses in `CAMERA_POSES`, still
+  eased by `CameraController`, still an instant cut under reduced motion, and
+  still no orbit/pan/WASD anywhere in the scene.
 
 ### B8 exit gate
 
-- [ ] 3D makes the meeting easier to understand without becoming necessary for protocol comprehension.
+- [x] 3D makes the meeting easier to understand without becoming necessary for protocol comprehension.
 
 ---
 

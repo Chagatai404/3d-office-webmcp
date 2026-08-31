@@ -102,6 +102,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
         "New users should reach first value faster, and onboarding completion should measurably improve.",
       category: "outcome",
       priority: "high",
+      referencedSourceIds: [],
       createdAt: demoTimestamp(1),
     },
     {
@@ -111,6 +112,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
         "Any onboarding change has to stay accessible and consistent with the existing interaction patterns.",
       category: "quality",
       priority: "high",
+      referencedSourceIds: [],
       createdAt: demoTimestamp(2),
     },
     {
@@ -120,6 +122,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
         "The product surface has to be stable before the campaign cutoff, and the campaign date cannot move.",
       category: "timing",
       priority: "high",
+      referencedSourceIds: [],
       createdAt: demoTimestamp(3),
     },
   ],
@@ -130,6 +133,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
       category: "outcome",
       text: "Onboarding completion rate must improve, not just change.",
       priority: "high",
+      referencedSourceIds: [],
       createdAt: demoTimestamp(1),
     },
     {
@@ -138,6 +142,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
       category: "outcome",
       text: "Time to first value should shorten for new accounts.",
       priority: "medium",
+      referencedSourceIds: [],
       createdAt: demoTimestamp(1),
     },
     {
@@ -146,6 +151,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
       category: "accessibility",
       text: "Every new onboarding step needs an accessibility review before release.",
       priority: "high",
+      referencedSourceIds: [],
       createdAt: demoTimestamp(2),
     },
     {
@@ -154,6 +160,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
       category: "consistency",
       text: "New screens must reuse the existing interaction and visual patterns.",
       priority: "medium",
+      referencedSourceIds: [],
       createdAt: demoTimestamp(2),
     },
     {
@@ -162,6 +169,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
       category: "timing",
       text: "The campaign date cannot move.",
       priority: "high",
+      referencedSourceIds: [],
       createdAt: demoTimestamp(3),
     },
     {
@@ -170,6 +178,7 @@ export const demoRoom: RoomState = roomStateSchema.parse({
       category: "timing",
       text: "The product surface must stabilize before the campaign cutoff.",
       priority: "high",
+      referencedSourceIds: [],
       createdAt: demoTimestamp(3),
     },
   ],
@@ -241,4 +250,5 @@ export const demoRoom: RoomState = roomStateSchema.parse({
     },
   ],
   expertFindings: [],
+  sources: [],
 });

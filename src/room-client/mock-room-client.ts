@@ -1,6 +1,11 @@
 import {
   addPositionInputSchema,
   claimSeatInputSchema,
+  createMeetingSourceInputSchema,
+  markMeetingSourceFailedInputSchema,
+  markMeetingSourceProcessedInputSchema,
+  readMeetingSourceContentInputSchema,
+  searchMeetingSourcesInputSchema,
   type ActionErrorCode,
   type ActionResult,
   type ActivityEvent,
@@ -9,18 +14,26 @@ import {
   type ClaimSeatInput,
   type ConfigureParticipantInput,
   type Constraint,
+  type CreateMeetingSourceInput,
   type DecisionRecord,
   type FinalDecisionPreview,
   type JsonValue,
   type JoinRequest,
   type ManageJoinRequestInput,
+  type MarkMeetingSourceFailedInput,
+  type MarkMeetingSourceProcessedInput,
+  type MeetingSource,
+  type MeetingSourceContent,
+  type MeetingSourceSearchResults,
   type Participant,
   type Position,
+  type ReadMeetingSourceContentInput,
   type RemoveParticipantInput,
   type ResolveObjectionInput,
   type RoomClient,
   type RoomPhase,
   type RoomState,
+  type SearchMeetingSourcesInput,
   type SetDecisionPolicyInput,
   type SetParticipantDecisionRoleInput,
   type StartDemoScenarioInput,
@@ -70,9 +83,11 @@ function nextSequence(ids: readonly string[], prefix: string): number {
 export class MockRoomClient implements RoomClient {
   #state: RoomState;
   #listeners = new Set<Listener>();
+  #sourceChunks = new Map<string, MeetingSourceContent["chunks"]>();
   #clockMs: number;
   #positionSeq: number;
   #constraintSeq: number;
+  #sourceSeq: number;
   #eventSeq: number;
 
   constructor(seed: RoomState) {
@@ -90,6 +105,10 @@ export class MockRoomClient implements RoomClient {
     this.#constraintSeq = nextSequence(
       seed.constraints.map((entry) => entry.id),
       "constraint",
+    );
+    this.#sourceSeq = nextSequence(
+      seed.sources.map((entry) => entry.id),
+      "source",
     );
     this.#eventSeq = nextSequence(
       seed.activity.map((entry) => entry.id),
@@ -165,6 +184,429 @@ export class MockRoomClient implements RoomClient {
     });
   }
 
+  async listMeetingSources(roomId: string): Promise<ActionResult<MeetingSource[]>> {
+    const roomError = this.#requireRoom(roomId);
+    if (roomError) return roomError;
+
+    const self = this.#self();
+    if (!self) {
+      return fail(
+        "NOT_AUTHORIZED",
+        "Only an active admitted participant can read meeting sources.",
+        this.#state.version,
+      );
+    }
+
+    return {
+      ok: true,
+      data: this.#visibleSourcesFor(self),
+      roomVersion: this.#state.version,
+      message: "Meeting sources loaded.",
+    };
+  }
+
+  async createMeetingSource(
+    roomId: string,
+    input: CreateMeetingSourceInput,
+  ): Promise<ActionResult<MeetingSource>> {
+    const roomError = this.#requireRoom(roomId);
+    if (roomError) return roomError;
+
+    const parsed = createMeetingSourceInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return fail(
+        "VALIDATION_ERROR",
+        "Meeting source input is invalid.",
+        this.#state.version,
+      );
+    }
+    if (this.#state.phase !== "input") {
+      return fail(
+        "WRONG_PHASE",
+        "Meeting sources can only be added while the room is gathering input.",
+        this.#state.version,
+      );
+    }
+
+    const actor = this.#self();
+    if (!actor) {
+      return fail(
+        "NOT_AUTHORIZED",
+        "Only an active admitted participant can add meeting sources.",
+        this.#state.version,
+      );
+    }
+
+    const pending = parsed.data.expectsExtraction === true && parsed.data.chunks.length === 0;
+    if (!pending && parsed.data.chunks.length === 0) {
+      return fail(
+        "VALIDATION_ERROR",
+        "A ready source needs at least one text chunk.",
+        this.#state.version,
+      );
+    }
+
+    const sourceId = `source-${this.#sourceSeq++}`;
+    const createdAt = this.#tick();
+    const source: MeetingSource = {
+      id: sourceId,
+      roomId,
+      uploadedByParticipantId: actor.id,
+      visibility: parsed.data.visibility,
+      title: parsed.data.title,
+      filename: parsed.data.filename,
+      mimeType: parsed.data.mimeType,
+      byteSize: parsed.data.byteSize,
+      sha256: parsed.data.sha256,
+      status: pending ? "processing" : "ready",
+      summary: parsed.data.summary,
+      errorMessage: null,
+      createdAt,
+      processedAt: pending ? null : createdAt,
+      removedAt: null,
+    };
+    const chunks = parsed.data.chunks.map((text, index) => ({
+      id: `${sourceId}-chunk-${index}`,
+      sourceId,
+      chunkIndex: index,
+      text,
+      tokenEstimate: Math.ceil(text.length / 4),
+    }));
+
+    const previousRoomVersion = this.#state.version;
+    const draft = this.#snapshot();
+    draft.sources.push(source);
+    draft.version = previousRoomVersion + 1;
+    draft.activity.push({
+      id: `event-${this.#eventSeq++}`,
+      actorType: "participant",
+      actorId: actor.id,
+      origin: "manual_ui",
+      action: "source.uploaded",
+      entityType: "source",
+      entityId: source.id,
+      sanitizedInput: {
+        title: source.title,
+        filename: source.filename,
+        mimeType: source.mimeType,
+        byteSize: source.byteSize,
+        sha256: source.sha256,
+        visibility: source.visibility,
+        chunkCount: chunks.length,
+      },
+      result: { ok: true },
+      previousRoomVersion,
+      resultingRoomVersion: draft.version,
+      confirmationRequired: false,
+      createdAt,
+    });
+    this.#state = draft;
+    this.#sourceChunks.set(sourceId, chunks);
+    this.#emit();
+
+    return {
+      ok: true,
+      data: structuredClone(source),
+      roomVersion: draft.version,
+      message: "Meeting source added.",
+    };
+  }
+
+  async readMeetingSourceContent(
+    roomId: string,
+    input: ReadMeetingSourceContentInput,
+  ): Promise<ActionResult<MeetingSourceContent>> {
+    const roomError = this.#requireRoom(roomId);
+    if (roomError) return roomError;
+
+    const parsed = readMeetingSourceContentInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return fail(
+        "VALIDATION_ERROR",
+        "Meeting source read input is invalid.",
+        this.#state.version,
+      );
+    }
+
+    const self = this.#self();
+    if (!self) {
+      return fail(
+        "NOT_AUTHORIZED",
+        "Only an active admitted participant can read meeting sources.",
+        this.#state.version,
+      );
+    }
+
+    const source = this.#visibleSourcesFor(self).find(
+      (entry) => entry.id === parsed.data.sourceId,
+    );
+    if (!source) {
+      return fail(
+        "NOT_AUTHORIZED",
+        "That meeting source is not available in this session.",
+        this.#state.version,
+      );
+    }
+
+    const allChunks = this.#sourceChunks.get(source.id) ?? [];
+    const start = parsed.data.cursor === null ? 0 : Number(parsed.data.cursor);
+    const safeStart = Number.isSafeInteger(start) && start >= 0 ? start : 0;
+    const chunks = allChunks.slice(safeStart, safeStart + parsed.data.maxChunks);
+    const nextOffset = safeStart + chunks.length;
+
+    return {
+      ok: true,
+      data: {
+        sourceId: source.id,
+        chunks: structuredClone(chunks),
+        nextCursor: nextOffset < allChunks.length ? String(nextOffset) : null,
+      },
+      roomVersion: this.#state.version,
+      message: "Meeting source content loaded.",
+    };
+  }
+
+  async searchMeetingSources(
+    roomId: string,
+    input: SearchMeetingSourcesInput,
+  ): Promise<ActionResult<MeetingSourceSearchResults>> {
+    const roomError = this.#requireRoom(roomId);
+    if (roomError) return roomError;
+
+    const parsed = searchMeetingSourcesInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return fail(
+        "VALIDATION_ERROR",
+        "Meeting source search input is invalid.",
+        this.#state.version,
+      );
+    }
+    const self = this.#self();
+    if (!self) {
+      return fail(
+        "NOT_AUTHORIZED",
+        "Only an active admitted participant can search meeting sources.",
+        this.#state.version,
+      );
+    }
+
+    const query = parsed.data.query.toLowerCase();
+    const sourceFilter = new Set(parsed.data.sourceIds);
+    const visibleSources = this.#visibleSourcesFor(self).filter(
+      (source) => source.status === "ready" && (sourceFilter.size === 0 || sourceFilter.has(source.id)),
+    );
+    const sourceTitles = new Map(visibleSources.map((source) => [source.id, source.title]));
+    const results = visibleSources.flatMap((source) =>
+      (this.#sourceChunks.get(source.id) ?? [])
+        .filter((chunk) => chunk.text.toLowerCase().includes(query))
+        .map((chunk) => ({
+          sourceId: source.id,
+          sourceTitle: sourceTitles.get(source.id) ?? source.title,
+          chunkId: chunk.id,
+          chunkIndex: chunk.chunkIndex,
+          excerpt: chunk.text.slice(0, 320),
+        })),
+    ).slice(0, parsed.data.limit);
+
+    return {
+      ok: true,
+      data: { query: parsed.data.query, results },
+      roomVersion: this.#state.version,
+      message: "Meeting sources searched.",
+    };
+  }
+
+  async shareMeetingSource(roomId: string, sourceId: string): Promise<ActionResult<MeetingSource>> {
+    const actor = this.#self();
+    const source = this.#state.sources.find((entry) => entry.id === sourceId && entry.status !== "removed");
+    const guard = this.#canManageSource(roomId, actor, source);
+    if (guard) return guard;
+    if (!actor || !source) throw new Error("Source guard failed.");
+
+    if (source.visibility === "shared_room") {
+      return {
+        ok: true,
+        data: structuredClone(source),
+        roomVersion: this.#state.version,
+        message: "Meeting source already shared.",
+      };
+    }
+
+    const result = this.#commit({
+      apply: (draft) => {
+        const target = draft.sources.find((entry) => entry.id === source.id);
+        if (target) target.visibility = "shared_room";
+      },
+      actor,
+      origin: "manual_ui",
+      action: "source.shared",
+      entityType: "source",
+      entityId: source.id,
+      sanitizedInput: { sourceId: source.id, visibility: "shared_room" },
+      message: "Meeting source shared.",
+    });
+    const shared = this.#state.sources.find((entry) => entry.id === source.id);
+    if (!result.ok) return result;
+    if (!shared) {
+      return fail("VALIDATION_ERROR", "Meeting source not found.", this.#state.version);
+    }
+    return {
+      ok: true,
+      data: structuredClone(shared),
+      roomVersion: result.roomVersion,
+      message: result.message,
+    };
+  }
+
+  /**
+   * Mock stand-in for the API client's retry helper: re-extracts text from a
+   * re-selected file and finishes (or fails) the same source row.
+   */
+  async retryMeetingSource(
+    roomId: string,
+    sourceId: string,
+    file: File,
+  ): Promise<ActionResult<MeetingSource>> {
+    const text = (await file.text()).replace(/\r\n/g, "\n").trim();
+    if (!text) {
+      return this.markMeetingSourceFailed(roomId, {
+        sourceId,
+        errorMessage: "The file contained no readable text.",
+      });
+    }
+    const chunks: string[] = [];
+    for (let index = 0; index < text.length; index += 10_000) {
+      chunks.push(text.slice(index, index + 10_000));
+    }
+    return this.markMeetingSourceProcessed(roomId, {
+      sourceId,
+      chunks,
+      summary: text.length > 280 ? `${text.slice(0, 277)}...` : text,
+    });
+  }
+
+  async markMeetingSourceProcessed(
+    roomId: string,
+    input: MarkMeetingSourceProcessedInput,
+  ): Promise<ActionResult<MeetingSource>> {
+    const parsed = markMeetingSourceProcessedInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return fail("VALIDATION_ERROR", "Meeting source processing input is invalid.", this.#state.version);
+    }
+    const actor = this.#self();
+    const source = this.#state.sources.find(
+      (entry) => entry.id === parsed.data.sourceId && entry.status !== "removed",
+    );
+    const guard = this.#canManageSource(roomId, actor, source);
+    if (guard) return guard;
+    if (!actor || !source) throw new Error("Source guard failed.");
+    if (source.status !== "processing" && source.status !== "failed") {
+      return fail("VALIDATION_ERROR", "Only a processing or failed source can be marked processed.", this.#state.version);
+    }
+
+    const createdAt = this.#tick();
+    const chunks = parsed.data.chunks.map((text, index) => ({
+      id: `${source.id}-chunk-${index}`,
+      sourceId: source.id,
+      chunkIndex: index,
+      text,
+      tokenEstimate: Math.ceil(text.length / 4),
+    }));
+    const result = this.#commit({
+      apply: (draft) => {
+        const target = draft.sources.find((entry) => entry.id === source.id);
+        if (target) {
+          target.status = "ready";
+          target.processedAt = createdAt;
+          target.errorMessage = null;
+          if (parsed.data.summary !== null) target.summary = parsed.data.summary;
+        }
+      },
+      actor,
+      origin: "manual_ui",
+      action: "source.processed",
+      entityType: "source",
+      entityId: source.id,
+      sanitizedInput: { sourceId: source.id, chunkCount: chunks.length },
+      createdAt,
+      message: "Meeting source processed.",
+    });
+    if (!result.ok) return result;
+    this.#sourceChunks.set(source.id, chunks);
+    const ready = this.#state.sources.find((entry) => entry.id === source.id);
+    if (!ready) return fail("VALIDATION_ERROR", "Meeting source not found.", this.#state.version);
+    return { ok: true, data: structuredClone(ready), roomVersion: result.roomVersion, message: result.message };
+  }
+
+  async markMeetingSourceFailed(
+    roomId: string,
+    input: MarkMeetingSourceFailedInput,
+  ): Promise<ActionResult<MeetingSource>> {
+    const parsed = markMeetingSourceFailedInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return fail("VALIDATION_ERROR", "Meeting source failure input is invalid.", this.#state.version);
+    }
+    const actor = this.#self();
+    const source = this.#state.sources.find(
+      (entry) => entry.id === parsed.data.sourceId && entry.status !== "removed",
+    );
+    const guard = this.#canManageSource(roomId, actor, source);
+    if (guard) return guard;
+    if (!actor || !source) throw new Error("Source guard failed.");
+    if (source.status === "ready") {
+      return fail("VALIDATION_ERROR", "A ready source cannot be marked failed.", this.#state.version);
+    }
+
+    const createdAt = this.#tick();
+    const result = this.#commit({
+      apply: (draft) => {
+        const target = draft.sources.find((entry) => entry.id === source.id);
+        if (target) {
+          target.status = "failed";
+          target.errorMessage = parsed.data.errorMessage;
+          target.processedAt = createdAt;
+        }
+      },
+      actor,
+      origin: "manual_ui",
+      action: "source.processing_failed",
+      entityType: "source",
+      entityId: source.id,
+      sanitizedInput: { sourceId: source.id, errorMessage: parsed.data.errorMessage },
+      createdAt,
+      message: "Meeting source marked failed.",
+    });
+    if (!result.ok) return result;
+    const failed = this.#state.sources.find((entry) => entry.id === source.id);
+    if (!failed) return fail("VALIDATION_ERROR", "Meeting source not found.", this.#state.version);
+    return { ok: true, data: structuredClone(failed), roomVersion: result.roomVersion, message: result.message };
+  }
+
+  async removeMeetingSource(roomId: string, sourceId: string): Promise<ActionResult> {
+    const actor = this.#self();
+    const source = this.#state.sources.find((entry) => entry.id === sourceId && entry.status !== "removed");
+    const guard = this.#canManageSource(roomId, actor, source);
+    if (guard) return guard;
+    if (!actor || !source) throw new Error("Source guard failed.");
+
+    return this.#commit({
+      apply: (draft) => {
+        const target = draft.sources.find((entry) => entry.id === source.id);
+        if (target) {
+          target.status = "removed";
+          target.removedAt = this.#tick();
+        }
+      },
+      actor,
+      origin: "manual_ui",
+      action: "source.removed",
+      entityType: "source",
+      entityId: source.id,
+      sanitizedInput: { sourceId: source.id },
+      message: "Meeting source removed.",
+    });
+  }
+
   async addMyPosition(
     roomId: string,
     input: AddPositionInput,
@@ -213,6 +655,7 @@ export class MockRoomClient implements RoomClient {
       summary: parsed.data.summary,
       category: parsed.data.category,
       priority: parsed.data.priority,
+      referencedSourceIds: this.#knownSourceIds(parsed.data.referencedSourceIds),
       createdAt,
     };
     // Constraints are created with the position so their IDs are stable
@@ -224,6 +667,7 @@ export class MockRoomClient implements RoomClient {
         category: constraint.category,
         text: constraint.text,
         priority: constraint.priority,
+        referencedSourceIds: this.#knownSourceIds(constraint.referencedSourceIds),
         createdAt,
       }),
     );
@@ -430,6 +874,65 @@ export class MockRoomClient implements RoomClient {
         (participant) => participant.id === selfId,
       ) ?? null
     );
+  }
+
+  /**
+   * Narrows caller-supplied source citations to sources that actually exist in
+   * this room and are not removed. Production rejects an unknown id outright;
+   * the mock only needs to keep the stored provenance honest.
+   */
+  #knownSourceIds(ids: readonly string[] | undefined): string[] {
+    if (!ids || ids.length === 0) return [];
+    const known = new Set(
+      this.#state.sources
+        .filter((source) => source.status !== "removed")
+        .map((source) => source.id),
+    );
+    return [...new Set(ids)].filter((id) => known.has(id));
+  }
+
+  #visibleSourcesFor(self: Participant): MeetingSource[] {
+    return structuredClone(
+      this.#state.sources.filter(
+        (source) =>
+          source.status !== "removed" &&
+          (source.visibility === "shared_room" ||
+            source.uploadedByParticipantId === self.id),
+      ),
+    );
+  }
+
+  #canManageSource(
+    roomId: string,
+    actor: Participant | null,
+    source: MeetingSource | undefined,
+  ): ActionResult<never> | null {
+    const roomError = this.#requireRoom(roomId);
+    if (roomError) return roomError;
+    if (this.#state.phase === "finalized") {
+      return fail("ALREADY_FINALIZED", "The finalized decision is immutable.", this.#state.version);
+    }
+    if (!actor) {
+      return fail(
+        "NOT_AUTHORIZED",
+        "Only an active admitted participant can manage meeting sources.",
+        this.#state.version,
+      );
+    }
+    if (!source) {
+      return fail("VALIDATION_ERROR", "Meeting source not found.", this.#state.version);
+    }
+    if (
+      source.uploadedByParticipantId !== actor.id &&
+      this.#state.ownerParticipantId !== actor.id
+    ) {
+      return fail(
+        "NOT_AUTHORIZED",
+        "Only the source uploader or room owner can manage this source.",
+        this.#state.version,
+      );
+    }
+    return null;
   }
 
   #requireRoom(roomId: string): ActionResult<never> | null {

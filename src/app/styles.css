@@ -497,6 +497,205 @@ select {
   line-height: 1.6;
 }
 
+.source-workspace {
+  display: grid;
+  gap: 1rem;
+}
+
+.source-workspace-head {
+  display: flex;
+  gap: 1rem;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.source-workspace-head .panel-note {
+  margin-top: -0.35rem;
+}
+
+.source-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.15rem;
+  height: 2.15rem;
+  padding: 0 0.55rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.source-form,
+.source-search {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.2fr) minmax(10rem, 1fr) minmax(9rem, 0.7fr) auto;
+  gap: 0.7rem;
+  align-items: end;
+}
+
+.source-search {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.source-field {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.source-field input,
+.source-field select,
+.source-search input {
+  width: 100%;
+  min-height: 2.55rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.55rem;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.source-field input:disabled,
+.source-field select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.source-form .button {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.source-notice,
+.source-error {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.7rem;
+  font-size: 0.86rem;
+}
+
+.source-notice {
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+}
+
+.source-error {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.source-list,
+.source-search-results {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.source-row,
+.source-excerpt {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--surface);
+}
+
+.source-row-main {
+  display: flex;
+  gap: 1rem;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.source-file-mark {
+  position: relative;
+  flex: 0 0 auto;
+  width: 1.55rem;
+  height: 1.9rem;
+  border: 1.5px solid var(--accent-ink);
+  border-radius: 0.28rem;
+  background: var(--accent-bg);
+}
+
+.source-file-mark::after {
+  content: "";
+  position: absolute;
+  top: -1.5px;
+  right: -1.5px;
+  width: 0.52rem;
+  height: 0.52rem;
+  border-left: 1.5px solid var(--accent-ink);
+  border-bottom: 1.5px solid var(--accent-ink);
+  background: var(--surface);
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+}
+
+.source-row h3,
+.source-row p,
+.source-excerpt p {
+  margin: 0;
+}
+
+.source-row h3 {
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.source-row-main p,
+.source-summary,
+.source-excerpt p {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.source-hash {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.source-preview {
+  display: grid;
+  gap: 0.55rem;
+  max-height: 15rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0.7rem;
+  border-radius: 0.7rem;
+  background: var(--surface-strong);
+}
+
+.source-preview p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.source-excerpt span {
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+
 /* ---------------------------------------------------------------- participants */
 
 .participant-list,
@@ -1424,6 +1623,48 @@ select {
   color: #fff;
 }
 
+.toolbar-sources {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.68rem 0.9rem;
+  border: 0;
+  border-radius: 0.9rem;
+  background: var(--surface-quiet);
+  box-shadow: 0 6px 20px rgba(46, 43, 39, 0.09);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.toolbar-sources-failed {
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.6rem;
+  background: var(--danger, #b3261e);
+  color: #fff;
+  font-size: 0.7rem;
+}
+
+.source-cite-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.85rem;
+}
+
+.source-retry {
+  cursor: pointer;
+}
+
+.position-sources {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 .toolbar-help {
   display: grid;
   place-items: center;
@@ -2224,6 +2465,14 @@ select {
     padding: 5rem 1.25rem 8.8rem;
   }
 
+  .source-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .source-form .button {
+    justify-self: start;
+  }
+
   .meeting-drawer {
     top: 5rem;
     bottom: 8.6rem;
@@ -2258,6 +2507,21 @@ select {
 
   .workspace-stage-body {
     padding: 1.5rem 1.1rem 1.3rem;
+  }
+
+  .source-workspace-head,
+  .source-row-main {
+    display: grid;
+  }
+
+  .source-form,
+  .source-search {
+    grid-template-columns: 1fr;
+  }
+
+  .source-hash {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   /* A drawer takes over the full content height on narrow screens rather
@@ -3670,4 +3934,660 @@ select {
   .welcome[data-leaving] .welcome-lead {
     transition: none;
   }
+}
+
+/* ------------------------------------------------------- coordination state */
+
+/* Where the room is and who it is waiting for, in the same words the agent
+   protocol uses. Never colour alone: every state below is also stated. */
+
+.coordination {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface-strong);
+}
+
+.coordination-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.coordination-phase {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.coordination-progress {
+  font-size: 0.86rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.coordination-goal {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.coordination-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0;
+}
+
+.coordination-facts dt {
+  color: var(--muted-2);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.coordination-facts dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.coordination-fact-warn {
+  color: var(--warn-ink);
+}
+
+.coordination-legend {
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.coordination-people {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coordination-person {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, auto) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.28rem 0.4rem;
+  border-radius: 0.4rem;
+  background: rgba(46, 43, 39, 0.035);
+}
+
+.coordination-person-done {
+  background: var(--accent-bg);
+}
+
+.coordination-person-mark {
+  color: var(--muted-2);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.coordination-person-done .coordination-person-mark {
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+
+.coordination-person-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.coordination-person-role {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coordination-person-detail {
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.coordination-waiting {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.coordination-waiting-open {
+  color: var(--warn-ink);
+}
+
+.coordination-strip {
+  /* A fixed band at the top of the workspace card: it never shrinks to make
+     room for the scrolling body beneath it. */
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.55rem 3rem 0.55rem 1.15rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-strong);
+}
+
+.coordination-strip-phase {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.coordination-strip-progress {
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.coordination-strip-divider {
+  width: 1px;
+  height: 0.75rem;
+  background: var(--border-strong);
+}
+
+.coordination-strip-waiting {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.coordination-strip-waiting-open {
+  color: var(--warn-ink);
+  font-weight: 700;
+}
+
+/* -------------------------------------------------------- agent-first copy */
+
+/* Examples, not a script: pressing one copies it, and typing something else
+   entirely is the expected case. */
+
+.agent-examples {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.agent-examples-lede {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.agent-examples-group {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.agent-examples-title {
+  color: var(--muted-2);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.agent-examples-list {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-example {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-example:hover {
+  border-color: var(--agent-ink);
+}
+
+.agent-example-text {
+  min-width: 0;
+}
+
+.agent-example-copy {
+  color: var(--agent-ink);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Reserved rather than conditional, so confirming a copy does not shift the
+   examples underneath it. */
+.agent-examples-status {
+  margin: -0.2rem 0 0;
+  min-height: 0.9rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 0.9rem;
+}
+
+/* -------------------------------------------- one question, one box, first */
+
+.input-question {
+  margin-bottom: 0.35rem;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.input-primary-field {
+  min-height: 6.5rem;
+  font-size: 1rem !important;
+  line-height: 1.5;
+}
+
+/* The DTO-shaped fields, kept for the person who wants them and out of the
+   way of the person who does not. */
+.advanced-fields {
+  margin-top: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+}
+
+.advanced-fields > summary {
+  padding: 0.5rem 0.7rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: revert;
+}
+
+.advanced-fields[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.advanced-fields-body {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0.7rem;
+}
+
+/* ------------------------------------------------------ participant clarity */
+
+.participant-authority {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* The owner's decision-authority control, sitting in the same row as the
+   authority tags it changes. It had no styling at all, so it read as loose
+   words rather than something you could operate. */
+.decision-role-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted-2);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.decision-role-select select {
+  padding: 0.16rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.participant-advisory {
+  margin: 0.25rem 0 0;
+  padding: 0.45rem 0.6rem;
+  border: 1px dashed var(--advisory-ink);
+  border-radius: 0.5rem;
+  color: var(--advisory-ink);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.tag-waiting {
+  border-style: dashed;
+  border-color: var(--warn-accent);
+  color: var(--warn-ink);
+  font-weight: 700;
+}
+
+.tag-warning {
+  border-color: var(--advisory-ink);
+  color: var(--advisory-ink);
+  font-weight: 700;
+}
+
+.drawer-role-authority {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0;
+}
+
+.drawer-role-authority dt {
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.drawer-role-authority dd {
+  margin: 0.1rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+/* ------------------------------------------------------------- at the door */
+
+.admission-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admission-card {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem;
+  border: 1px solid var(--warn-accent);
+  border-radius: 0.75rem;
+  background: var(--surface-strong);
+}
+
+.admission-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+}
+
+.admission-requested {
+  margin: 0;
+}
+
+.admission-requested dt {
+  color: var(--muted-2);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.admission-requested dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.admission-field {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* The choice rows are labels too, and they must not inherit the small-caps
+   field-label treatment. */
+.admission-field > label:not(.admission-choice),
+.admission-field > legend {
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admission-field input[type="text"],
+.admission-field > input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+.admission-authority {
+  gap: 0.4rem;
+}
+
+.admission-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.15rem 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.admission-choice:has(input:checked) {
+  border-color: var(--accent-ink);
+  background: var(--accent-bg);
+}
+
+.admission-choice input {
+  grid-row: 1 / span 2;
+}
+
+.admission-choice-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.admission-choice-note {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+/* --------------------------------------------------- blockers vs warnings */
+
+.issues-tally {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.issues-tally-primary {
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.issues-tally-blocked .issues-tally-primary {
+  color: var(--warn-ink);
+}
+
+.issues-tally-secondary {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.decision-list-item-blocking {
+  border-left: 3px solid var(--warn-accent);
+  padding-left: 0.6rem;
+}
+
+/* A severity pill is a pill, not a banner: the resolution list is a grid, and
+   a stretched tag reads as a status bar across the whole row. */
+.decision-list-item > .tag {
+  justify-self: start;
+}
+
+/* --------------------------------------------- the last step is a person's */
+
+/* Your agent prepared the decision and stopped. That is the design, so this
+   reads as a hand-off — accent, not the warning red of `feedback-error` —
+   sitting above the exact thing it is asking you to look at. */
+.decision-handoff {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0 0 0.25rem;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--accent-ink);
+  border-left-width: 4px;
+  border-radius: 0.65rem;
+  background: var(--accent-bg);
+}
+
+.decision-handoff-title {
+  color: var(--accent-ink);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.decision-handoff p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+/* The tick is the sentence; the hash it binds to is the small print under it,
+   present and checkable without being what you are asked to read. */
+.decision-confirm-hash {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* ------------------------------------------------------- decision report */
+
+/* What a finalized meeting leaves behind. Sections in reading order — what we
+   decided, why, and what it costs — with the audit trail folded away at the
+   bottom rather than spread through it. */
+.report-head {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.report-head .panel-heading {
+  margin-bottom: 0.15rem;
+}
+
+.report-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.report-meta code {
+  overflow-wrap: anywhere;
+  color: var(--warn-ink);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+}
+
+.report-decision {
+  gap: 0.35rem;
+}
+
+.report-decision strong {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 400;
+}
+
+.report-export {
+  gap: 0.5rem;
+}
+
+/* The one action on the page, so it is the one thing shaped like an action.
+   `.button`'s default top margin belongs to a page hero, not to a grid row. */
+.report-pdf {
+  justify-self: start;
+  margin-top: 0;
+  font-size: 0.9rem;
+}
+
+.report-provenance {
+  margin-top: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--surface);
+}
+
+.report-provenance > summary {
+  padding: 0.55rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: revert;
+}
+
+.report-provenance[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.report-provenance-body {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.8rem 0.75rem;
+}
+
+.report-provenance-body code {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
 }

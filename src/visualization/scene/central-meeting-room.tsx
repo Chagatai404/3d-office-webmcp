@@ -49,6 +49,7 @@ import {
 const CONSTRAINTS_ON_BOARD = 6;
 const PROPOSALS_ON_BOARD = 6;
 const ISSUES_ON_BOARD = 4;
+const SOURCES_ON_BOARD = 4;
 
 /** Adds a "+N more" tail card when `total` outruns what the board shows. */
 function withOverflow(cards: BoardCard[], total: number, shown: number): BoardCard[] {
@@ -146,14 +147,20 @@ export function CentralMeetingRoom({
     ISSUES_ON_BOARD,
   );
 
-  // The whiteboard is not wired to canonical state yet (see WhiteboardWorkspace);
-  // it stays a set of blank working cards until it is.
-  const whiteboardCards: BoardCard[] = [
-    { text: "" },
-    { text: "" },
-    { text: "" },
-    { text: "" },
-  ];
+  const sourceCards: BoardCard[] = withOverflow(
+    view.sources.slice(0, SOURCES_ON_BOARD).map((source) => ({
+      id: source.id,
+      text: source.title,
+      tone:
+        source.status === "ready"
+          ? source.visibility === "private_to_participant"
+            ? "quiet"
+            : "default"
+          : "attention",
+    })),
+    view.sources.length,
+    SOURCES_ON_BOARD,
+  );
 
   // The activity halo sits at whichever seat a browser agent most recently
   // acted from, so the pulse only ever claims real, recent agent activity.
@@ -186,7 +193,11 @@ export function CentralMeetingRoom({
             position={seat.position}
             rotation={[0, seat.rotationY, 0]}
           >
-            <Seat accent={participant.isSelf} plateReach={plateReach} />
+            <Seat
+              accent={participant.isSelf}
+              plateReach={plateReach}
+              waitedOn={participant.isWaitedOn}
+            />
             <ParticipantAvatar participant={participant} color={SURFACE.accent} />
           </group>
         );
@@ -266,7 +277,7 @@ export function CentralMeetingRoom({
             width={BOARDS.whiteboard.width}
             height={BOARDS.whiteboard.height}
             label={WORKSPACE_LABEL.whiteboard}
-            cards={whiteboardCards}
+            cards={sourceCards}
             columns={2}
             cardColor="#dedad0"
             active={activeWorkspace === "whiteboard"}
@@ -574,7 +585,16 @@ function MeetingTable({ radius }: { radius: number }) {
  * a placeholder. Only the nameplate is still procedural: it carries state —
  * which seat is yours — and state stays in geometry this file controls.
  */
-function Seat({ accent, plateReach }: { accent: boolean; plateReach: number }) {
+function Seat({
+  accent,
+  plateReach,
+  waitedOn,
+}: {
+  accent: boolean;
+  plateReach: number;
+  /** The room is waiting on this person for whatever the phase asks. */
+  waitedOn: boolean;
+}) {
   const plateColor = accent ? SURFACE.accent : SURFACE.card;
 
   return (
@@ -585,6 +605,51 @@ function Seat({ accent, plateReach }: { accent: boolean; plateReach: number }) {
       <mesh position={[0, TABLE_SURFACE, plateReach]} castShadow receiveShadow>
         <boxGeometry args={[0.66, 0.012, 0.2]} />
         <meshStandardMaterial color={plateColor} roughness={0.85} />
+      </mesh>
+      {waitedOn ? <PendingMarker plateReach={plateReach} /> : null}
+    </group>
+  );
+}
+
+/**
+ * A raised token beside the nameplate of someone the room is waiting on.
+ *
+ * Silhouette first: it stands off the table where everything else on it lies
+ * flat, so "three markers up" is countable at a glance from the room pose,
+ * without reading a word — which is the whole requirement, because 3D text at
+ * this distance is unreadable and pretending otherwise would push people back
+ * into flying the camera around to find things out.
+ *
+ * Only *pending* is ever marked. There is no "done" token, because there is no
+ * phase-independent thing a seat has finished: while the room is waiting for
+ * an option on the table or for a blocking objection to be settled it is
+ * waiting on nobody in particular, and a clean table there is the honest
+ * picture. Absence of a marker means "not you", in every phase.
+ *
+ * It is a cue, never the record: the names, the words and the counts are in
+ * the DOM roster beside it, and this is only ever what the same projection
+ * already said.
+ */
+function PendingMarker({ plateReach }: { plateReach: number }) {
+  return (
+    <group position={[0.42, TABLE_SURFACE, plateReach]}>
+      <mesh position={[0, 0.13, 0]} castShadow>
+        <cylinderGeometry args={[0.07, 0.07, 0.26, 16]} />
+        <meshStandardMaterial
+          color={SURFACE.attention}
+          emissive={SURFACE.attention}
+          emissiveIntensity={0.35}
+          roughness={0.6}
+        />
+      </mesh>
+      <mesh position={[0, 0.3, 0]} castShadow>
+        <sphereGeometry args={[0.09, 18, 12]} />
+        <meshStandardMaterial
+          color={SURFACE.attention}
+          emissive={SURFACE.attention}
+          emissiveIntensity={0.45}
+          roughness={0.5}
+        />
       </mesh>
     </group>
   );

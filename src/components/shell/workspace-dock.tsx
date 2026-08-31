@@ -22,9 +22,9 @@ const WORKSPACE_SUB: Record<WorkspaceId, (context: DockContext) => string> = {
   proposals: (c) =>
     c.hasActiveProposal ? "active" : c.proposalCount > 0 ? `${c.proposalCount} drafted` : "none yet",
   issues: (c) => (c.hasBlockingConflict ? "blocking" : c.openConflictCount > 0 ? "open" : "clear"),
-  whiteboard: () => "not tracked yet",
+  whiteboard: (c) => (c.sourceCount > 0 ? `${c.sourceCount} attached` : c.canAddSources ? "add files" : "none"),
   alignment: (c) => (c.alignmentOpen ? "open" : "not open"),
-  decision: (c) => (c.finalized ? "finalized" : c.inApproval ? "in review" : "draft"),
+  decision: (c) => (c.finalized ? "report" : c.inApproval ? "in review" : "draft"),
 };
 
 interface DockContext {
@@ -34,6 +34,8 @@ interface DockContext {
   proposalCount: number;
   openConflictCount: number;
   hasBlockingConflict: boolean;
+  sourceCount: number;
+  canAddSources: boolean;
   alignmentOpen: boolean;
   inApproval: boolean;
   finalized: boolean;
@@ -67,6 +69,8 @@ export function WorkspaceDock() {
     proposalCount: visualization.proposals.length,
     openConflictCount: openConflicts.length,
     hasBlockingConflict: visualization.consensus.hasBlockingConflict,
+    sourceCount: visualization.sources.length,
+    canAddSources: room.phase === "input" && self?.status === "active" && self.isClaimed,
     alignmentOpen: room.phase === "voting",
     inApproval: room.phase === "approval",
     finalized: room.phase === "finalized",

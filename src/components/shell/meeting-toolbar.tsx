@@ -18,8 +18,17 @@ import { useAttentionItems } from "./use-attention-items";
  */
 export function MeetingToolbar() {
   const { room } = useRoom();
-  const { activeWorkspace, moving, openDrawer } = useShell();
+  const { activeWorkspace, moving, openDrawer, goToWorkspace } = useShell();
   const attentionItems = useAttentionItems();
+
+  const sourceCount = useMemo(
+    () => room.sources.filter((source) => source.status !== "removed").length,
+    [room.sources],
+  );
+  const failedSourceCount = useMemo(
+    () => room.sources.filter((source) => source.status === "failed").length,
+    [room.sources],
+  );
 
   const agentsUsed = useMemo(() => {
     const actorIds = new Set(
@@ -58,6 +67,19 @@ export function MeetingToolbar() {
         >
           {attentionItems.length > 0 ? `Needs you · ${attentionItems.length}` : "All caught up"}
         </button>
+        {sourceCount > 0 ? (
+          <button
+            type="button"
+            className="toolbar-sources"
+            onClick={() => goToWorkspace("whiteboard")}
+            title="Open the meeting sources workspace"
+          >
+            {`${sourceCount} source${sourceCount === 1 ? "" : "s"}`}
+            {failedSourceCount > 0 ? (
+              <span className="toolbar-sources-failed">{`${failedSourceCount} failed`}</span>
+            ) : null}
+          </button>
+        ) : null}
         <span className="toolbar-agents">
           <span className="toolbar-agents-dot" aria-hidden="true" />
           {agentsUsed === 0

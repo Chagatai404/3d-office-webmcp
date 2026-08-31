@@ -9,6 +9,7 @@ import { subscribeToUiConfirmation } from "@/webmcp/confirmation-bridge";
 import { AttentionAlerts } from "./attention-alerts";
 import { DrawerHost } from "./drawers/drawer-host";
 import { MeetingShellProvider, useShell } from "./shell-provider";
+import { usePhaseFollow } from "./use-phase-follow";
 import { MeetingToolbar } from "./meeting-toolbar";
 import { WorkspaceDock } from "./workspace-dock";
 import { WorkspacePanel } from "./workspace-panel";
@@ -42,20 +43,35 @@ const RoomVisualization = dynamic(
 
 function World() {
   const { visualization } = useRoom();
-  const { request, activeWorkspace, reducedMotion, goToWorkspace, handleArrive, openDrawer } = useShell();
+  const {
+    request,
+    activeWorkspace,
+    reducedMotion,
+    goToWorkspace,
+    handleArrive,
+    openDrawer,
+    openDecisionReviewForHuman,
+  } = useShell();
+
+  // The room follows the meeting: when the canonical phase changes, the camera
+  // stands where the work now is, rather than leaving people to find it.
+  usePhaseFollow();
 
   // Bridges a sensitive WebMCP tool's "prepare, don't complete" refusal to
   // the exact visible confirmation surface: open the Participants drawer for
   // a transfer/removal (the alertdialog itself arms via
   // `subscribeToArmedParticipantsRequest` inside `ParticipantPanel`), or move
-  // the camera to the Decision workspace for a final-decision confirmation.
+  // the camera to the Decision workspace for a final-decision confirmation --
+  // there, carrying the hand-off notice, so the person arrives understanding
+  // that their agent stopped on purpose rather than failed.
   useEffect(
     () =>
       subscribeToUiConfirmation((event) => {
         if (event.kind === "participants") openDrawer("participants");
-        else goToWorkspace("decision");
+        else if (event.kind === "decision") openDecisionReviewForHuman();
+        else goToWorkspace("whiteboard");
       }),
-    [openDrawer, goToWorkspace],
+    [goToWorkspace, openDrawer, openDecisionReviewForHuman],
   );
 
   const interaction = useMemo<SceneInteraction>(

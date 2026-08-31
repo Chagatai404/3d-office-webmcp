@@ -130,8 +130,13 @@ export const TOOL_AVAILABILITY: Record<string, Predicate> = {
   get_alignment: (c) => inRoom(c) && c.phase === "voting",
   get_decision_record: (c) => inRoom(c) && c.isFinalized,
   get_final_report: (c) => inRoom(c) && c.isFinalized,
+  get_meeting_sources: inRoom,
+  read_meeting_source: inRoom,
+  search_meeting_sources: inRoom,
+  summarize_meeting_sources: inRoom,
 
   // Participant writes -- always require a claimed seat.
+  request_source_upload: asClaimedInPhase("input"),
   share_my_context: asClaimedInPhase("input"),
   mark_my_input_ready: asClaimedInPhase("input"),
   suggest_option: asClaimedInPhase("proposals"),
@@ -210,6 +215,7 @@ export const MUTATION_TOOL_NAMES: ReadonlySet<string> = new Set([
   "resolve_my_concern",
   "express_my_alignment",
   "approve_final_decision",
+  "request_source_upload",
   "admit_participant",
   "reject_participant",
   "lock_meeting",

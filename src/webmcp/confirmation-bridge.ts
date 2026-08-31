@@ -18,7 +18,8 @@
 
 export type ConfirmationRequest =
   | { kind: "participants"; action: "remove" | "transfer"; participantId: string }
-  | { kind: "decision" };
+  | { kind: "decision" }
+  | { kind: "sources"; action: "upload" };
 
 type ParticipantsRequest = Extract<ConfirmationRequest, { kind: "participants" }>;
 

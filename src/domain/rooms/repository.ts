@@ -7,19 +7,28 @@ import type {
   ClaimSeatInput,
   ConfigureParticipantInput,
   CreateRoomInput,
+  CreateMeetingSourceInput,
   DecisionRecord,
   ExpressAlignmentInput,
   FinalDecisionPreview,
   JoinRequest,
   JoinRequestResult,
   ManageJoinRequestInput,
+  MarkMeetingSourceFailedInput,
+  MarkMeetingSourceProcessedInput,
+  MeetingSourceIdInput,
+  MeetingSource,
+  MeetingSourceContent,
+  MeetingSourceSearchResults,
   RecordExpertAdviceOutcomeInput,
   RemoveParticipantInput,
+  ReadMeetingSourceContentInput,
   RequestJoinByInviteInput,
   RequestJoinByPasscodeInput,
   RaiseObjectionInput,
   ResolveObjectionInput,
   ProposeTradeoffInput,
+  SearchMeetingSourcesInput,
   RoomInvitePreview,
   RoomPhase,
   RoomState,
@@ -71,6 +80,42 @@ export interface RoomRepository {
   claimSeat(
     roomId: string,
     input: ClaimSeatInput,
+    context: MutationContext,
+  ): Promise<ActionResult>;
+  listSources(roomId: string, actor: DomainActor): Promise<ActionResult<MeetingSource[]>>;
+  createSource(
+    roomId: string,
+    input: CreateMeetingSourceInput,
+    context: MutationContext,
+  ): Promise<ActionResult<MeetingSource>>;
+  readSourceContent(
+    roomId: string,
+    input: ReadMeetingSourceContentInput,
+    actor: DomainActor,
+  ): Promise<ActionResult<MeetingSourceContent>>;
+  searchSources(
+    roomId: string,
+    input: SearchMeetingSourcesInput,
+    actor: DomainActor,
+  ): Promise<ActionResult<MeetingSourceSearchResults>>;
+  markSourceProcessed(
+    roomId: string,
+    input: MarkMeetingSourceProcessedInput,
+    context: MutationContext,
+  ): Promise<ActionResult<MeetingSource>>;
+  markSourceFailed(
+    roomId: string,
+    input: MarkMeetingSourceFailedInput,
+    context: MutationContext,
+  ): Promise<ActionResult<MeetingSource>>;
+  shareSource(
+    roomId: string,
+    input: MeetingSourceIdInput,
+    context: MutationContext,
+  ): Promise<ActionResult<MeetingSource>>;
+  removeSource(
+    roomId: string,
+    input: MeetingSourceIdInput,
     context: MutationContext,
   ): Promise<ActionResult>;
   addPosition(
