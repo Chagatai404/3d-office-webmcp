@@ -935,6 +935,73 @@
   border-bottom: 1px solid #263545;
 }
 
+.pasteRow {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.pasteField {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pasteField input {
+  flex: 1;
+  min-width: 0;
+  min-height: 2.85rem;
+}
+
+.pasteField .inlineButton {
+  flex: 0 0 auto;
+  min-height: 2.85rem;
+  margin-top: 0;
+  padding: 0 1rem;
+  font-size: 0.78rem;
+}
+
+.linkHint {
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.manualJoin {
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+
+.manualJoin > summary {
+  padding: 0.75rem 0.9rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.manualJoin[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.manualJoinBody {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem 0.9rem;
+}
+
+.manualJoinBody label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
 .roleReveal {
   display: flex;
   align-items: center;

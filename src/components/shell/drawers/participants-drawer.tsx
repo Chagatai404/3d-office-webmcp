@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ParticipantPanel } from "@/components/room/participant-panel";
+import { readInviteUrl } from "@/components/room/invite-stash";
 import { RoomStatusPanel } from "@/components/room/room-status";
 import { useRoom } from "@/components/room/room-provider";
 import type { JoinRequest } from "@/contracts/room";
@@ -12,6 +13,7 @@ export function ParticipantsDrawer() {
     <DrawerShell label="Participants" title="Participants">
       <RoomStatusPanel />
       <OwnerWaitingRoom />
+      <InviteLink />
       <ParticipantPanel />
     </DrawerShell>
   );
@@ -63,4 +65,93 @@ function OwnerWaitingRoom() {
       </li>)}
     </ul>}
   </section>;
+}
+
+/** The stash is written once, before this drawer can exist. */
+function subscribeToNothing(): () => void {
+  return () => {};
+}
+
+/**
+ * The invite link, still reachable once the meeting is under way.
+ *
+ * It used to exist only on the create screen, which meant the owner had one
+ * chance to copy it and no way back — so inviting a latecomer meant starting
+ * a new room. It is shown to the owner alone: the link is a capability, and a
+ * participant handing it on is an admission decision the owner never made.
+ *
+ * When it cannot be found (a different tab, a different device, or a room
+ * someone else created) this says so plainly instead of showing an empty box,
+ * because the honest answer is that the server cannot reissue it — see
+ * `invite-stash` for why.
+ */
+function InviteLink() {
+  const { room, self } = useRoom();
+  const isOwner = self?.id === room.ownerParticipantId && self.meetingRole === "owner";
+  // `sessionStorage` does not exist while rendering on the server, so the
+  // link is read through the same external-store seam the rest of the app
+  // uses for browser-only facts. The stash never changes under an open
+  // drawer, so there is nothing to subscribe to.
+  const inviteUrl = useSyncExternalStore(
+    subscribeToNothing,
+    () => readInviteUrl(room.id),
+    () => null,
+  );
+  const [copied, setCopied] = useState(false);
+  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (clearTimer.current) clearTimeout(clearTimer.current);
+  }, []);
+
+  if (!isOwner) return null;
+
+  async function copy(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      if (clearTimer.current) clearTimeout(clearTimer.current);
+      clearTimer.current = setTimeout(() => setCopied(false), 2400);
+    } catch {
+      // The field is selectable and readable either way.
+    }
+  }
+
+  return (
+    <section className="panel-block" aria-labelledby="invite-link-heading">
+      <h2 className="panel-heading" id="invite-link-heading">
+        Invite link
+      </h2>
+
+      {inviteUrl === null ? (
+        <p className="panel-note">
+          This browser tab does not have the link for this room. The server
+          stores only a hash of it, so it cannot be shown again here — reopen
+          the tab you created the room in, or create a fresh room to get a new
+          link.
+        </p>
+      ) : (
+        <>
+          <p className="panel-note">
+            Anyone with this link can ask to join. They still wait in the
+            lobby until you admit them.
+          </p>
+          <div className="flow-share-field">
+            <input
+              aria-label="Invite link"
+              readOnly
+              value={inviteUrl}
+              onFocus={(event) => event.currentTarget.select()}
+            />
+            <button type="button" className="flow-copy-btn" onClick={() => void copy(inviteUrl)}>
+              {copied ? "Copied" : "Copy link"}
+            </button>
+          </div>
+          <p className="flow-copy-status" aria-live="polite">
+            {copied ? "Invite link copied to clipboard." : ""}
+          </p>
+        </>
+      )}
+    </section>
+  );
 }

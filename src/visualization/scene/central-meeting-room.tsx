@@ -37,8 +37,25 @@ import {
   RugRound,
   SodaCan,
 } from "./room-props";
-import { SelectableZone } from "./scene-interaction";
-import { useFloorTexture, useWallTexture, useWoodTexture } from "./textures";
+import { SelectableZone, useSceneInteraction } from "./scene-interaction";
+import {
+  type BoardCard,
+  useFloorTexture,
+  useWallTexture,
+  useWoodTexture,
+} from "./textures";
+
+/** How many cards each text board shows before it rolls the rest into "+N more". */
+const CONSTRAINTS_ON_BOARD = 6;
+const PROPOSALS_ON_BOARD = 6;
+const ISSUES_ON_BOARD = 4;
+
+/** Adds a "+N more" tail card when `total` outruns what the board shows. */
+function withOverflow(cards: BoardCard[], total: number, shown: number): BoardCard[] {
+  return total > shown
+    ? [...cards, { text: `+${total - shown} more`, tone: "quiet" }]
+    : cards;
+}
 
 /**
  * The collective decision space — one bright room, open along its front.
@@ -68,6 +85,11 @@ export function CentralMeetingRoom({
    */
   footing?: "ground" | "surface";
 }) {
+  // The zones already report "this board was picked"; this reports the finer
+  // fact that one written item on it was. A decorative mounting of this room
+  // has no handler, and the boards then behave exactly as they did before.
+  const { onOpenItem } = useSceneInteraction();
+
   const { width: W, depth: D, wallHeight: H } = ROOM;
   const seats = meetingSeats(Math.max(view.participants.length, 1));
   const table = tableRadius(view.participants.length);
@@ -79,9 +101,59 @@ export function CentralMeetingRoom({
   const seatRing = Math.hypot(seats[0]?.position[0] ?? 0, seats[0]?.position[2] ?? 0);
   const plateReach = seatRing - table + 0.22;
   const openConflicts = view.conflicts.filter((conflict) => conflict.status === "open");
-  const hasBlockingConflict = openConflicts.some((conflict) => conflict.severity === "blocking");
 
-  const activeProposalIndex = view.proposals.findIndex((proposal) => proposal.isActive);
+  // The text each board echoes from its workspace panel. Kept plain (no
+  // useMemo): the scene is already memoised on `view`, and these are a handful
+  // of short array maps.
+  const briefBody = view.brief
+    ? view.title
+      ? `${view.title} — ${view.brief}`
+      : view.brief
+    : "";
+
+  const constraintCards: BoardCard[] = withOverflow(
+    view.constraints.slice(0, CONSTRAINTS_ON_BOARD).map((constraint) => ({
+      id: constraint.id,
+      label: constraint.category,
+      text: constraint.text,
+      tone: constraint.priority?.toLowerCase() === "high" ? "attention" : "default",
+    })),
+    view.constraints.length,
+    CONSTRAINTS_ON_BOARD,
+  );
+
+  const proposalCards: BoardCard[] = withOverflow(
+    view.proposals.slice(0, PROPOSALS_ON_BOARD).map((proposal) => ({
+      id: proposal.id,
+      text: proposal.title,
+      tone: proposal.isActive
+        ? "accent"
+        : proposal.status === "superseded"
+          ? "quiet"
+          : "default",
+    })),
+    view.proposals.length,
+    PROPOSALS_ON_BOARD,
+  );
+
+  const issueCards: BoardCard[] = withOverflow(
+    openConflicts.slice(0, ISSUES_ON_BOARD).map((conflict) => ({
+      id: conflict.id,
+      text: conflict.reason,
+      tone: conflict.severity === "blocking" ? "attention" : "quiet",
+    })),
+    openConflicts.length,
+    ISSUES_ON_BOARD,
+  );
+
+  // The whiteboard is not wired to canonical state yet (see WhiteboardWorkspace);
+  // it stays a set of blank working cards until it is.
+  const whiteboardCards: BoardCard[] = [
+    { text: "" },
+    { text: "" },
+    { text: "" },
+    { text: "" },
+  ];
 
   // The activity halo sits at whichever seat a browser agent most recently
   // acted from, so the pulse only ever claims real, recent agent activity.
@@ -131,11 +203,11 @@ export function CentralMeetingRoom({
             height={BOARDS.brief.height}
             label={WORKSPACE_LABEL.brief}
             face={SURFACE.boardDark}
-            cardCount={3}
-            columns={3}
-            cardColor="#413c36"
-            accentIndex={0}
+            body={briefBody}
             active={activeWorkspace === "brief"}
+            onPress={
+              onOpenItem && ((card) => onOpenItem("brief", card?.id ?? null))
+            }
           />
         </group>
       </SelectableZone>
@@ -146,9 +218,12 @@ export function CentralMeetingRoom({
             width={BOARDS.constraints.width}
             height={BOARDS.constraints.height}
             label={WORKSPACE_LABEL.constraints}
-            cardCount={view.constraints.length}
-            columns={4}
+            cards={constraintCards}
+            columns={2}
             active={activeWorkspace === "constraints"}
+            onPress={
+              onOpenItem && ((card) => onOpenItem("constraints", card?.id ?? null))
+            }
           />
         </group>
       </SelectableZone>
@@ -159,10 +234,12 @@ export function CentralMeetingRoom({
             width={BOARDS.proposals.width}
             height={BOARDS.proposals.height}
             label={WORKSPACE_LABEL.proposals}
-            cardCount={view.proposals.length}
+            cards={proposalCards}
             columns={2}
-            accentIndex={activeProposalIndex}
             active={activeWorkspace === "proposals"}
+            onPress={
+              onOpenItem && ((card) => onOpenItem("proposals", card?.id ?? null))
+            }
           />
         </group>
       </SelectableZone>
@@ -173,10 +250,12 @@ export function CentralMeetingRoom({
             width={BOARDS.issues.width}
             height={BOARDS.issues.height}
             label={WORKSPACE_LABEL.issues}
-            cardCount={openConflicts.length}
+            cards={issueCards}
             columns={1}
-            cardColor={hasBlockingConflict ? SURFACE.attention : SURFACE.quiet}
             active={activeWorkspace === "issues"}
+            onPress={
+              onOpenItem && ((card) => onOpenItem("issues", card?.id ?? null))
+            }
           />
         </group>
       </SelectableZone>
@@ -187,10 +266,13 @@ export function CentralMeetingRoom({
             width={BOARDS.whiteboard.width}
             height={BOARDS.whiteboard.height}
             label={WORKSPACE_LABEL.whiteboard}
-            cardCount={4}
+            cards={whiteboardCards}
             columns={2}
             cardColor="#dedad0"
             active={activeWorkspace === "whiteboard"}
+            onPress={
+              onOpenItem && ((card) => onOpenItem("whiteboard", card?.id ?? null))
+            }
           />
         </group>
       </SelectableZone>

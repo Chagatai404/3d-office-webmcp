@@ -106,22 +106,33 @@ state at a glance.
 ### Brief
 
 A presentation display or wall panel containing the decision title, brief, and
-success criteria.
+success criteria. The board draws the title and brief text itself, wrapped and
+clamped to the panel and sized to stay legible at the Brief camera pose.
 
 ### Constraints
 
-A planning board with participant constraints grouped clearly. Blocking or
-critical constraints receive restrained emphasis.
+A planning board with participant constraints grouped clearly, each card
+carrying its category and constraint text (the same wording as the panel).
+High-priority constraints receive restrained emphasis; the overflow past what
+fits rolls into a "+N more" card.
 
 ### Proposals
 
-A presentation board/tablet for the active candidate and revision lineage.
-Avoid showing every historical proposal equally.
+A presentation board/tablet for the candidate plans, each card showing the
+proposal title. The active candidate is the only one that takes the accent
+tone, and only while Proposals is the board in focus; superseded proposals are
+muted.
 
 ### Issues
 
-An evaluation board linking unresolved objections to the active proposal and
-related constraints.
+An evaluation board with one card per unresolved objection, showing the
+objection text. Blocking objections take the attention tone; the rest are
+muted.
+
+Concise real text on these four boards is intentional: it is an echo of the
+matching workspace panel, which stays the accessible source of truth (the
+canvas is `aria-hidden`). Text is sized for each board's own camera pose, never
+crammed — long values wrap, clamp, and overflow into a "+N more" card.
 
 ### Whiteboard
 
@@ -150,8 +161,55 @@ A good pattern is:
 DOM workspace panel = readable detail + forms/actions
 ```
 
-The DOM panel should be compact and context-sensitive. Do not return to a giant
+The DOM panel should be context-sensitive. Do not return to a giant
 all-in-one dashboard.
+
+### Where the panel opens
+
+One workspace panel at a time, as a wide card centred over the stage — not a
+rail down one edge. A brief, a constraints board and a proposal form all need
+more width than an edge rail can give them, and a rail crowds the stage it is
+supposed to be explaining.
+
+```text
+┌────────────────────────────────────────────┐
+│ room title / phase             utilities   │
+│      ┌──────────────────────────────┐      │
+│  3D  │  the open workspace      [×] │  3D  │
+│      │  readable detail + actions   │      │
+│      └──────────────────────────────┘      │
+│ Room  Brief  Constraints  Proposals  …     │  workspace dock
+│ Participants · Role · Activity · Leave     │  meeting toolbar
+└────────────────────────────────────────────┘
+```
+
+Requirements:
+
+- the toolbar above and the dock below are never covered, so the way out is
+  always one press away and the viewer can always see where they are;
+- a soft scrim sits between the card and the stage: the room stays visible
+  behind it rather than being replaced by a page;
+- dismissal is available three ways — Escape, the close button, the scrim;
+- Room clears the panel rather than opening one: it is the home state;
+- a drawer and a workspace panel never share the screen; opening either puts
+  the other away.
+
+### Opening at one item
+
+A board is made of written things, and pressing one of them opens that one
+thing, not just the wall it is written on:
+
+```text
+press the constraints board  -> Constraints opens
+press one constraint on it   -> Constraints opens, marked at that constraint
+press its "+N more" card      -> Constraints opens, nothing singled out
+```
+
+The card grid is laid out once and shared, so a card's pressable area is the
+card. Where a panel does not render the pressed item, the workspace simply
+opens unmarked — never a broken or empty state. The dock carries the same
+routes for the keyboard, so the canvas stays an alternative and never the only
+way in.
 
 ## Visual system
 
@@ -164,7 +222,9 @@ Use the reference image as mood, not as a literal copy.
 - one vivid accent for active/connected/attention state;
 - large rounded outer surfaces in DOM UI;
 - generous whitespace;
-- minimal text on the 3D scene itself;
+- text on the 3D scene stays concise — board cards echo the panel in a few
+  words, wrapped and clamped, and sized for that board's camera pose; the DOM
+  panel is still where full detail and controls live;
 - soft shadows only when performance allows.
 
 Avoid:

@@ -1,28 +1,10 @@
 "use client";
 
-import type { AttentionItem, AttentionItemType, RoomPhase } from "@/contracts/room";
-import type { WorkspaceId } from "@/visualization/scene/camera-poses";
+import type { AttentionItem } from "@/contracts/room";
+import { targetFor } from "../attention-routes";
 import { useAttentionItems } from "../use-attention-items";
 import { useShell } from "../shell-provider";
 import { DrawerShell } from "./drawer-shell";
-
-/** Where clicking each attention item type sends the viewer. */
-function targetFor(item: AttentionItem, phase: RoomPhase): { drawer?: "participants"; workspace?: WorkspaceId } {
-  const routes: Record<AttentionItemType, { drawer?: "participants"; workspace?: WorkspaceId }> = {
-    input_required: { workspace: "constraints" },
-    admission_request: { drawer: "participants" },
-    conflict_requires_human: { workspace: "issues" },
-    alignment_required: { workspace: "alignment" },
-    owner_decision_required: { workspace: "decision" },
-    consensus_approval_required: { workspace: "decision" },
-    expert_advice_needs_disposition: { workspace: "alignment" },
-    owner_progress_required: {
-      workspace:
-        phase === "proposals" ? "proposals" : phase === "deliberation" ? "issues" : phase === "voting" ? "alignment" : "room",
-    },
-  };
-  return routes[item.type];
-}
 
 export function AttentionDrawer() {
   const items = useAttentionItems();

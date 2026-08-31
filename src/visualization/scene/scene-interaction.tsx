@@ -27,6 +27,15 @@ export interface SceneInteraction {
   /** `null` means the viewer clicked empty floor: nothing is selected. */
   onSelect(zone: SceneZoneId | null): void;
   onHover(zone: SceneZoneId | null): void;
+  /**
+   * One written thing inside a zone was pressed rather than the zone at
+   * large: a single constraint card, an objection, the brief's paragraph.
+   * `itemId` is `null` where the pressed thing has no room item behind it
+   * (a "+N more" tail, a blank whiteboard card) — the zone still opens, just
+   * with nothing singled out. Optional so a decorative scene can leave it
+   * out and stay inert.
+   */
+  onOpenItem?: ((zone: SceneZoneId, itemId: string | null) => void) | undefined;
 }
 
 /** The same, plus the hover the canvas keeps to itself. */
@@ -39,6 +48,7 @@ const INERT: ZoneContext = {
   hoveredZone: null,
   onSelect: () => {},
   onHover: () => {},
+  onOpenItem: () => {},
 };
 
 const SceneInteractionContext = createContext<ZoneContext>(INERT);
@@ -58,7 +68,7 @@ export function SceneInteractionProvider({
   children: ReactNode;
 }) {
   const [hoveredZone, setHoveredZone] = useState<SceneZoneId | null>(null);
-  const { selectedZone, onSelect, onHover } = value;
+  const { selectedZone, onSelect, onHover, onOpenItem } = value;
 
   // A stale pointer cursor would outlive the scene it belonged to.
   useEffect(() => () => {
@@ -70,6 +80,7 @@ export function SceneInteractionProvider({
       selectedZone,
       hoveredZone,
       onSelect,
+      onOpenItem,
       onHover: (zone) => {
         // Only places worth visiting take a pointer cursor.
         document.body.style.cursor = zone === null ? "" : "pointer";
@@ -77,7 +88,7 @@ export function SceneInteractionProvider({
         onHover(zone);
       },
     }),
-    [selectedZone, hoveredZone, onSelect, onHover],
+    [selectedZone, hoveredZone, onSelect, onHover, onOpenItem],
   );
 
   return (

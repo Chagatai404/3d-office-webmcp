@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from "three";
+import { SURFACE } from "./meeting-room-layout";
 
 /**
  * Surface texture for the room, drawn at runtime.
@@ -161,19 +162,33 @@ export function useWoodTexture(base: string, repeat = 1) {
 /**
  * A board's whole face, drawn as one image.
  *
- * The name and the cards used to be separate meshes standing in front of the
- * board — a 30mm slab per card, floating 5mm off a panel that itself stood
- * 40mm proud of its frame. Close up they read as tiles propped against the
- * board rather than anything written on it. Drawing them into the surface the
- * board is made of means there is nothing to stand off it: what you see is
- * the board.
+ * The name and the cards are drawn into the surface the board is made of, so
+ * there is nothing to stand off it: what you see is the board. Each card now
+ * carries the concise real text the matching workspace panel shows — the panel
+ * stays the accessible source of truth (the canvas is `aria-hidden`), and the
+ * board is its echo on the wall, the way a real meeting room's whiteboard is.
  *
  * The layout is done in metres and converted to pixels at the end, so a card
  * is the same size on a 7.4m wall panel as on a 4.6m one, and the grid keeps
- * equal margins whatever the count. Nothing here invents content: the cards
- * are blocks whose number is the real count, and the only text is the
- * workspace's own name.
+ * equal margins whatever the count.
  */
+export type BoardCardTone = "default" | "accent" | "attention" | "quiet";
+
+export interface BoardCard {
+  /**
+   * The room item this card echoes — a constraint, proposal or conflict id.
+   * Drawn nowhere: it exists so pressing the card can say *which* item was
+   * pressed. Cards with nothing behind them (the "+N more" tail, the
+   * whiteboard's blanks) leave it undefined and open the workspace unfocused.
+   */
+  id?: string | undefined;
+  /** The line(s) of text drawn in the card; wrapped and clamped to fit. */
+  text: string;
+  /** Optional category drawn small above the text. */
+  label?: string | undefined;
+  tone?: BoardCardTone | undefined;
+}
+
 export interface BoardFaceSpec {
   /** The face's size in metres — the panel inside the frame, not the board. */
   width: number;
@@ -184,19 +199,138 @@ export interface BoardFaceSpec {
   ink: string;
   /** Height reserved for the name across the top, in metres. */
   band: number;
-  cardCount: number;
+  /** Concise real text, one card per item, laid out in a grid. */
+  cards: BoardCard[];
   columns: number;
   cardColor: string;
   accentColor: string;
-  /** Which card is highlighted, or -1. */
-  accentIndex: number;
+  /** A flowing paragraph drawn below the name band instead of cards (Brief). */
+  body?: string | undefined;
 }
 
 const FACE_MARGIN = 0.22;
 const FACE_GUTTER = 0.16;
+/** Gap between the name band's rule and the first line of a `body` paragraph. */
+const FACE_BODY_TOP_GAP = 0.28;
 /** Long side of the drawn face. Enough that the name stays crisp at the
  *  board's own camera pose without a 2048px canvas per board. */
 const FACE_RESOLUTION = 1536;
+
+const FACE_FONT = 'ui-sans-serif, system-ui, "Helvetica Neue", Arial, sans-serif';
+
+/**
+ * A rectangle on the face, in metres, measured from its top-left corner.
+ *
+ * The same frame the drawing code works in. `Board` converts these into
+ * meshes so the pressable area of a card is the card, by construction: there
+ * is one grid, and both the pixels and the hit targets are laid out from it.
+ */
+export interface BoardFaceRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Where each card sits on a face — the grid, solved once.
+ *
+ * Returns an empty list when the cards cannot fit (no columns, or a band and
+ * margins that leave no height), which is the same condition the drawing code
+ * treats as "draw nothing".
+ */
+export function boardCardRects({
+  width,
+  height,
+  band,
+  count,
+  columns,
+}: {
+  width: number;
+  height: number;
+  band: number;
+  count: number;
+  columns: number;
+}): BoardFaceRect[] {
+  if (count <= 0 || columns <= 0) return [];
+
+  const rows = Math.ceil(count / columns);
+  const cardWidth = (width - 2 * FACE_MARGIN - (columns - 1) * FACE_GUTTER) / columns;
+  const cardHeight = (height - band - 2 * FACE_MARGIN - (rows - 1) * FACE_GUTTER) / rows;
+  if (cardWidth <= 0 || cardHeight <= 0) return [];
+
+  return Array.from({ length: count }, (_, index) => ({
+    x: FACE_MARGIN + (index % columns) * (cardWidth + FACE_GUTTER),
+    y: band + FACE_MARGIN + Math.floor(index / columns) * (cardHeight + FACE_GUTTER),
+    width: cardWidth,
+    height: cardHeight,
+  }));
+}
+
+/** Where a `body` paragraph sits on a face — the Brief board's one region. */
+export function boardBodyRect({
+  width,
+  height,
+  band,
+}: {
+  width: number;
+  height: number;
+  band: number;
+}): BoardFaceRect {
+  const y = band + FACE_BODY_TOP_GAP;
+  return {
+    x: FACE_MARGIN,
+    y,
+    width: Math.max(0, width - FACE_MARGIN * 2),
+    height: Math.max(0, height - y - FACE_MARGIN),
+  };
+}
+
+/** Fill colour for a card of the given tone. */
+function toneFill(tone: BoardCardTone | undefined, cardColor: string, accentColor: string): string {
+  switch (tone) {
+    case "accent":
+      return accentColor;
+    case "attention":
+      return SURFACE.attention;
+    case "quiet":
+      return SURFACE.quiet;
+    default:
+      return cardColor;
+  }
+}
+
+/** Greedy word-wrap into lines that fit `maxWidth` at the context's font. */
+function wrapLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (!current || ctx.measureText(candidate).width <= maxWidth) {
+      current = candidate;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+/** Clamp to `maxLines`, marking the last kept line with an ellipsis. */
+function clampLines(lines: string[], maxLines: number): string[] {
+  if (maxLines <= 0) return [];
+  if (lines.length <= maxLines) return lines;
+  const kept = lines.slice(0, maxLines);
+  const last = kept.length - 1;
+  kept[last] = `${(kept[last] ?? "").replace(/[\s.,;:]+$/, "")}…`;
+  return kept;
+}
 
 function roundedRect(
   ctx: CanvasRenderingContext2D,
@@ -228,12 +362,28 @@ export function useBoardFaceTexture(spec: BoardFaceSpec): CanvasTexture | null {
     label,
     ink,
     band,
-    cardCount,
+    cards,
     columns,
     cardColor,
     accentColor,
-    accentIndex,
+    body,
   } = spec;
+
+  // `cards` is rebuilt every render by the scene, so the redraw keys off the
+  // serialised spec rather than array identity: same text, same texture.
+  const signature = JSON.stringify({
+    width,
+    height,
+    color,
+    label,
+    ink,
+    band,
+    columns,
+    cardColor,
+    accentColor,
+    body,
+    cards,
+  });
 
   const texture = useMemo(() => {
     const landscape = width >= height;
@@ -253,7 +403,7 @@ export function useBoardFaceTexture(spec: BoardFaceSpec): CanvasTexture | null {
 
     if (label) {
       const size = px(0.3);
-      ctx.font = `600 ${size}px ui-sans-serif, system-ui, "Helvetica Neue", Arial, sans-serif`;
+      ctx.font = `600 ${size}px ${FACE_FONT}`;
       ctx.fillStyle = ink;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -272,20 +422,38 @@ export function useBoardFaceTexture(spec: BoardFaceSpec): CanvasTexture | null {
       ctx.globalAlpha = 1;
     }
 
-    if (cardCount > 0) {
-      const rows = Math.ceil(cardCount / columns);
-      const cardWidth =
-        (width - 2 * FACE_MARGIN - (columns - 1) * FACE_GUTTER) / columns;
-      const cardHeight =
-        (height - band - 2 * FACE_MARGIN - (rows - 1) * FACE_GUTTER) / rows;
-      if (cardWidth > 0 && cardHeight > 0) {
-        for (let index = 0; index < cardCount; index += 1) {
-          const column = index % columns;
-          const row = Math.floor(index / columns);
-          const x = FACE_MARGIN + column * (cardWidth + FACE_GUTTER);
-          const y = band + FACE_MARGIN + row * (cardHeight + FACE_GUTTER);
+    const trimmedBody = body?.trim();
 
-          ctx.fillStyle = index === accentIndex ? accentColor : cardColor;
+    if (trimmedBody) {
+      const size = px(0.18);
+      const lineHeight = size * 1.4;
+      const top = px(band) + px(FACE_BODY_TOP_GAP);
+      const innerWidth = canvas.width - px(FACE_MARGIN) * 2;
+      const maxLines = Math.max(
+        1,
+        Math.floor((canvas.height - top - px(FACE_MARGIN)) / lineHeight),
+      );
+      ctx.font = `400 ${size}px ${FACE_FONT}`;
+      ctx.fillStyle = ink;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      clampLines(wrapLines(ctx, trimmedBody, innerWidth), maxLines).forEach(
+        (line, index) => ctx.fillText(line, px(FACE_MARGIN), top + index * lineHeight),
+      );
+    } else if (cards.length > 0) {
+      const rects = boardCardRects({ width, height, band, count: cards.length, columns });
+      if (rects.length > 0) {
+        const pad = px(0.12);
+        const labelSize = px(0.1);
+        const textSize = px(0.135);
+        const textLine = textSize * 1.32;
+
+        cards.forEach((card, index) => {
+          const rect = rects[index];
+          if (!rect) return;
+          const { x, y, width: cardWidth, height: cardHeight } = rect;
+
+          ctx.fillStyle = toneFill(card.tone, cardColor, accentColor);
           roundedRect(ctx, px(x), px(y), px(cardWidth), px(cardHeight), px(0.04));
           ctx.fill();
 
@@ -295,17 +463,59 @@ export function useBoardFaceTexture(spec: BoardFaceSpec): CanvasTexture | null {
           ctx.lineWidth = Math.max(1, px(0.006));
           ctx.stroke();
           ctx.globalAlpha = 1;
-        }
+
+          // The text is drawn dark: every card tone here is a light fill.
+          const innerX = px(x) + pad;
+          const innerWidth = px(cardWidth) - pad * 2;
+          const bottom = px(y) + px(cardHeight) - pad;
+          let cursorY = px(y) + pad;
+          ctx.fillStyle = SURFACE.frame;
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+
+          if (card.label) {
+            ctx.font = `600 ${labelSize}px ${FACE_FONT}`;
+            ctx.globalAlpha = 0.55;
+            ctx.fillText(
+              card.label.toUpperCase().slice(0, 34),
+              innerX,
+              cursorY,
+            );
+            ctx.globalAlpha = 1;
+            cursorY += labelSize * 1.6;
+          }
+
+          ctx.font = `500 ${textSize}px ${FACE_FONT}`;
+          const maxLines = Math.max(1, Math.floor((bottom - cursorY) / textLine));
+          clampLines(wrapLines(ctx, card.text, innerWidth), maxLines).forEach(
+            (line, lineIndex) =>
+              ctx.fillText(line, innerX, cursorY + lineIndex * textLine),
+          );
+        });
       }
+    } else {
+      const size = px(0.15);
+      ctx.font = `400 ${size}px ${FACE_FONT}`;
+      ctx.fillStyle = ink;
+      ctx.globalAlpha = 0.4;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(
+        "Nothing here yet",
+        canvas.width / 2,
+        (px(band) + canvas.height) / 2,
+      );
+      ctx.globalAlpha = 1;
     }
 
     const drawn = new CanvasTexture(canvas);
     drawn.colorSpace = SRGBColorSpace;
     drawn.anisotropy = 8;
     return drawn;
-  }, [width, height, color, label, ink, band, cardCount, columns, cardColor, accentColor, accentIndex]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `signature` is the serialised spec; redrawing on it and nothing else is intentional.
+  }, [signature]);
 
-  // The face is redrawn whenever the room's counts change, so the texture it
+  // The face is redrawn whenever the room's text changes, so the texture it
   // replaces has to go back to the GPU rather than accumulate there.
   useEffect(() => () => texture?.dispose(), [texture]);
 

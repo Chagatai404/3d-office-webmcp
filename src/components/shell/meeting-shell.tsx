@@ -6,6 +6,7 @@ import { useRoom } from "@/components/room/room-provider";
 import { RoomSummary } from "@/components/room/room-summary";
 import type { SceneInteraction } from "@/visualization/scene/scene-interaction";
 import { subscribeToUiConfirmation } from "@/webmcp/confirmation-bridge";
+import { AttentionAlerts } from "./attention-alerts";
 import { DrawerHost } from "./drawers/drawer-host";
 import { MeetingShellProvider, useShell } from "./shell-provider";
 import { MeetingToolbar } from "./meeting-toolbar";
@@ -63,6 +64,9 @@ function World() {
       onSelect: (zone) => {
         if (zone !== null) goToWorkspace(zone);
       },
+      // Pressing one written item on a board goes to the same place as
+      // pressing the board, and additionally says which item to open at.
+      onOpenItem: (zone, itemId) => goToWorkspace(zone, itemId),
       onHover: () => {},
     }),
     [activeWorkspace, goToWorkspace],
@@ -83,6 +87,7 @@ function World() {
       </div>
 
       <MeetingToolbar />
+      <AttentionAlerts />
       {activeWorkspace === "room" ? <RoomSummary /> : null}
       <WorkspacePanel />
       <DrawerHost />
