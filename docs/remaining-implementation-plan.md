@@ -11,23 +11,35 @@ separately because they are not missing application features.
 
 ## Verification baseline
 
-- `npm run check`: passed (13 files, 208 tests).
-- `npm run test:unit`: passed (38 files, 416 tests).
+- `npm run check`: passed (16 files, 248 tests).
+- `npm run test:unit`: passed (41 files, 459 tests).
 - `npm run build`: passed with Next.js 16.3.3.
-- `npm run test:domain`: not run; the required local Supabase stack is stopped.
-  The privileged retry reached the CLI and failed with
-  `LegacyResetLocalDbNotRunningError`, before Vitest started.
-- Full Playwright, two-agent, hosted-incognito, and adversarial gates remain
-  unverified in this audit.
+- Postgres-backed domain suite: passed (16 files, 122 tests) after a clean local
+  Supabase reset.
+- The focused created-room Playwright file passed all three cases, including
+  the new two-room read/write/WebMCP/realtime isolation scenario. The runner's
+  dev-server teardown stalled after reporting all cases green and was stopped
+  manually; the full Playwright, two-agent, hosted-incognito, and adversarial
+  gates remain separate verification work.
 
 ## P0 — Finish the merged agent-native experience
 
+Implementation status (2026-09-01): all application-code items below are now
+implemented. `npm run check`, the complete non-Supabase unit suite, the full
+Postgres-backed domain suite, the production build, and the focused two-room
+browser scenario pass.
+
 ### 1. Wire the finalized UI to canonical `MeetingReport`
 
-Current gap: A8 and A9 are implemented, but
+Previously identified gap: A8 and A9 were implemented, but
 `src/components/room/final-report.tsx` still calls `getDecisionRecord()` and
 reconstructs constraints/resolved concerns from `RoomState`. This is the one
 explicit B7 integration item still missing.
+
+Status: implemented. The JSON route, shared server operation, complete
+`RoomClient` path, canonical report UI, WebMCP, and PDF all use the same
+`MeetingReport` projection. `DecisionRecord` is fetched only for the optional
+line-by-line provenance disclosure.
 
 Plan:
 
@@ -44,13 +56,16 @@ Plan:
 
 ### 2. Complete `get_room_updates` event coverage
 
-Current gaps:
+Previously identified gaps:
 
 - `participant.configured` is emitted after A6 role/authority changes but maps
   to the generic `other` update.
 - A revision supersedes its parent in the database, but the update stream only
   labels the new row `proposal_submitted`; it does not explicitly describe a
   revision/supersession.
+
+Status: implemented. Updates now distinguish `participant_configured` and
+`proposal_revised`, carry changed fields/parent IDs, and paginate at 100 events.
 
 Plan:
 
@@ -63,9 +78,13 @@ Plan:
 
 ### 3. Finish prompt-first simplification in Deliberation
 
-Current gap: Input and Proposal are simplified, but the primary Deliberation UI
+Previously identified gap: Input and Proposal were simplified, but the primary Deliberation UI
 still exposes low-level fields such as conflict severity, trade-off expected
 effect, revised rationale, expected outcomes, and constraint references.
+
+Status: implemented. Each Deliberation action has one primary natural-language
+field; complete structured inputs remain in closed optional disclosures and in
+the canonical/WebMCP contracts.
 
 Plan:
 
@@ -79,7 +98,7 @@ Plan:
 
 ### 4. Close security and reliability gaps
 
-Current gaps:
+Previously identified gaps:
 
 - No rate limiting/abuse mitigation exists for passcode/invite join attempts.
 - Tool output size is not consistently bounded (the checklist calls this out
@@ -91,6 +110,16 @@ Current gaps:
 - The “all successful mutations bump exactly once” checklist statement is not
   formally audited; idempotent no-op successes intentionally keep the version,
   so the invariant should be rewritten as “every material mutation bumps once.”
+
+Status: implemented and exercised in focused regression coverage. Join attempts
+are throttled with generic retry responses and hashed buckets; collection reads
+have explicit limits/continuations plus a 256 KiB final tool-result ceiling; a
+route-table conformance test covers authentication and optimistic concurrency
+on every versioned room mutation route; and a two-room Playwright scenario
+asserts read/write/WebMCP/realtime isolation. The route audit also found and
+fixed empty `If-Match` being coerced to version zero. The complete domain suite
+and focused two-room browser scenario pass; the full browser matrix remains an
+operational prerequisite below.
 
 Plan:
 

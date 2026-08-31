@@ -17,11 +17,13 @@ export type RoomUpdateType =
   | "join_rejected"
   | "participant_joined"
   | "participant_removed"
+  | "participant_configured"
   | "decision_role_changed"
   | "ownership_transferred"
   | "input_shared"
   | "readiness_changed"
   | "proposal_submitted"
+  | "proposal_revised"
   | "concern_raised"
   | "concern_resolved"
   | "tradeoff_proposed"
@@ -57,6 +59,7 @@ const ACTION_TYPE: Record<string, RoomUpdateType> = {
   "join.rejected": "join_rejected",
   "participant.seat_claimed": "participant_joined",
   "participant.removed": "participant_removed",
+  "participant.configured": "participant_configured",
   "participant.decision_role_changed": "decision_role_changed",
   "ownership.transferred": "ownership_transferred",
   "position.added": "input_shared",
@@ -105,9 +108,26 @@ export interface RoomUpdate {
   actorName: string | null;
   entityType: string | null;
   entityId: string | null;
+  parentProposalId: string | null;
+  changedFields: string[];
   decisionHash: string | null;
   summary: string;
   createdAt: string;
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function changedConfigurationFields(event: ActivityEvent): string[] {
+  if (event.action !== "participant.configured") return [];
+  const input = objectValue(event.sanitizedInput);
+  return ["role", "decisionRole"].filter((field) => {
+    const change = objectValue(input?.[field]);
+    return change !== null && change.from !== change.to;
+  });
 }
 
 function describe(event: ActivityEvent, type: RoomUpdateType, actorName: string | null): string {
@@ -119,11 +139,13 @@ function describe(event: ActivityEvent, type: RoomUpdateType, actorName: string 
     case "join_rejected": return `${who} rejected a waiting join request.`;
     case "participant_joined": return `${who} joined the meeting.`;
     case "participant_removed": return `${who} removed a participant.`;
+    case "participant_configured": return `${who} changed a participant's role or decision authority.`;
     case "decision_role_changed": return `${who} changed a participant's decision authority.`;
     case "ownership_transferred": return `${who} transferred meeting ownership.`;
     case "input_shared": return `${who} shared new input.`;
     case "readiness_changed": return `${who} marked their input ready.`;
     case "proposal_submitted": return `${who} submitted a proposal.`;
+    case "proposal_revised": return `${who} submitted a revision and superseded the previous proposal.`;
     case "concern_raised": return `${who} raised a concern.`;
     case "concern_resolved": return `${who} resolved a concern.`;
     case "tradeoff_proposed": return `${who} proposed a trade-off.`;
@@ -151,7 +173,14 @@ export function computeRoomUpdates(room: RoomState, sinceVersion: number): RoomU
   return room.activity
     .filter((event) => event.resultingRoomVersion > sinceVersion && !IGNORED_ACTIONS.has(event.action))
     .map((event): RoomUpdate => {
-      const type = ACTION_TYPE[event.action] ?? "other";
+      const sanitizedInput = objectValue(event.sanitizedInput);
+      const parentProposalId = typeof sanitizedInput?.parentProposalId === "string"
+        ? sanitizedInput.parentProposalId
+        : null;
+      const mappedType = ACTION_TYPE[event.action] ?? "other";
+      const type = mappedType === "proposal_submitted" && parentProposalId
+        ? "proposal_revised"
+        : mappedType;
       const actorName = event.actorId ? nameById.get(event.actorId) ?? null : null;
       const decisionHash =
         type === "phase_changed" && typeof event.result === "object" && event.result !== null && !Array.isArray(event.result)
@@ -166,6 +195,8 @@ export function computeRoomUpdates(room: RoomState, sinceVersion: number): RoomU
         actorName,
         entityType: event.entityType,
         entityId: event.entityId,
+        parentProposalId,
+        changedFields: changedConfigurationFields(event),
         decisionHash: typeof decisionHash === "string" ? decisionHash : null,
         summary: describe(event, type, actorName),
         createdAt: event.createdAt,

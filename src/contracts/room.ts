@@ -914,6 +914,7 @@ export const actionErrorCodeSchema = z.enum([
   "ALREADY_PARTICIPANT",
   "REQUEST_ALREADY_RESOLVED",
   "MEETING_LOCKED",
+  "RATE_LIMITED",
 ]);
 export type ActionErrorCode = z.infer<typeof actionErrorCodeSchema>;
 
@@ -1175,6 +1176,9 @@ export interface RoomClient {
   ): Promise<ActionResult>;
 
   getDecisionRecord(roomId: string): Promise<ActionResult<DecisionRecord>>;
+
+  /** Canonical human-facing report projection, available only after finalization. */
+  getMeetingReport(roomId: string): Promise<ActionResult<MeetingReport>>;
 
   startDemoScenario(
     roomId: string,

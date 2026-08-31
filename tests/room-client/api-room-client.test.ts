@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiRoomClient } from "@/clients/api-room-client";
 import { demoRoom } from "@/fixtures/demo-room";
+import type { MeetingReport } from "@/contracts/room";
 
 type SubscribeStatusCallback = (status: string) => void;
 
@@ -120,5 +121,56 @@ describe("ApiRoomClient realtime loading", () => {
       expect(errorSpy).toHaveBeenCalledWith("Room refresh failed", expect.anything());
     });
     expect(realtime.supabase.removeChannel).not.toHaveBeenCalled();
+  });
+});
+
+describe("ApiRoomClient canonical report", () => {
+  it("reads and validates the authenticated MeetingReport endpoint", async () => {
+    const report: MeetingReport = {
+      roomId: demoRoom.id,
+      title: "Decision report",
+      brief: "A finalized decision.",
+      executiveSummary: "The room chose the accessible option.",
+      finalDecision: { title: "Accessible option", summary: "Ship the accessible option." },
+      rationale: "It satisfies the hard constraints.",
+      participants: [],
+      decisionPolicy: "owner_decides",
+      keyInputs: [],
+      constraints: [],
+      proposalsConsidered: [],
+      concernsRaised: [],
+      resolvedConcerns: [],
+      unresolvedWarnings: [],
+      acceptedTradeoffs: [],
+      alignment: [],
+      dissent: [],
+      expertAdvice: [],
+      actionItems: [],
+      owners: [],
+      deadlines: [],
+      requiredApprovalParticipantIds: [],
+      approvals: [],
+      decisionHash: "sha256:report",
+      finalizedAt: "2026-09-01T00:00:00.000Z",
+      provenanceSummary: { totalEvents: 0, byAction: {} },
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      data: report,
+      roomVersion: 17,
+      message: "Final meeting report loaded.",
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const realtime = createSupabaseStub();
+    const client = new ApiRoomClient(realtime.supabase as never);
+
+    await expect(client.getMeetingReport(demoRoom.id)).resolves.toMatchObject({
+      ok: true,
+      data: { decisionHash: "sha256:report" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/rooms/${encodeURIComponent(demoRoom.id)}/report`,
+      expect.objectContaining({ headers: { Authorization: "Bearer session-token" } }),
+    );
   });
 });

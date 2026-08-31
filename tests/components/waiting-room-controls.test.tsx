@@ -69,6 +69,8 @@ class B3RoomClient implements RoomClient {
     this.unavailable();
   getDecisionRecord: RoomClient["getDecisionRecord"] = async () =>
     this.unavailable();
+  getMeetingReport: RoomClient["getMeetingReport"] = async () =>
+    this.unavailable();
   startDemoScenario: RoomClient["startDemoScenario"] = async () =>
     this.unavailable();
   listJoinRequests: RoomClient["listJoinRequests"] = async () =>

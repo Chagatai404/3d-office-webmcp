@@ -3,6 +3,7 @@
 import type { RoomState } from "@/contracts/room";
 import {
   getFinalDecisionRecord,
+  getFinalMeetingReport,
   getMeetingContext,
   listJoinRequests,
   previewFinalDecision,
@@ -52,6 +53,14 @@ export class RoomWebMcpContext {
 
   async getDecisionRecord() {
     return getFinalDecisionRecord(
+      this.repository,
+      await this.getActorUserId(),
+      this.roomId,
+    );
+  }
+
+  async getMeetingReport() {
+    return getFinalMeetingReport(
       this.repository,
       await this.getActorUserId(),
       this.roomId,

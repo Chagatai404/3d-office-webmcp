@@ -14,6 +14,7 @@ import {
   submitParticipantProposal,
 } from "@/domain/rooms/operations";
 import { GET as getReportPdf } from "@/app/api/rooms/[roomId]/report.pdf/route";
+import { GET as getReportJson } from "@/app/api/rooms/[roomId]/report/route";
 import type { CreateRoomInput } from "@/contracts/room";
 import type { MutationContext } from "@/domain/rooms/repository";
 import { SupabaseRoomRepository } from "@/lib/supabase/room-repository";
@@ -61,6 +62,10 @@ function pdfRequest(roomId: string, accessToken?: string): Request {
 
 function callRoute(roomId: string, accessToken?: string) {
   return getReportPdf(pdfRequest(roomId, accessToken), { params: Promise.resolve({ roomId }) });
+}
+
+function callJsonRoute(roomId: string, accessToken?: string) {
+  return getReportJson(pdfRequest(roomId, accessToken), { params: Promise.resolve({ roomId }) });
 }
 
 function extractDecompressedText(bytes: ArrayBuffer): string {
@@ -129,8 +134,12 @@ describe.sequential("A9: GET /api/rooms/:roomId/report.pdf", () => {
   });
 
   it("refuses an unauthenticated request", async () => {
-    const response = await callRoute(roomId, undefined);
-    expect(response.status).toBe(401);
+    const [pdfResponse, jsonResponse] = await Promise.all([
+      callRoute(roomId, undefined),
+      callJsonRoute(roomId, undefined),
+    ]);
+    expect(pdfResponse.status).toBe(401);
+    expect(jsonResponse.status).toBe(401);
   });
 
   it("refuses a caller with no legitimate access to the room", async () => {
@@ -187,6 +196,21 @@ describe.sequential("A9: GET /api/rooms/:roomId/report.pdf", () => {
     expect(bytes.byteLength).toBeGreaterThan(1000);
     expect(Buffer.from(bytes.slice(0, 5)).toString("latin1")).toBe("%PDF-");
     expect(extractDecompressedText(bytes)).toContain(decisionHash);
+
+    const jsonResponse = await callJsonRoute(roomId, owner.accessToken);
+    expect(jsonResponse.status).toBe(200);
+    const json = await jsonResponse.json();
+    expect(json).toMatchObject({
+      ok: true,
+      data: {
+        decisionHash,
+        finalDecision: { title: "Reduced scope onboarding" },
+        constraints: [],
+        concernsRaised: [],
+        resolvedConcerns: [],
+        acceptedTradeoffs: [],
+      },
+    });
   });
 
   it("serves the same finalized report to the other participant, with the same decision hash", async () => {

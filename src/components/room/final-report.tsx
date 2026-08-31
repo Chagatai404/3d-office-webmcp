@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ActionResult, DecisionRecord } from "@/contracts/room";
+import type { ActionResult, DecisionRecord, MeetingReport } from "@/contracts/room";
 import { ActionFeedback } from "./action-feedback";
 import { shortDecisionHash } from "./coordination";
 import {
   ConflictList,
   DecisionList,
   ExpertAdviceList,
-  participantLabel,
 } from "./decision-shared";
 import { ALIGNMENT_CHOICE_LABEL, formatActionName, formatTime } from "./room-labels";
 import { useRoom } from "./room-provider";
@@ -17,18 +16,9 @@ import { useRoom } from "./room-provider";
  * What a finalized meeting leaves behind: one report, the same for everyone.
  *
  * BACKEND CONTRACT:
- * Every word below is read out of the server's own `DecisionRecord` — the
- * immutable record fetched after finalization — plus the canonical
- * `RoomState` it belongs to. There is no frontend report model here, and
- * there must never be one: two participants comparing screens are comparing
- * one server-side artifact, down to the decision hash, not two local
- * reconstructions that happen to agree today.
- *
- * When Developer A's canonical `MeetingReport` projection lands (A8), this
- * component swaps `getDecisionRecord()` for `get_final_report`'s projection
- * and drops the small amount of lookup it does here (constraints by id,
- * resolved objections). The sections stay exactly as they are, because they
- * are already the report's sections rather than a dump of room state.
+ * Every primary section below is read directly from the server's canonical
+ * `MeetingReport`. The raw `DecisionRecord` is fetched only for the explicitly
+ * expanded line-by-line provenance view; it never reconstructs report content.
  *
  * The PDF button points at the authenticated report endpoint (A9). It is a
  * plain same-origin link on purpose: the session cookie goes with it, the
@@ -38,8 +28,9 @@ import { useRoom } from "./room-provider";
 export function FinalReport() {
   const { room, actions } = useRoom();
 
+  const [report, setReport] = useState<MeetingReport | null>(null);
   const [record, setRecord] = useState<DecisionRecord | null>(null);
-  const [result, setResult] = useState<ActionResult<DecisionRecord> | null>(null);
+  const [result, setResult] = useState<ActionResult<MeetingReport> | null>(null);
   const [pending, setPending] = useState(false);
 
   /* A finalized room exposes its report without being asked — B7's whole
@@ -57,11 +48,12 @@ export function FinalReport() {
 
     let cancelled = false;
     setPending(true);
-    void actions.getDecisionRecord().then((next) => {
+    void Promise.all([actions.getMeetingReport(), actions.getDecisionRecord()]).then(([next, raw]) => {
       if (cancelled) return;
       setPending(false);
       setResult(next);
-      if (next.ok) setRecord(next.data);
+      if (next.ok) setReport(next.data);
+      if (raw.ok) setRecord(raw.data);
     });
 
     return () => {
@@ -72,13 +64,13 @@ export function FinalReport() {
   async function reload() {
     if (pending) return;
     setPending(true);
-    const next = await actions.getDecisionRecord();
+    const next = await actions.getMeetingReport();
     setPending(false);
     setResult(next);
-    if (next.ok) setRecord(next.data);
+    if (next.ok) setReport(next.data);
   }
 
-  if (!record) {
+  if (!report) {
     return (
       <section
         className="panel-block decision-panel"
@@ -103,14 +95,9 @@ export function FinalReport() {
     );
   }
 
-  const { decision } = record;
-  const { proposal } = decision;
-
-  const constraints = decision.proposal.referencedConstraintIds
-    .map((id) => room.constraints.find((constraint) => constraint.id === id))
-    .filter((constraint) => constraint !== undefined);
-
-  const resolvedConflicts = room.conflicts.filter((conflict) => conflict.status === "resolved");
+  const participantName = (participantId: string) =>
+    report.participants.find((participant) => participant.id === participantId)?.name
+      ?? participantId;
 
   return (
     <section
@@ -123,12 +110,12 @@ export function FinalReport() {
           Decision report
         </h2>
         <p className="report-meta">
-          {room.title} · finalized {formatTime(record.finalizedAt)} ·{" "}
+          {report.title} · finalized {formatTime(report.finalizedAt)} ·{" "}
           {/* The hash identifies the artifact and belongs on the page, but it
               is not what anyone came to read: short here, exact under
               provenance. */}
-          <code title={decision.decisionHash} data-testid="report-hash">
-            {shortDecisionHash(decision.decisionHash)}
+          <code title={report.decisionHash} data-testid="report-hash">
+            {shortDecisionHash(report.decisionHash)}
           </code>
         </p>
         <p className="panel-note">
@@ -142,21 +129,16 @@ export function FinalReport() {
           Decision
         </h3>
         <article className="decision-card report-decision">
-          <strong>{proposal.title}</strong>
-          <p>{proposal.summary}</p>
+          <strong>{report.finalDecision.title}</strong>
+          <p>{report.finalDecision.summary}</p>
         </article>
-        <DecisionList
-          title="What this is expected to produce"
-          entries={proposal.expectedOutcomes}
-          empty="No expected outcomes were recorded."
-        />
       </section>
 
       <section className="decision-section" aria-labelledby="report-why-heading">
         <h3 className="panel-subheading" id="report-why-heading">
           Why we chose it
         </h3>
-        <p>{decision.rationale}</p>
+        <p>{report.rationale}</p>
       </section>
 
       <section className="decision-section" aria-labelledby="report-constraints-heading">
@@ -165,7 +147,7 @@ export function FinalReport() {
         </h3>
         <DecisionList
           title="Carried into the decision"
-          entries={constraints.map(
+          entries={report.constraints.map(
             (constraint) => `${constraint.category}: ${constraint.text}`,
           )}
           empty="This decision referenced no constraints."
@@ -176,17 +158,17 @@ export function FinalReport() {
         <h3 className="panel-subheading" id="report-concerns-heading">
           Concerns addressed
         </h3>
-        {resolvedConflicts.length === 0 ? (
+        {report.resolvedConcerns.length === 0 ? (
           <p className="panel-empty">No objections were raised against this decision.</p>
         ) : (
-          <ConflictList room={room} conflicts={resolvedConflicts} />
+          <ConflictList room={room} conflicts={report.resolvedConcerns} />
         )}
-        {decision.unresolvedWarnings.length > 0 ? (
+        {report.unresolvedWarnings.length > 0 ? (
           <>
             <h4 className="panel-subheading">Warnings carried with the decision</h4>
             {/* Not hidden and not softened: a warning that travelled with the
                 decision is part of what was decided. */}
-            <ConflictList room={room} conflicts={decision.unresolvedWarnings} />
+            <ConflictList room={room} conflicts={report.unresolvedWarnings} />
           </>
         ) : null}
       </section>
@@ -197,7 +179,7 @@ export function FinalReport() {
         </h3>
         <DecisionList
           title="Accepted"
-          entries={record.acceptedTradeoffs.map(
+          entries={report.acceptedTradeoffs.map(
             (tradeoff) => `${tradeoff.description} — ${tradeoff.expectedEffect}`,
           )}
           empty="No trade-offs were accepted."
@@ -210,9 +192,9 @@ export function FinalReport() {
         </h3>
         <DecisionList
           title="Where people stood"
-          entries={record.alignments.map(
+          entries={report.alignment.map(
             (alignment) =>
-              `${participantLabel(room, alignment.participantId)}: ${
+              `${participantName(alignment.participantId)}: ${
                 ALIGNMENT_CHOICE_LABEL[alignment.choice]
               }${alignment.comment ? ` — ${alignment.comment}` : ""}`,
           )}
@@ -222,7 +204,7 @@ export function FinalReport() {
             decision made over an objection has to say so. */}
         <DecisionList
           title="Dissent"
-          entries={decision.dissent}
+          entries={report.dissent}
           empty="No dissent was recorded."
         />
       </section>
@@ -233,19 +215,19 @@ export function FinalReport() {
         </h3>
         <DecisionList
           title="Owners"
-          entries={decision.owners.map(
+          entries={report.owners.map(
             (owner) =>
-              `${participantLabel(room, owner.participantId)} — ${owner.responsibility}`,
+              `${participantName(owner.participantId)} — ${owner.responsibility}`,
           )}
           empty="No owner was named."
         />
         <DecisionList
           title="Action items"
-          entries={decision.actionItems.map((item) => {
+          entries={report.actionItems.map((item) => {
             const owner =
               item.ownerParticipantId === null
                 ? "unassigned"
-                : participantLabel(room, item.ownerParticipantId);
+                : participantName(item.ownerParticipantId);
             const due = item.dueAt ? `, due ${formatTime(item.dueAt)}` : "";
             return `${item.text} (${owner}${due})`;
           })}
@@ -253,7 +235,7 @@ export function FinalReport() {
         />
         <DecisionList
           title="Deadlines"
-          entries={decision.deadlines.map(
+          entries={report.deadlines.map(
             (deadline) => `${deadline.label} — ${formatTime(deadline.dueAt)}`,
           )}
           empty="No deadline was set."
@@ -264,10 +246,10 @@ export function FinalReport() {
         <h3 className="panel-subheading" id="report-security-heading">
           Security advice
         </h3>
-        {decision.expertAdvice.length === 0 ? (
+        {report.expertAdvice.length === 0 ? (
           <p className="panel-empty">The Security Expert raised nothing against this decision.</p>
         ) : (
-          <ExpertAdviceList advice={decision.expertAdvice} />
+          <ExpertAdviceList advice={report.expertAdvice} />
         )}
         <p className="panel-note">
           Advisory only. The Security Expert never aligned, approved, or owned any part of this
@@ -279,7 +261,7 @@ export function FinalReport() {
         <h3 className="panel-subheading" id="report-export-heading">
           Take it with you
         </h3>
-        <a className="button report-pdf" href={`/api/rooms/${room.id}/report.pdf`}>
+        <a className="button report-pdf" href={`/api/rooms/${report.roomId}/report.pdf`}>
           Download PDF
         </a>
         <p className="panel-note">
@@ -297,12 +279,12 @@ export function FinalReport() {
             <div>
               <dt>Decision hash</dt>
               <dd>
-                <code>{decision.decisionHash}</code>
+                <code>{report.decisionHash}</code>
               </dd>
             </div>
             <div>
               <dt>Finalized</dt>
-              <dd>{formatTime(record.finalizedAt)}</dd>
+              <dd>{formatTime(report.finalizedAt)}</dd>
             </div>
             <div>
               <dt>Room version</dt>
@@ -311,9 +293,9 @@ export function FinalReport() {
           </dl>
           <DecisionList
             title="Approvals"
-            entries={record.approvals.map(
+            entries={report.approvals.map(
               (approval) =>
-                `${participantLabel(room, approval.participantId)} confirmed ${shortDecisionHash(
+                `${participantName(approval.participantId)} confirmed ${shortDecisionHash(
                   approval.decisionHash,
                 )} at ${formatTime(approval.approvedAt)}`,
             )}
@@ -321,11 +303,10 @@ export function FinalReport() {
           />
           <DecisionList
             title="Provenance"
-            entries={record.provenance.map(
-              (event) =>
-                `${participantLabel(room, event.actorId)} via ${event.origin}: ${formatActionName(
-                  event.action,
-                )}`,
+            entries={record?.provenance.map((event) =>
+              `${event.actorId ? participantName(event.actorId) : "System"} via ${event.origin}: ${formatActionName(event.action)}`,
+            ) ?? Object.entries(report.provenanceSummary.byAction).map(
+              ([action, count]) => `${formatActionName(action)} × ${count}`,
             )}
             empty="No provenance was recorded."
           />
