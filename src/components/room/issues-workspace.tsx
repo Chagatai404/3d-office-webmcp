@@ -3,7 +3,7 @@
 import { useId, useMemo, useState, type FormEvent } from "react";
 import type { ActionResult, Conflict } from "@/contracts/room";
 import { ActionFeedback } from "./action-feedback";
-import { ConflictList, TRADEOFF_DRAFT } from "./decision-shared";
+import { ConflictList } from "./decision-shared";
 import { useRoom } from "./room-provider";
 
 /** The Issues workspace: objections, trade-offs, and explicit resolution. */
@@ -45,12 +45,13 @@ export function IssuesWorkspace() {
 
     const data = new FormData(event.currentTarget);
     const constraintId = String(data.get("constraintId") ?? "");
+    const rawSeverity = String(data.get("severity") ?? "blocking");
     setObjectionPending(true);
     const result = await actions.raiseObjection({
       proposalId: activeProposal.id,
       constraintId: constraintId === "" ? null : constraintId,
       reason: String(data.get("reason")).trim(),
-      severity: String(data.get("severity")) as Conflict["severity"],
+      severity: (rawSeverity === "warning" ? "warning" : "blocking") as Conflict["severity"],
     });
     setObjectionPending(false);
     setObjectionResult(result);
@@ -61,19 +62,26 @@ export function IssuesWorkspace() {
     if (tradeoffPending || !activeProposal || !self || selectedConflictIds.length === 0) return;
 
     const data = new FormData(event.currentTarget);
+    const description = String(data.get("description")).trim();
+    const explicitEffect = String(data.get("expectedEffect") ?? "").trim();
+    const explicitSummary = String(data.get("revisedSummary") ?? "").trim();
+    const explicitRationale = String(data.get("revisedRationale") ?? "").trim();
+    const explicitOutcomes = String(data.get("revisedOutcomes") ?? "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
     setTradeoffPending(true);
     const result = await actions.proposeTradeoff({
       conflictIds: selectedConflictIds,
-      description: String(data.get("description")).trim(),
-      expectedEffect: String(data.get("expectedEffect")).trim(),
+      description,
+      expectedEffect: explicitEffect || description,
       revisedProposal: {
-        title: String(data.get("revisedTitle")).trim(),
-        summary: String(data.get("revisedSummary")).trim(),
-        rationale: String(data.get("revisedRationale")).trim(),
-        expectedOutcomes: String(data.get("revisedOutcomes"))
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean),
+        title: String(data.get("revisedTitle") ?? "").trim() || activeProposal.title,
+        summary: explicitSummary || description,
+        rationale: explicitRationale || description,
+        expectedOutcomes: explicitOutcomes.length > 0
+          ? explicitOutcomes
+          : activeProposal.expectedOutcomes,
         referencedConstraintIds: revisedConstraintIds,
       },
     });
@@ -132,24 +140,29 @@ export function IssuesWorkspace() {
         <h3 className="panel-subheading">Objections</h3>
         <ConflictList room={room} conflicts={openConflicts} />
         <fieldset disabled={!self || room.phase !== "deliberation" || !activeProposal || objectionPending}>
-          <label htmlFor={`${fieldId}-objection-constraint`}>Related constraint</label>
-          <select id={`${fieldId}-objection-constraint`} name="constraintId">
-            <option value="">No single constraint</option>
-            {room.constraints.map((constraint) => (
-              <option key={constraint.id} value={constraint.id}>
-                {constraint.category}: {constraint.text}
-              </option>
-            ))}
-          </select>
-
-          <label htmlFor={`${fieldId}-objection-severity`}>Severity</label>
-          <select id={`${fieldId}-objection-severity`} name="severity" defaultValue="blocking">
-            <option value="blocking">Blocking</option>
-            <option value="warning">Warning</option>
-          </select>
-
-          <label htmlFor={`${fieldId}-objection-reason`}>Reason</label>
+          <label htmlFor={`${fieldId}-objection-reason`}>What concern should the room address?</label>
           <textarea id={`${fieldId}-objection-reason`} name="reason" rows={3} required />
+
+          <details className="advanced-fields">
+            <summary>Add structured detail (optional)</summary>
+            <div className="advanced-fields-body">
+              <label htmlFor={`${fieldId}-objection-constraint`}>Related constraint</label>
+              <select id={`${fieldId}-objection-constraint`} name="constraintId">
+                <option value="">No single constraint</option>
+                {room.constraints.map((constraint) => (
+                  <option key={constraint.id} value={constraint.id}>
+                    {constraint.category}: {constraint.text}
+                  </option>
+                ))}
+              </select>
+
+              <label htmlFor={`${fieldId}-objection-severity`}>Severity</label>
+              <select id={`${fieldId}-objection-severity`} name="severity" defaultValue="blocking">
+                <option value="blocking">Blocking</option>
+                <option value="warning">Warning</option>
+              </select>
+            </div>
+          </details>
 
           <button className="button decision-action" type="submit">
             {objectionPending ? "Raising..." : "Raise objection"}
@@ -176,81 +189,52 @@ export function IssuesWorkspace() {
             tradeoffPending
           }
         >
-          <div className="decision-checklist" aria-label="Conflicts addressed by this tradeoff">
-            {openConflicts.map((conflict) => (
-              <label key={conflict.id} className="decision-check">
-                <input
-                  type="checkbox"
-                  checked={selectedConflictIds.includes(conflict.id)}
-                  onChange={(event) =>
-                    setExcludedConflictIds((current) =>
-                      event.target.checked
-                        ? current.filter((id) => id !== conflict.id)
-                        : [...current, conflict.id],
-                    )
-                  }
-                />
-                <span>
-                  {conflict.severity}: {conflict.reason}
-                </span>
-              </label>
-            ))}
-          </div>
-
-          <label htmlFor={`${fieldId}-tradeoff-description`}>Tradeoff</label>
+          <label htmlFor={`${fieldId}-tradeoff-description`}>How should the proposal change?</label>
           <textarea
             id={`${fieldId}-tradeoff-description`}
             name="description"
             rows={3}
             required
-            defaultValue={TRADEOFF_DRAFT.description}
           />
 
-          <label htmlFor={`${fieldId}-tradeoff-effect`}>Expected effect</label>
-          <textarea
-            id={`${fieldId}-tradeoff-effect`}
-            name="expectedEffect"
-            rows={3}
-            required
-            defaultValue={TRADEOFF_DRAFT.expectedEffect}
-          />
+          <details className="advanced-fields">
+            <summary>Refine this response (optional)</summary>
+            <div className="advanced-fields-body">
+              <div className="decision-checklist" aria-label="Conflicts addressed by this tradeoff">
+                {openConflicts.map((conflict) => (
+                  <label key={conflict.id} className="decision-check">
+                    <input
+                      type="checkbox"
+                      checked={selectedConflictIds.includes(conflict.id)}
+                      onChange={(event) =>
+                        setExcludedConflictIds((current) =>
+                          event.target.checked
+                            ? current.filter((id) => id !== conflict.id)
+                            : [...current, conflict.id],
+                        )
+                      }
+                    />
+                    <span>{conflict.severity}: {conflict.reason}</span>
+                  </label>
+                ))}
+              </div>
 
-          <label htmlFor={`${fieldId}-revised-title`}>Revised proposal title</label>
-          <input
-            id={`${fieldId}-revised-title`}
-            name="revisedTitle"
-            required
-            defaultValue={activeProposal?.title ?? ""}
-          />
+              <label htmlFor={`${fieldId}-tradeoff-effect`}>Expected effect</label>
+              <textarea id={`${fieldId}-tradeoff-effect`} name="expectedEffect" rows={3} />
 
-          <label htmlFor={`${fieldId}-revised-summary`}>Revised summary</label>
-          <textarea
-            id={`${fieldId}-revised-summary`}
-            name="revisedSummary"
-            rows={3}
-            required
-            defaultValue={activeProposal?.summary ?? ""}
-          />
+              <label htmlFor={`${fieldId}-revised-title`}>Revised proposal title</label>
+              <input id={`${fieldId}-revised-title`} name="revisedTitle" defaultValue={activeProposal?.title ?? ""} />
 
-          <label htmlFor={`${fieldId}-revised-rationale`}>Revised rationale</label>
-          <textarea
-            id={`${fieldId}-revised-rationale`}
-            name="revisedRationale"
-            rows={3}
-            required
-            defaultValue={activeProposal?.rationale ?? ""}
-          />
+              <label htmlFor={`${fieldId}-revised-summary`}>Revised summary</label>
+              <textarea id={`${fieldId}-revised-summary`} name="revisedSummary" rows={3} />
 
-          <label htmlFor={`${fieldId}-revised-outcomes`}>
-            Revised expected outcomes, one per line
-          </label>
-          <textarea
-            id={`${fieldId}-revised-outcomes`}
-            name="revisedOutcomes"
-            rows={3}
-            required
-            defaultValue={activeProposal?.expectedOutcomes.join("\n") ?? ""}
-          />
+              <label htmlFor={`${fieldId}-revised-rationale`}>Revised rationale</label>
+              <textarea id={`${fieldId}-revised-rationale`} name="revisedRationale" rows={3} />
+
+              <label htmlFor={`${fieldId}-revised-outcomes`}>Revised expected outcomes, one per line</label>
+              <textarea id={`${fieldId}-revised-outcomes`} name="revisedOutcomes" rows={3} />
+            </div>
+          </details>
 
           <button
             className="button decision-action"

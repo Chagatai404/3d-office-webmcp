@@ -20,6 +20,7 @@ import type {
   Approval,
   Conflict,
   DecisionRecord,
+  MeetingReport,
   FinalDecisionPreview,
   Proposal,
   RoomClient,
@@ -27,6 +28,7 @@ import type {
   RoomState,
   Tradeoff,
 } from "@/contracts/room";
+import { computeMeetingReport } from "@/domain/rooms/report";
 
 vi.mock("@/webmcp/register-tools", () => ({
   useRoomWebMcpTools: () => undefined,
@@ -54,6 +56,7 @@ class FakeRoomClient implements RoomClient {
   readonly setParticipantDecisionRoleCalls: Parameters<RoomClient["setParticipantDecisionRole"]>[1][] = [];
   previewCalls = 0;
   recordCalls = 0;
+  reportCalls = 0;
   private readonly listeners = new Set<Listener>();
 
   constructor(seed: RoomState) {
@@ -130,6 +133,14 @@ class FakeRoomClient implements RoomClient {
   getDecisionRecord: RoomClient["getDecisionRecord"] = async () => {
     this.recordCalls += 1;
     return this.ok("Immutable decision record loaded.", decisionRecord(this.state));
+  };
+
+  getMeetingReport: RoomClient["getMeetingReport"] = async () => {
+    this.reportCalls += 1;
+    return this.ok<MeetingReport>(
+      "Final meeting report loaded.",
+      computeMeetingReport(this.state, decisionRecord(this.state)),
+    );
   };
 
   startDemoScenario: RoomClient["startDemoScenario"] = async () =>
@@ -526,6 +537,44 @@ describe("proposals workspace", () => {
 });
 
 describe("issues workspace", () => {
+  it("keeps objection and tradeoff records behind optional disclosures", async () => {
+    const client = new FakeRoomClient(roomInPhase("deliberation"));
+    await mount(client, <IssuesWorkspace />);
+
+    const objectionForm = byTestId<HTMLFormElement>("objection-form");
+    const tradeoffForm = byTestId<HTMLFormElement>("tradeoff-form");
+    const visibleObjectionControls = [
+      ...objectionForm.querySelectorAll("input, select, textarea"),
+    ].filter((element) => element.closest("details") === null);
+    const visibleTradeoffControls = [
+      ...tradeoffForm.querySelectorAll("input, select, textarea"),
+    ].filter((element) => element.closest("details") === null);
+
+    expect(visibleObjectionControls).toHaveLength(1);
+    expect((visibleObjectionControls[0] as HTMLTextAreaElement).name).toBe("reason");
+    expect(visibleTradeoffControls).toHaveLength(1);
+    expect((visibleTradeoffControls[0] as HTMLTextAreaElement).name).toBe("description");
+    expect(objectionForm.querySelector("details")?.open).toBe(false);
+    expect(tradeoffForm.querySelector("details")?.open).toBe(false);
+
+    const objectionDetailNames = [
+      ...objectionForm.querySelectorAll("details input, details select, details textarea"),
+    ].map((element) => (element as HTMLInputElement).name);
+    const tradeoffDetailNames = [
+      ...tradeoffForm.querySelectorAll("details input, details select, details textarea"),
+    ].map((element) => (element as HTMLInputElement).name);
+    expect(objectionDetailNames).toEqual(expect.arrayContaining(["constraintId", "severity"]));
+    expect(tradeoffDetailNames).toEqual(
+      expect.arrayContaining([
+        "expectedEffect",
+        "revisedTitle",
+        "revisedSummary",
+        "revisedRationale",
+        "revisedOutcomes",
+      ]),
+    );
+  });
+
   it("keeps objections, tradeoffs, and explicit resolutions as separate actions", async () => {
     const client = new FakeRoomClient(roomInPhase("deliberation"));
     await mount(client, <IssuesWorkspace />);
@@ -537,6 +586,12 @@ describe("issues workspace", () => {
       "The proposal still weakens accessibility review.",
     );
     await submit("objection-form");
+    setValue(
+      byTestId<HTMLFormElement>("tradeoff-form").querySelector<HTMLTextAreaElement>(
+        'textarea[name="description"]',
+      )!,
+      "Keep the accessibility review and narrow the first release instead.",
+    );
     await submit("tradeoff-form");
     setValue(
       byTestId<HTMLElement>("resolution-panel").querySelector<HTMLTextAreaElement>(
@@ -555,7 +610,11 @@ describe("issues workspace", () => {
     ]);
     expect(client.proposeTradeoffCalls[0]).toMatchObject({
       conflictIds: ["conflict-1"],
+      description: "Keep the accessibility review and narrow the first release instead.",
+      expectedEffect: "Keep the accessibility review and narrow the first release instead.",
       revisedProposal: expect.objectContaining({
+        summary: "Keep the accessibility review and narrow the first release instead.",
+        rationale: "Keep the accessibility review and narrow the first release instead.",
         referencedConstraintIds: ["constraint-1", "constraint-3", "constraint-5"],
       }),
     });
@@ -662,6 +721,7 @@ describe("decision workspace", () => {
     const client = new FakeRoomClient(roomInPhase("finalized"));
     await mount(client, <DecisionWorkspace />);
 
+    expect(client.reportCalls).toBe(1);
     expect(client.recordCalls).toBe(1);
     expect(byTestId("final-report")).toBeTruthy();
     expect(container.querySelector('[data-testid="approval-panel"]')).toBeNull();

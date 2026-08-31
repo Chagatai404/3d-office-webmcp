@@ -79,6 +79,7 @@ class WaitingRoomFakeClient implements RoomClient {
   previewFinalDecision: RoomClient["previewFinalDecision"] = async () => this.unavailable();
   approveFinalDecision: RoomClient["approveFinalDecision"] = async () => this.unavailable();
   getDecisionRecord: RoomClient["getDecisionRecord"] = async () => this.unavailable();
+  getMeetingReport: RoomClient["getMeetingReport"] = async () => this.unavailable();
   startDemoScenario: RoomClient["startDemoScenario"] = async () => this.unavailable();
   advanceDemoPhase: RoomClient["advanceDemoPhase"] = async () => this.unavailable();
   markMyInputReady: RoomClient["markMyInputReady"] = async () => this.unavailable();

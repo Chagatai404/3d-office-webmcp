@@ -6,6 +6,7 @@ import {
   decisionRecordSchema,
   finalDecisionPreviewSchema,
   joinRequestSchema,
+  meetingReportSchema,
   meetingSourceContentSchema,
   meetingSourceSearchResultsSchema,
   meetingSourceSchema,
@@ -20,6 +21,7 @@ import {
   type DecisionRecord,
   type FinalDecisionPreview,
   type JoinRequest,
+  type MeetingReport,
   type ManageJoinRequestInput,
   type MarkMeetingSourceFailedInput,
   type MarkMeetingSourceProcessedInput,
@@ -283,6 +285,10 @@ export class ApiRoomClient implements RoomClient {
 
   getDecisionRecord(roomId: string): Promise<ActionResult<DecisionRecord>> {
     return this.readAction(roomId, "decision-record", decisionRecordSchema);
+  }
+
+  getMeetingReport(roomId: string): Promise<ActionResult<MeetingReport>> {
+    return this.readAction(roomId, "report", meetingReportSchema);
   }
 
   async startDemoScenario(

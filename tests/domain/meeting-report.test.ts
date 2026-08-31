@@ -8,6 +8,7 @@ import {
   createRoom,
   expressMyAlignment,
   getFinalDecisionRecord,
+  getFinalMeetingReport,
   getMeetingContext,
   markMyInputReady,
   raiseParticipantObjection,
@@ -167,6 +168,8 @@ describe.sequential("A8: computeMeetingReport against a real finalized room", ()
     if (!notYetFinalized.ok) throw new Error(notYetFinalized.error.message);
     const record = await getFinalDecisionRecord(owner.repository, owner.userId, notYetFinalized.data.roomId);
     expect(record).toMatchObject({ ok: false, error: { code: "WRONG_PHASE" } });
+    const report = await getFinalMeetingReport(owner.repository, owner.userId, notYetFinalized.data.roomId);
+    expect(report).toMatchObject({ ok: false, error: { code: "WRONG_PHASE" } });
   });
 
   it("includes dissent, approvals/authority, and resolved concerns once finalized", async () => {
@@ -199,5 +202,12 @@ describe.sequential("A8: computeMeetingReport against a real finalized room", ()
     const mayaReport = computeMeetingReport(mayaRoom!, mayaRecord.data);
     expect(ownerReport).toEqual(mayaReport);
     expect(ownerReport.decisionHash).toBe(mayaReport.decisionHash);
+
+    const [ownerCanonical, mayaCanonical] = await Promise.all([
+      getFinalMeetingReport(owner.repository, owner.userId, roomId),
+      getFinalMeetingReport(maya.repository, maya.userId, roomId),
+    ]);
+    expect(ownerCanonical).toMatchObject({ ok: true, data: ownerReport });
+    expect(mayaCanonical).toEqual(ownerCanonical);
   });
 });

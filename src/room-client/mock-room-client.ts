@@ -19,6 +19,7 @@ import {
   type FinalDecisionPreview,
   type JsonValue,
   type JoinRequest,
+  type MeetingReport,
   type ManageJoinRequestInput,
   type MarkMeetingSourceFailedInput,
   type MarkMeetingSourceProcessedInput,
@@ -752,6 +753,16 @@ export class MockRoomClient implements RoomClient {
       roomId,
       "finalized",
       "Reading the decision record",
+    );
+  }
+
+  async getMeetingReport(
+    roomId: string,
+  ): Promise<ActionResult<MeetingReport>> {
+    return this.#notInThisMilestone(
+      roomId,
+      "finalized",
+      "Reading the final meeting report",
     );
   }
 

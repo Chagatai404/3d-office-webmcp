@@ -20,6 +20,7 @@ import type {
   FinalDecisionPreview,
   JoinRequest,
   ManageJoinRequestInput,
+  MeetingReport,
   MeetingSource,
   MeetingSourceContent,
   MeetingSourceSearchResults,
@@ -120,6 +121,8 @@ export interface RoomActions {
   getDecisionRecord(): Promise<
     ActionResult<DecisionRecord>
   >;
+
+  getMeetingReport(): Promise<ActionResult<MeetingReport>>;
 
   /** Reset/reseed the single shared demo room through the guarded demo API. */
   startDemoScenario(input: StartDemoScenarioInput): Promise<ActionResult>;
@@ -374,6 +377,9 @@ export function RoomProvider({
 
       getDecisionRecord: () =>
         client.getDecisionRecord(roomId),
+
+      getMeetingReport: () =>
+        client.getMeetingReport(roomId),
 
       startDemoScenario: (input) =>
         client.startDemoScenario(roomId, input),

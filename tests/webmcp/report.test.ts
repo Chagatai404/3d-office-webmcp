@@ -153,8 +153,9 @@ describe("get_final_report WebMCP tool", () => {
   it("returns the full report once finalized", async () => {
     const room = buildRoomStateFixture({ phase: "finalized", participants: [owner, engineer], proposals: [finalProposal], finalizedAt: "2026-08-30T02:00:01.000Z" });
     const record = buildDecisionRecordFixture();
+    const report = computeMeetingReport(room, record);
     const context = fakeRoomWebMcpContext({ room, roomVersion: 4 });
-    Object.assign(context, { getDecisionRecord: () => Promise.resolve({ ok: true, data: record, roomVersion: 4, message: "Loaded." }) });
+    Object.assign(context, { getMeetingReport: () => Promise.resolve({ ok: true, data: report, roomVersion: 4, message: "Loaded." }) });
     const result = await executeTool(createRoomWebMcpTools(context).get_final_report!, {}) as {
       ok: boolean; data: { decisionHash: string; participants: unknown[] }; roomVersion: number;
     };
@@ -167,10 +168,11 @@ describe("get_final_report WebMCP tool", () => {
   it("returns the same report basis and decision hash regardless of which participant reads it", async () => {
     const room = buildRoomStateFixture({ phase: "finalized", participants: [owner, engineer], proposals: [finalProposal], finalizedAt: "2026-08-30T02:00:01.000Z" });
     const record = buildDecisionRecordFixture();
+    const report = computeMeetingReport(room, record);
     const ownerContext = fakeRoomWebMcpContext({ room, roomVersion: 4, selfParticipantId: "participant-owner" });
-    Object.assign(ownerContext, { getDecisionRecord: () => Promise.resolve({ ok: true, data: record, roomVersion: 4, message: "Loaded." }) });
+    Object.assign(ownerContext, { getMeetingReport: () => Promise.resolve({ ok: true, data: report, roomVersion: 4, message: "Loaded." }) });
     const engineerContext = fakeRoomWebMcpContext({ room, roomVersion: 4, selfParticipantId: "participant-engineer" });
-    Object.assign(engineerContext, { getDecisionRecord: () => Promise.resolve({ ok: true, data: record, roomVersion: 4, message: "Loaded." }) });
+    Object.assign(engineerContext, { getMeetingReport: () => Promise.resolve({ ok: true, data: report, roomVersion: 4, message: "Loaded." }) });
 
     const ownerResult = await executeTool(createRoomWebMcpTools(ownerContext).get_final_report!, {}) as { data: unknown };
     const engineerResult = await executeTool(createRoomWebMcpTools(engineerContext).get_final_report!, {}) as { data: unknown };
