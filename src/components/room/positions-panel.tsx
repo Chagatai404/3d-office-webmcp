@@ -223,7 +223,13 @@ export function PositionsPanel() {
                 {owned.length > 0 ? (
                   <ul className="constraint-list">
                     {owned.map((constraint) => (
-                      <li key={constraint.id} className="constraint-item">
+                      <li
+                        key={constraint.id}
+                        className="constraint-item"
+                        /* Named so pressing this constraint on the wall board
+                           opens the workspace at this row. */
+                        data-board-item={constraint.id}
+                      >
                         <span className="constraint-category">
                           {constraint.category}
                         </span>

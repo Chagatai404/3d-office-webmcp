@@ -1562,27 +1562,266 @@ select {
   background: var(--dark-strong);
 }
 
-/* --------------------------------------------------- workspace floating panel */
+/* --------------------------------------------------- attention alerts */
 
-.workspace-panel {
+/* What arrived while you were here. Under the toolbar on the same side as the
+   "Needs you" chip they belong to, above the workspace scrim (28) so an alert
+   is never buried by an open workspace, below the dock (40). */
+.attention-alerts {
   position: absolute;
+  top: 4.6rem;
   right: 1.5rem;
-  top: 5.5rem;
-  bottom: 7.3rem;
-  z-index: 25;
-  width: min(25.5rem, calc(100% - 3rem));
-  overflow-y: auto;
-  padding: 1.4rem;
-  border-radius: 1.35rem;
-  background: var(--surface-strong);
-  box-shadow: 0 16px 44px rgba(46, 43, 39, 0.14);
-  animation: sceneFadeUp 0.3s ease-out;
+  z-index: 35;
+  display: grid;
+  gap: 0.5rem;
+  width: min(22rem, calc(100% - 3rem));
 }
 
-.workspace-panel .panel-block {
+.attention-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem 0.8rem;
+  border-left: 3px solid var(--accent-ink);
+  border-radius: 0.75rem;
+  background: var(--surface-strong);
+  box-shadow: 0 12px 32px rgba(46, 43, 39, 0.2);
+  animation: sceneFadeUp 0.26s ease-out;
+}
+
+.attention-alert-critical {
+  border-left-color: var(--warn-ink);
+  background: var(--warn-bg);
+}
+
+.attention-alert-dot {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-top: 0.3rem;
+  border-radius: 999px;
+  background: var(--accent-ink);
+}
+
+.attention-alert-critical .attention-alert-dot {
+  background: var(--warn-ink);
+}
+
+.attention-alert-body {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.attention-alert-title {
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.attention-alert-summary {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.attention-alert-actions {
+  display: grid;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.attention-alert-review {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.45rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.attention-alert-review:hover {
+  background: var(--accent);
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+}
+
+.attention-alert-dismiss {
+  padding: 0.15rem;
+  border: 0;
+  background: none;
+  color: var(--muted-2);
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.attention-alert-dismiss:hover {
+  color: var(--text);
+}
+
+.attention-alert-more {
+  padding: 0.5rem 0.7rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 0.7rem;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+/* The toolbar chip stops being a quiet label while something is waiting. */
+.toolbar-attention-active {
+  animation: attentionPulse 2.4s ease-in-out infinite;
+}
+
+/* Who is waiting in the lobby, on the closed Participants button. */
+.meeting-control-waiting {
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@keyframes attentionPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(158, 74, 28, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(158, 74, 28, 0.24);
+  }
+}
+
+/* Motion is the cue, not the message: the wording and the badge already say
+   it, so a viewer who asked for stillness loses nothing by stopping it. */
+@media (prefers-reduced-motion: reduce) {
+  .toolbar-attention-active {
+    animation: none;
+  }
+
+  .attention-alert {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------- workspace stage */
+
+/* The open workspace sits over the middle of the room rather than down one
+   edge: a brief, a constraints board and a proposal form all needed more than
+   a 25rem rail. The stage keeps clear of the toolbar above and the dock below,
+   so the room and the way out of it are never covered. */
+.workspace-stage {
+  position: absolute;
+  inset: 0;
+  /* Under the toolbar (30) and the dock (40) on purpose: the scrim dims the
+     room, and the two rows of chrome that say where you are and let you leave
+     stay crisp and clickable above it. */
+  z-index: 28;
+  display: grid;
+  place-items: center;
+  padding: 5.4rem 1.5rem 7.6rem;
+  /* The stage box itself is only a frame: pointers belong to the scrim and
+     the card, so the room around them stays hoverable. */
+  pointer-events: none;
+}
+
+.workspace-stage-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(46, 43, 39, 0.3);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
+  pointer-events: auto;
+  animation: stageScrimIn 0.24s ease-out;
+}
+
+.workspace-stage-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(54rem, 100%);
+  /* `min-height: 0` on both the card and its body is what actually makes the
+     scroll happen. A flex item defaults to `min-height: auto`, which refuses
+     to shrink below its content — so the card grew past `max-height` and the
+     body's `overflow-y` never had an overflow to act on. */
+  min-height: 0;
+  max-height: 100%;
+  pointer-events: auto;
+  /* Clips the scrolling body to the card's rounded corners. */
+  overflow: hidden;
+  border-radius: 1.5rem;
+  background: var(--surface-strong);
+  box-shadow: 0 26px 70px rgba(46, 43, 39, 0.26);
+  animation: sceneFadeUp 0.28s ease-out;
+}
+
+.workspace-stage-card:focus {
+  outline: none;
+}
+
+.workspace-stage-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.9rem 2.1rem 2.1rem;
+}
+
+.workspace-stage-body .panel-block {
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+.workspace-stage-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.workspace-stage-close:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+/* The row a board press opened the workspace at, so the item you touched on
+   the wall is the item your eye lands on here. An outline rather than a ring
+   or a fill: it takes no layout space, it clears the row's own left rule and
+   card border, and it is the same mark the rest of the app uses for focus. */
+[data-board-focus="on"] {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 4px;
+  border-radius: 0.4rem;
+  scroll-margin: 1.25rem;
+}
+
+@keyframes stageScrimIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* --------------------------------------------------------------- drawers */
@@ -1981,7 +2220,10 @@ select {
 }
 
 @media (max-width: 68rem) {
-  .workspace-panel,
+  .workspace-stage {
+    padding: 5rem 1.25rem 8.8rem;
+  }
+
   .meeting-drawer {
     top: 5rem;
     bottom: 8.6rem;
@@ -2003,13 +2245,19 @@ select {
     display: none;
   }
 
-  .workspace-panel {
-    left: 0.6rem;
-    right: 0.6rem;
-    width: auto;
-    top: auto;
-    bottom: 8.8rem;
-    max-height: 46dvh;
+  /* Narrow screens give the card the whole stage: there is no room to spare
+     around it, and the workspace is what the viewer just asked for. */
+  .workspace-stage {
+    padding: 4.8rem 0.6rem 9rem;
+  }
+
+  .workspace-stage-card {
+    width: 100%;
+    border-radius: 1.1rem;
+  }
+
+  .workspace-stage-body {
+    padding: 1.5rem 1.1rem 1.3rem;
   }
 
   /* A drawer takes over the full content height on narrow screens rather
@@ -2840,6 +3088,151 @@ select {
   color: var(--muted-2);
   font-size: 0.72rem;
   line-height: 1.5;
+}
+
+/* --- share access (post-create hand-off) --- */
+
+.flow-share-block {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.flow-share-label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.flow-share-field {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.flow-share-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.flow-copy-btn {
+  flex-shrink: 0;
+  padding: 0.8rem 1.1rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--dark);
+  color: var(--dark-ink);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.flow-copy-btn:hover {
+  background: var(--dark-strong);
+}
+
+.flow-copy-btn-ghost {
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text);
+}
+
+.flow-copy-btn-ghost:hover {
+  background: #fff;
+}
+
+.flow-copy-status {
+  min-height: 1rem;
+  margin: 0;
+  color: var(--accent-ink);
+  font-size: 0.72rem;
+}
+
+.flow-reveal {
+  margin-top: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: var(--surface);
+}
+
+.flow-reveal > summary {
+  padding: 0.85rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.flow-reveal[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.flow-reveal-body {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.flow-reveal-body .flow-alert {
+  margin-top: 0;
+}
+
+.flow-code-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.flow-code-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.7rem;
+  background: var(--dark);
+  color: var(--dark-ink);
+}
+
+.flow-code-chip dt {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.flow-code-chip dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+}
+
+.flow-code-chip dd code {
+  font: inherit;
+}
+
+.flow-reveal-body .flow-copy-btn {
+  justify-self: start;
 }
 
 /* --- lobby --- */

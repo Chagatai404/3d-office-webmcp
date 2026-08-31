@@ -28,7 +28,19 @@ export function JoinRoom({ roomId: routeRoomId, inviteToken = null, client: supp
   const [joinRequest, setJoinRequest] = useState<JoinRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [linkDraft, setLinkDraft] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
   const submitting = useRef(false);
+
+  function followInviteLink() {
+    const target = parseInviteLink(linkDraft);
+    if (!target) {
+      setLinkError("That doesn’t look like a meeting invite link.");
+      return;
+    }
+    setLinkError(null);
+    router.push(target);
+  }
 
   // Resumes a join request `join_meeting` (a WebMCP tool) created for this
   // browser session, whether it happened before this page mounted (read on
@@ -138,8 +150,40 @@ export function JoinRoom({ roomId: routeRoomId, inviteToken = null, client: supp
             <p>{preview?.inviteValid ? preview.brief : "A valid passcode or invite lets you request admission. The owner decides who enters."}</p>
           </div>
           {!inviteToken ? <>
-            <label>Room ID<input name="roomId" value={roomId} onChange={(event) => setRoomId(event.target.value)} /></label>
-            <label>Passcode<input name="passcode" type="password" value={passcode} onChange={(event) => setPasscode(event.target.value)} /></label>
+            <div className={styles.pasteRow}>
+              <label htmlFor="invite-link">Paste your invite link</label>
+              <div className={styles.pasteField}>
+                <input
+                  id="invite-link"
+                  name="inviteLink"
+                  inputMode="url"
+                  autoComplete="off"
+                  placeholder="https://…/room/…/join?invite=…"
+                  value={linkDraft}
+                  onChange={(event) => setLinkDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      followInviteLink();
+                    }
+                  }}
+                />
+                <button type="button" className={styles.inlineButton} onClick={followInviteLink}>
+                  Continue
+                </button>
+              </div>
+              {linkError ? <p className={styles.linkHint} role="alert">{linkError}</p> : null}
+              <p className={styles.linkHint}>
+                The link is the whole invitation — it carries the room and skips the code below.
+              </p>
+            </div>
+            <details className={styles.manualJoin}>
+              <summary>I only have a room code, not a link</summary>
+              <div className={styles.manualJoinBody}>
+                <label>Room ID<input name="roomId" value={roomId} onChange={(event) => setRoomId(event.target.value)} /></label>
+                <label>Passcode<input name="passcode" type="password" value={passcode} onChange={(event) => setPasscode(event.target.value)} /></label>
+              </div>
+            </details>
           </> : null}
           <label>Your name<input name="displayName" autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
           <label>Your role<input name="role" value={role} onChange={(event) => setRole(event.target.value)} placeholder="Designer" /></label>
@@ -149,6 +193,26 @@ export function JoinRoom({ roomId: routeRoomId, inviteToken = null, client: supp
       </section>
     </main>
   );
+}
+
+/**
+ * Turns a pasted invite URL (absolute or a bare path) into the local
+ * `/room/{id}/join?invite=…` route. Returns null for anything that isn't a
+ * meeting invite link, so the caller can show a hint instead of navigating.
+ */
+function parseInviteLink(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  let url: URL;
+  try {
+    url = new URL(trimmed, window.location.origin);
+  } catch {
+    return null;
+  }
+  const match = url.pathname.match(/\/room\/([^/]+)\/join\/?$/);
+  const invite = url.searchParams.get("invite");
+  if (!match || !match[1] || !invite) return null;
+  return `/room/${encodeURIComponent(decodeURIComponent(match[1]))}/join?invite=${encodeURIComponent(invite)}`;
 }
 
 function JoinStatus({ title, detail, rejected = false }: { title: string; detail: string; rejected?: boolean }) {

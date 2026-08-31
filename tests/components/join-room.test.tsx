@@ -160,6 +160,48 @@ describe("room ID + passcode join", () => {
   });
 });
 
+describe("invite link paste (no token yet)", () => {
+  function continueButton(): HTMLButtonElement {
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (candidate) => candidate.textContent === "Continue",
+    );
+    if (!button) throw new Error("Continue button missing.");
+    return button;
+  }
+
+  it("routes a pasted invite link into invite mode instead of asking for a code", async () => {
+    await mountJoin(makeClient());
+
+    await act(async () => {
+      setValue(
+        field("inviteLink"),
+        "https://app.example/room/rm_join-room/join?invite=raw-token",
+      );
+    });
+    await act(async () => {
+      continueButton().click();
+    });
+
+    expect(navigation.push).toHaveBeenCalledWith(
+      "/room/rm_join-room/join?invite=raw-token",
+    );
+  });
+
+  it("rejects a pasted value that is not a meeting invite link", async () => {
+    await mountJoin(makeClient());
+
+    await act(async () => {
+      setValue(field("inviteLink"), "https://example.com/somewhere-else");
+    });
+    await act(async () => {
+      continueButton().click();
+    });
+
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("look like a meeting invite link");
+  });
+});
+
 describe("invite link join", () => {
   it("previews the invitation automatically and disables submission until it resolves", async () => {
     let resolvePreview!: (preview: RoomInvitePreview) => void;

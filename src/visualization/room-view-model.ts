@@ -59,6 +59,8 @@ export interface VisualConflict {
   constraintId: string | null;
   severity: "blocking" | "warning";
   status: "open" | "resolved";
+  /** The objection text, echoed onto the Issues board. */
+  reason: string;
 }
 
 export interface VisualActivity {
@@ -74,6 +76,10 @@ export interface VisualActivity {
 
 export interface RoomVisualizationState {
   roomId: string;
+  /** The decision title, shown on the Brief board. */
+  title: string;
+  /** The meeting brief, shown on the Brief board. */
+  brief: string;
   phase: RoomPhase;
   version: number;
 
@@ -158,6 +164,8 @@ export function createPlaceholderVisualizationState(
 
   return {
     roomId: options.roomId ?? "",
+    title: "",
+    brief: "",
     phase: "input",
     version: 0,
     participants,
@@ -237,6 +245,8 @@ export function createRoomVisualizationState(
 
   return {
     roomId: room.id,
+    title: room.title,
+    brief: room.brief,
     phase: room.phase,
     version: room.version,
 
@@ -256,6 +266,7 @@ export function createRoomVisualizationState(
       constraintId: conflict.constraintId,
       severity: conflict.severity,
       status: conflict.status,
+      reason: conflict.reason,
     })),
     recentActivity: room.activity
       .slice(-RECENT_ACTIVITY_LIMIT)

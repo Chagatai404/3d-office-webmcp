@@ -104,7 +104,7 @@ export function ActiveProposalView({
   }
 
   return (
-    <article className="decision-card">
+    <article className="decision-card" data-board-item={proposal.id}>
       <div className="decision-card-head">
         <strong>{proposal.title}</strong>
         <span className="tag">{proposal.status}</span>
@@ -134,7 +134,7 @@ export function ConflictList({
   return (
     <ul className="decision-list">
       {conflicts.map((conflict) => (
-        <li key={conflict.id} className="decision-list-item">
+        <li key={conflict.id} className="decision-list-item" data-board-item={conflict.id}>
           <div className="decision-card-head">
             <span className={`tag ${conflict.severity === "blocking" ? "tag-risk" : ""}`}>
               {conflict.status} {conflict.severity}

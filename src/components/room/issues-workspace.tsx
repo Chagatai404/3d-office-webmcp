@@ -260,7 +260,11 @@ export function IssuesWorkspace() {
         ) : (
           <ul className="decision-list">
             {openConflicts.map((conflict) => (
-              <li key={conflict.id} className="decision-list-item">
+              <li
+                key={conflict.id}
+                className="decision-list-item"
+                data-board-item={conflict.id}
+              >
                 <span className={`tag ${conflict.severity === "blocking" ? "tag-risk" : ""}`}>
                   {conflict.status} {conflict.severity}
                 </span>
