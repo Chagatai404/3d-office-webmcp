@@ -18,6 +18,7 @@ vi.mock("@/domain/rooms/operations", () => ({
   getMeetingContext: vi.fn(),
   listJoinRequests: vi.fn(),
   lockMeeting: vi.fn(),
+  markMyInputReady: vi.fn(),
   previewFinalDecision: vi.fn(),
   proposeParticipantTradeoff: vi.fn(),
   raiseParticipantObjection: vi.fn(),
@@ -39,22 +40,24 @@ const confirmationBridge = await import("@/webmcp/confirmation-bridge");
 /** Tools gated by the `asClaimedParticipant` second gate -- see room-tools.ts. */
 const PARTICIPANT_GATED_TOOL_NAMES = [
   "share_my_context",
+  "mark_my_input_ready",
   "suggest_option",
   "raise_concern",
   "respond_to_concern",
   "resolve_my_concern",
   "express_my_alignment",
-  "request_final_decision_confirmation",
+  "approve_final_decision",
 ];
 
 const DOMAIN_OPERATION_BY_TOOL = {
   share_my_context: operations.addParticipantPosition,
+  mark_my_input_ready: operations.markMyInputReady,
   suggest_option: operations.submitParticipantProposal,
   raise_concern: operations.raiseParticipantObjection,
   respond_to_concern: operations.proposeParticipantTradeoff,
   resolve_my_concern: operations.resolveParticipantObjection,
   express_my_alignment: operations.expressMyAlignment,
-  request_final_decision_confirmation: operations.approveParticipantFinalDecision,
+  approve_final_decision: operations.approveParticipantFinalDecision,
 } as const;
 
 function allPropertyNames(value: unknown): string[] {
@@ -137,7 +140,7 @@ describe("WebMCP participant/owner authority", () => {
     const alignment = await executeTool(tools.express_my_alignment!, {
       proposalId: "proposal-1", choice: "support", comment: null, participantId: "demo-designer",
     }) as { error: { code: string } };
-    const confirmation = await executeTool(tools.request_final_decision_confirmation!, {
+    const confirmation = await executeTool(tools.approve_final_decision!, {
       decisionHash: "hash", actorId: "demo-designer",
     }) as { error: { code: string } };
 
@@ -188,7 +191,12 @@ describe("WebMCP participant/owner authority", () => {
     for (const [name, operation] of Object.entries(DOMAIN_OPERATION_BY_TOOL)) {
       await executeTool(tools[name]!, VALID_MUTATION_TOOL_INPUTS[name]);
       expect(operation, name).toHaveBeenCalledOnce();
-      const [, roomId, , forwardedContext] = vi.mocked(operation).mock.calls[0]!;
+      // The mutation context is always the last argument -- most operations
+      // also take an `input` argument between `roomId` and it, but
+      // `mark_my_input_ready` takes no domain input at all.
+      const call = vi.mocked(operation).mock.calls[0]!;
+      const [, roomId] = call;
+      const forwardedContext = call[call.length - 1];
       expect(roomId, name).toBe("room-under-test");
       expect(forwardedContext, name).toEqual(mutationContext);
       expect(forwardedContext, name).not.toHaveProperty("humanConfirmed");
@@ -201,7 +209,7 @@ describe("WebMCP participant/owner authority", () => {
       mutationContext: () => Promise.resolve({ actor: { authUserId: "auth-user-1", origin: "webmcp" as const }, expectedRoomVersion: 12 }),
     });
 
-    await executeTool(catalog(context).request_final_decision_confirmation!, VALID_MUTATION_TOOL_INPUTS.request_final_decision_confirmation);
+    await executeTool(catalog(context).approve_final_decision!, VALID_MUTATION_TOOL_INPUTS.approve_final_decision);
 
     const [, , input, forwardedContext] = vi.mocked(operations.approveParticipantFinalDecision).mock.calls[0]!;
     expect(input).toEqual({ decisionHash: "decision-hash-1" });
@@ -214,7 +222,7 @@ describe("WebMCP participant/owner authority", () => {
       error: { code: "HUMAN_CONFIRMATION_REQUIRED", message: "Confirm visibly." },
       roomVersion: 12,
     } as never);
-    await executeTool(catalog().request_final_decision_confirmation!, VALID_MUTATION_TOOL_INPUTS.request_final_decision_confirmation);
+    await executeTool(catalog().approve_final_decision!, VALID_MUTATION_TOOL_INPUTS.approve_final_decision);
     expect(confirmationBridge.requestUiConfirmation).toHaveBeenCalledWith({ kind: "decision" });
   });
 
@@ -224,7 +232,7 @@ describe("WebMCP participant/owner authority", () => {
       error: { code: "DECISION_CHANGED", message: "The hash changed." },
       roomVersion: 13,
     } as never);
-    await executeTool(catalog().request_final_decision_confirmation!, VALID_MUTATION_TOOL_INPUTS.request_final_decision_confirmation);
+    await executeTool(catalog().approve_final_decision!, VALID_MUTATION_TOOL_INPUTS.approve_final_decision);
     expect(confirmationBridge.requestUiConfirmation).not.toHaveBeenCalled();
   });
 

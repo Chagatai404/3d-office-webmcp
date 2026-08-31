@@ -23,7 +23,7 @@ git rev-parse HEAD
 
 Record the shared base SHA here before starting:
 
-- [ ] `BASE_SHA = ______________________________`
+- [x] `BASE_SHA = 67972adca6a8c154383a09494b064c19d493a40e` (matches `origin/main` at the time this slice started)
 
 At the time this plan was created, `main` already contained:
 
@@ -51,7 +51,7 @@ git pull origin main
 git switch -c feature/agent-first-ux
 ```
 
-- [ ] Developer A branch created from the recorded `BASE_SHA`.
+- [x] Developer A branch created from the recorded `BASE_SHA`. (This slice runs on `final-steps-branch-a`, not `feature/agent-protocol-core` -- it was already checked out at exactly `BASE_SHA` when work started, so it satisfies the same constraint under a different name.)
 - [ ] Developer B branch created from the same `BASE_SHA`.
 - [ ] Neither feature branch is created from the other feature branch.
 
@@ -261,12 +261,12 @@ A participant's agent should discover the meeting protocol through WebMCP immedi
 
 ### Tool-discovery behavior
 
-- [ ] Audit every legitimate meeting action and map it to a WebMCP tool.
-- [ ] Normal collaboration tools are not unnecessarily hidden merely because the current phase is different.
-- [ ] Calling a normal tool in the wrong phase returns a structured refusal explaining the current phase and next requirement.
-- [ ] Truly privileged tools remain authority-gated.
-- [ ] Tool descriptions clearly tell the agent when/why to use each capability.
-- [ ] Tool descriptions do not require the agent to inspect DOM/UI state.
+- [x] Audit every legitimate meeting action and map it to a WebMCP tool. (Every `RoomProvider` action now has a registered tool; `mark_my_input_ready` was the one gap -- see below.)
+- [x] Normal collaboration tools are not unnecessarily hidden merely because the current phase is different. (Unchanged from existing design -- each participant tool is gated only by its own phase, not by an unrelated one.)
+- [x] Calling a normal tool in the wrong phase returns a structured refusal explaining the current phase and next requirement. (Pre-existing `WRONG_PHASE`/`STALE_ROOM_STATE` refusals via `prepareMutation`; unchanged.)
+- [x] Truly privileged tools remain authority-gated. (Unchanged.)
+- [x] Tool descriptions clearly tell the agent when/why to use each capability. (Verified against the existing catalog; `mark_my_input_ready`'s new description follows the same pattern.)
+- [x] Tool descriptions do not require the agent to inspect DOM/UI state. (Unchanged.)
 
 ### Missing readiness tool
 
@@ -276,11 +276,11 @@ Implement:
 mark_my_input_ready
 ```
 
-- [ ] Tool is discoverable to active claimed human participants.
-- [ ] Tool calls the same canonical operation as the existing visible readiness UI.
-- [ ] Tool cannot mark another participant ready.
-- [ ] Server-side actor identity still derives from authenticated session.
-- [ ] Tool returns the resulting room version.
+- [x] Tool is discoverable to active claimed human participants. (`asClaimedInPhase("input")` in `src/webmcp/capability-context.ts`.)
+- [x] Tool calls the same canonical operation as the existing visible readiness UI. (Calls `markMyInputReady` from `src/domain/rooms/operations.ts`, the same operation the manual "Ready" control and `POST /api/rooms/:roomId/ready` use.)
+- [x] Tool cannot mark another participant ready. (No input schema at all -- the acting seat is derived server-side from `auth.uid()`.)
+- [x] Server-side actor identity still derives from authenticated session. (Unchanged SQL function.)
+- [x] Tool returns the resulting room version. (Via the shared `executeToolSafely`/`ActionResult` wrapper, same as every other tool.)
 
 ### Final approval tool naming
 
@@ -307,24 +307,24 @@ return HUMAN_CONFIRMATION_REQUIRED
 human reviews and confirms visibly
 ```
 
-- [ ] Existing autonomous approval bypass does not exist.
-- [ ] Human confirmation remains required.
-- [ ] Tool is available only to a legitimate required approver.
-- [ ] Old overlapping WebMCP name is removed/aliased in a way that does not create duplicate confusing tools.
-- [ ] Tests explicitly prove the agent cannot complete human confirmation itself.
+- [x] Existing autonomous approval bypass does not exist. (Unchanged: the tool still only ever returns `HUMAN_CONFIRMATION_REQUIRED`.)
+- [x] Human confirmation remains required. (Unchanged.)
+- [x] Tool is available only to a legitimate required approver. (Unchanged `isRequiredApprover` gate, just renamed.)
+- [x] Old overlapping WebMCP name is removed/aliased in a way that does not create duplicate confusing tools. (`request_final_decision_confirmation` renamed in place to `approve_final_decision` everywhere -- tool definition, capability table, tests, evals, Playwright spec, docs. No alias, no duplicate.)
+- [x] Tests explicitly prove the agent cannot complete human confirmation itself. (Pre-existing `participant-authority.test.ts` coverage -- "never asks the domain to treat a WebMCP call as human-confirmed", "opens the Decision workspace when requesting final decision confirmation" -- carried over under the new name.)
 
 ### A1 tests
 
-- [ ] Capability-matrix unit tests updated.
-- [ ] Tool-catalog tests updated.
-- [ ] `mark_my_input_ready` WebMCP test added.
-- [ ] `approve_final_decision` human-gate test added.
-- [ ] Stale captured tool references still fail server-side after authority/phase changes.
+- [x] Capability-matrix unit tests updated. (`tests/webmcp/registration.test.ts`.)
+- [x] Tool-catalog tests updated. (`tests/webmcp/registration.test.ts`, `tests/webmcp/prompt-injection.test.ts`, `tests/webmcp/tool-selection-evals.test.ts`, `tests/webmcp-evals/tool-selection.json`.)
+- [x] `mark_my_input_ready` WebMCP test added. (Registration/lifecycle coverage in `registration.test.ts`; authority/wiring coverage in `participant-authority.test.ts`; a discovery eval in `tool-selection.json`.)
+- [x] `approve_final_decision` human-gate test added. (Existing human-gate tests preserved under the new name; no behavior change.)
+- [x] Stale captured tool references still fail server-side after authority/phase changes. (Generic `participant-authority.test.ts` proof -- "forwards a domain refusal unchanged" -- covers every tool including the two touched here; unchanged mechanism.)
 
 ### A1 exit gate
 
-- [ ] A real browser agent can discover how to share input, mark ready, propose, deliberate, align, review, and request final approval from WebMCP alone.
-- [ ] No DOM inspection is necessary to discover those actions.
+- [ ] A real browser agent can discover how to share input, mark ready, propose, deliberate, align, review, and request final approval from WebMCP alone. (Structurally true; requires the manual Chrome WebMCP inspector pass in `docs/webmcp-demo.md` to confirm.)
+- [ ] No DOM inspection is necessary to discover those actions. (Same -- pending the manual pass above.)
 
 ---
 

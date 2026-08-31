@@ -50,6 +50,7 @@ describe("centralized WebMCP capability registration", () => {
         "get_my_attention_items",
         "get_waiting_participants",
         "lock_meeting",
+        "mark_my_input_ready",
         "reject_participant",
         "remove_participant",
         "set_decision_policy",
@@ -66,7 +67,7 @@ describe("centralized WebMCP capability registration", () => {
       return available(room).filter((name) => !name.startsWith("get_"));
     });
     expect(byPhase).toEqual([
-      ["share_my_context"],
+      ["mark_my_input_ready", "share_my_context"],
       ["suggest_option"],
       ["raise_concern", "resolve_my_concern", "respond_to_concern"],
       ["express_my_alignment"],
@@ -157,10 +158,10 @@ describe("centralized WebMCP capability registration", () => {
     expect(names).not.toContain("set_decision_policy");
     expect(names).not.toContain("set_participant_decision_role");
     // The owner is still the required approver, so confirmation stays available.
-    expect(names).toContain("request_final_decision_confirmation");
+    expect(names).toContain("approve_final_decision");
   });
 
-  it("registers request_final_decision_confirmation only for the participant currently required to approve", () => {
+  it("registers approve_final_decision only for the participant currently required to approve", () => {
     const preview = {
       proposal: { id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r", expectedOutcomes: [], referencedConstraintIds: [], parentProposalId: null, status: "candidate" as const, createdAt: "2026-08-30T00:00:00.000Z" },
       rationale: "r",
@@ -190,8 +191,8 @@ describe("centralized WebMCP capability registration", () => {
       activeProposalId: "proposal-1",
       finalDecisionPreview: preview,
     });
-    expect(available(requiredApprover)).toContain("request_final_decision_confirmation");
-    expect(available(notRequired)).not.toContain("request_final_decision_confirmation");
+    expect(available(requiredApprover)).toContain("approve_final_decision");
+    expect(available(notRequired)).not.toContain("approve_final_decision");
   });
 
   it("finalized rooms register only read-only tools", () => {

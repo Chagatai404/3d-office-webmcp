@@ -60,7 +60,7 @@ Run these prompts in order, supplying Maya's join-request ID or selecting it fro
 8. “Review the final decision.”  
    Expected: `review_final_decision`.
 9. “Finalize the decision.”  
-   Expected: `request_final_decision_confirmation`, returning `HUMAN_CONFIRMATION_REQUIRED`. The agent must not approve. The human reviews the exact hash and confirms visibly in the Decision workspace.
+   Expected: `approve_final_decision`, returning `HUMAN_CONFIRMATION_REQUIRED`. The agent must not approve. The human reviews the exact hash and confirms visibly in the Decision workspace.
 
 ## Participant prompt script
 
@@ -68,11 +68,13 @@ Run these prompts in order, supplying Maya's join-request ID or selecting it fro
    Expected: `join_meeting`; the result is a waiting request, never an admitted participant.
 2. “Tell the room that we only have two engineering days and cannot rewrite auth.”  
    Expected: `share_my_context`.
-3. “Suggest a reduced-scope onboarding version.”  
+3. “Mark my input ready.”  
+   Expected: `mark_my_input_ready`.
+4. “Suggest a reduced-scope onboarding version.”  
    Expected: `suggest_option`.
-4. “Raise a blocking concern if the current proposal requires an auth rewrite.”  
+5. “Raise a blocking concern if the current proposal requires an auth rewrite.”  
    Expected: `raise_concern` with `blocking` only when the hard constraint is actually violated.
-5. “I support the reduced version.”  
+6. “I support the reduced version.”  
    Expected: `express_my_alignment`, not a vote or approval tool.
 
 ## Two-person demo sequence
@@ -80,12 +82,12 @@ Run these prompts in order, supplying Maya's join-request ID or selecting it fro
 1. Owner agent calls `create_meeting`; save the returned room ID and one-time passcode.
 2. Participant agent calls `join_meeting` and sees a waiting state.
 3. Owner agent calls `get_waiting_participants`, then `admit_participant`.
-4. Participant agent calls `share_my_context` with its facts and constraints.
+4. Participant agent calls `share_my_context` with its facts and constraints, then `mark_my_input_ready`.
 5. Owner advances Input to Proposals; participants call `suggest_option`.
 6. Owner advances to Deliberation; participants call `raise_concern`, `respond_to_concern`, and the original raiser may call `resolve_my_concern`.
 7. Owner calls `request_team_alignment`; each human calls `express_my_alignment` for their own seat.
 8. Owner calls `review_final_decision`, which freezes the exact candidate and hash.
-9. A required approver calls `request_final_decision_confirmation`; the result is `HUMAN_CONFIRMATION_REQUIRED` and the Decision workspace opens.
+9. A required approver calls `approve_final_decision`; the result is `HUMAN_CONFIRMATION_REQUIRED` and the Decision workspace opens.
 10. The human checks the visible confirmation and clicks confirm.
 11. Both browsers converge on the same finalized record; `get_decision_record` returns it.
 

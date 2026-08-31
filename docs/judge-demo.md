@@ -86,7 +86,7 @@ your agent should call -- you never need to say the tool name yourself.
    Expected: `review_final_decision`, freezing the exact candidate (including the Security
    Expert's advisory disposition) and its hash.
 8. **"Finalize it."**
-   Expected: `request_final_decision_confirmation`, returning `HUMAN_CONFIRMATION_REQUIRED`.
+   Expected: `approve_final_decision`, returning `HUMAN_CONFIRMATION_REQUIRED`.
    The Decision workspace opens. **The agent never clicks the confirmation for you** -- you
    review the exact decision and click it yourself.
 
@@ -135,7 +135,7 @@ Follow `docs/webmcp-demo.md`'s Chrome setup section, then drive the prompt scrip
 against a real running app and a real Chrome browser with WebMCP testing enabled. At minimum
 validate `get_meeting_context`, `advance_discussion`, `get_open_issues`, `respond_to_concern`,
 `request_team_alignment`, `get_my_attention_items`, `review_final_decision`, and
-`request_final_decision_confirmation` this way, with natural-language tool selection (not
+`approve_final_decision` this way, with natural-language tool selection (not
 manual tool invocation from DevTools). This manual pass has not been automated by any coding
 agent and must be performed by a human before Gate 6 is considered fully closed -- see the
 Slice 6 completion report's "Chrome Inspector" section for the current status.

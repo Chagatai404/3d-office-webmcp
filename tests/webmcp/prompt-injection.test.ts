@@ -82,7 +82,7 @@ describe("WebMCP prompt-injection hardening", () => {
       "respond_to_concern",
       "resolve_my_concern",
       "express_my_alignment",
-      "request_final_decision_confirmation",
+      "approve_final_decision",
     ]) {
       expect(tools[name]?.annotations?.untrustedContentHint, name).toBe(true);
     }

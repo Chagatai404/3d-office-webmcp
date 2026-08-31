@@ -258,7 +258,7 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
   await engineer.getByTestId("advance-phase").click();
   await expect(designer.getByTestId("room-phase")).toHaveText("approval");
   await expect.poll(() => toolNames(engineer)).toEqual(expect.arrayContaining([
-    "request_final_decision_confirmation", "get_meeting_context", "get_current_decision",
+    "approve_final_decision", "get_meeting_context", "get_current_decision",
   ]));
 
   const engineerPreview = JSON.parse(String(await executeTool(engineer, "get_current_decision", {})));
@@ -276,7 +276,7 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
 
   const engineerApprovalRequest = JSON.parse(String(await executeTool(
     engineer,
-    "request_final_decision_confirmation",
+    "approve_final_decision",
     { decisionHash },
   )));
   expect(engineerApprovalRequest).toMatchObject({
@@ -292,7 +292,7 @@ test("two sessions collaborate through phase-aware WebMCP and canonical realtime
 
   const designerApprovalRequest = JSON.parse(String(await executeTool(
     designer,
-    "request_final_decision_confirmation",
+    "approve_final_decision",
     { decisionHash },
   )));
   expect(designerApprovalRequest).toMatchObject({
@@ -459,7 +459,7 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
   await expect(page.getByTestId("room-phase")).toHaveText("approval");
   await expect(page.getByTestId("approvals")).toBeEmpty();
   await expect.poll(() => toolNames(page)).toEqual(expect.arrayContaining([
-    "request_final_decision_confirmation", "get_meeting_context", "get_current_decision",
+    "approve_final_decision", "get_meeting_context", "get_current_decision",
   ]));
 
   const preview = JSON.parse(String(await executeTool(page, "get_current_decision", {})));
@@ -470,7 +470,7 @@ test("one judge completes and replays the deterministic solo demo", async ({ bro
 
   const approvalRequest = JSON.parse(String(await executeTool(
     page,
-    "request_final_decision_confirmation",
+    "approve_final_decision",
     { decisionHash },
   )));
   expect(approvalRequest).toMatchObject({

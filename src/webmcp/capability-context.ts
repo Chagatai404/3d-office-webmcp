@@ -124,12 +124,13 @@ export const TOOL_AVAILABILITY: Record<string, Predicate> = {
 
   // Participant writes -- always require a claimed seat.
   share_my_context: asClaimedInPhase("input"),
+  mark_my_input_ready: asClaimedInPhase("input"),
   suggest_option: asClaimedInPhase("proposals"),
   raise_concern: asClaimedInPhase("deliberation"),
   respond_to_concern: asClaimedInPhase("deliberation"),
   resolve_my_concern: asClaimedInPhase("deliberation"),
   express_my_alignment: asClaimedInPhase("voting"),
-  request_final_decision_confirmation: (c) =>
+  approve_final_decision: (c) =>
     inRoom(c) && c.hasClaimedSeat && c.phase === "approval" && c.isRequiredApprover,
 
   // Owner-only.
@@ -179,12 +180,13 @@ export function getAvailableWebMcpToolNames(ctx: WebMcpCapabilityContext): strin
  */
 export const MUTATION_TOOL_NAMES: ReadonlySet<string> = new Set([
   "share_my_context",
+  "mark_my_input_ready",
   "suggest_option",
   "raise_concern",
   "respond_to_concern",
   "resolve_my_concern",
   "express_my_alignment",
-  "request_final_decision_confirmation",
+  "approve_final_decision",
   "admit_participant",
   "reject_participant",
   "lock_meeting",

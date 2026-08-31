@@ -589,18 +589,17 @@ The current catalog is split by intent:
 - compact reads: `get_meeting_context`, `get_current_decision`,
   `get_my_attention_items`, `get_open_issues`, `get_alignment`, and finalized
   `get_decision_record`;
-- participant goals: `share_my_context`, `suggest_option`, `raise_concern`,
-  `respond_to_concern`, `resolve_my_concern`, `express_my_alignment`;
+- participant goals: `share_my_context`, `mark_my_input_ready`, `suggest_option`,
+  `raise_concern`, `respond_to_concern`, `resolve_my_concern`, `express_my_alignment`;
 - owner goals: waiting-room management, lock/unlock, responsible phase
   progression, decision-policy and decision-role configuration, participant
   removal preparation, and ownership-transfer preparation;
-- final authority: `request_final_decision_confirmation` only for a current
+- final authority: `approve_final_decision` only for a current
   missing required approver.
 
 The retired WebMCP-facing names `add_my_position`, `submit_proposal`,
-`raise_objection`, `cast_my_vote`, and `approve_final_decision` are not
-registered. Internal domain terminology remains where it is part of the
-canonical persistence model.
+`raise_objection`, and `cast_my_vote` are not registered. Internal domain
+terminology remains where it is part of the canonical persistence model.
 
 Read tools put participant-authored prose under `untrustedRoomContent` where a
 trusted/untrusted split is useful, and every tool that may surface participant

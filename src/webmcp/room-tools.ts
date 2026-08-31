@@ -17,6 +17,7 @@ import {
   approveParticipantFinalDecision,
   expressMyAlignment,
   lockMeeting,
+  markMyInputReady,
   proposeParticipantTradeoff,
   raiseParticipantObjection,
   rejectJoinRequest,
@@ -314,6 +315,17 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext): Record<string
       }),
     },
 
+    mark_my_input_ready: {
+      name: "mark_my_input_ready",
+      description:
+        "Declare the authenticated participant's own input complete during Input, once they have shared at least one position via `share_my_context`. Use this when the user says they're done sharing or asks to be marked ready. This can only mark the calling participant's own input ready -- no argument can mark another participant ready. Calling it again once already ready is a safe no-op.",
+      inputSchema: noInputSchema,
+      annotations: { readOnlyHint: false, untrustedContentHint: false },
+      execute: asClaimedParticipant(async () =>
+        markMyInputReady(context.repository, context.roomId, await context.mutationContext()),
+      ),
+    },
+
     suggest_option: {
       name: "suggest_option",
       description:
@@ -435,7 +447,7 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext): Record<string
     express_my_alignment: {
       name: "express_my_alignment",
       description:
-        "Share or update only the authenticated participant's own alignment (support, concern, strong objection, or needs clarification) on the active candidate. This is not a vote: under `owner_decides` it informs the owner but does not mechanically decide the outcome, and it is distinct from the final decision approval in `request_final_decision_confirmation`. No argument can share alignment for anyone else.",
+        "Share or update only the authenticated participant's own alignment (support, concern, strong objection, or needs clarification) on the active candidate. This is not a vote: under `owner_decides` it informs the owner but does not mechanically decide the outcome, and it is distinct from the final decision approval in `approve_final_decision`. No argument can share alignment for anyone else.",
       inputSchema: {
         type: "object",
         properties: {
@@ -453,8 +465,8 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext): Record<string
       }),
     },
 
-    request_final_decision_confirmation: {
-      name: "request_final_decision_confirmation",
+    approve_final_decision: {
+      name: "approve_final_decision",
       description:
         "Prepare the exact current decision for the authenticated participant's own required approval and open the Decision workspace for them. This never records approval itself: it always returns `HUMAN_CONFIRMATION_REQUIRED` and waits for the human's own visible confirmation. Only available to a participant currently required to approve under the room's decision policy.",
       inputSchema: {
@@ -567,7 +579,7 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext): Record<string
 
     review_final_decision: {
       name: "review_final_decision",
-      description: "Owner-only. Move the room from Alignment into Decision review, freezing the exact current candidate as the decision to be approved. Only valid during Alignment, and only when no blocking concern is still open. This does not finalize anything by itself -- see `request_final_decision_confirmation`.",
+      description: "Owner-only. Move the room from Alignment into Decision review, freezing the exact current candidate as the decision to be approved. Only valid during Alignment, and only when no blocking concern is still open. This does not finalize anything by itself -- see `approve_final_decision`.",
       inputSchema: noInputSchema,
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute: () => safely(async () => advanceRoomPhase(context.repository, context.roomId, "approval", await context.mutationContext())),
