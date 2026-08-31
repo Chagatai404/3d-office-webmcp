@@ -70,6 +70,8 @@ describe("WebMCP prompt-injection hardening", () => {
     const tools = { ...createRoomWebMcpTools(context), ...createAttentionWebMcpTool(context) };
     for (const name of [
       "get_meeting_context",
+      "get_coordination_status",
+      "get_room_updates",
       "get_current_decision",
       "get_open_issues",
       "get_alignment",

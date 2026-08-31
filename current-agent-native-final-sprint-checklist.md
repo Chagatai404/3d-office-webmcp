@@ -170,13 +170,13 @@ Do not create another bootstrap implementation.
 
 ## Hosted Supabase/Vercel configuration
 
-- [ ] Hosted Supabase anonymous sign-ins are enabled.
-- [ ] Hosted Supabase migrations are current.
-- [ ] Vercel `NEXT_PUBLIC_SUPABASE_URL` points to the intended hosted Supabase project.
-- [ ] Vercel `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` matches that project.
-- [ ] Vercel `SUPABASE_SERVICE_ROLE_KEY` is present and server-only.
-- [ ] Vercel `NEXT_PUBLIC_APP_URL` is the deployed application origin.
-- [ ] No service-role/database secret is exposed through `NEXT_PUBLIC_*`.
+- [ ] Hosted Supabase anonymous sign-ins are enabled. (No tool available to me confirms this Auth setting directly -- confirm in the Supabase dashboard, or it will show up as a failure in the browser smoke test below.)
+- [x] Hosted Supabase migrations are current. (Verified via the Supabase MCP: `list_migrations` on the hosted `quoram` project (`ijujoenmxkrynexbxzcm`) returns exactly the same 13 versions/names as `supabase/migrations/*.sql` on disk, in order, nothing missing or extra.)
+- [ ] Vercel `NEXT_PUBLIC_SUPABASE_URL` points to the intended hosted Supabase project. (No Vercel tool available to me lists env var values -- confirm in the Vercel dashboard for project `3d-office-webmcp` / team `ca-tech1`.)
+- [ ] Vercel `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` matches that project. (Same limitation.)
+- [ ] Vercel `SUPABASE_SERVICE_ROLE_KEY` is present and server-only. (Same limitation for presence; server-only *usage* is independently confirmed by code -- see below.)
+- [ ] Vercel `NEXT_PUBLIC_APP_URL` is the deployed application origin. (Same limitation.)
+- [x] No service-role/database secret is exposed through `NEXT_PUBLIC_*`. (Confirmed at the code level: `SUPABASE_SERVICE_ROLE_KEY` is read only in `src/lib/supabase/server.ts`, a server-only module never bundled to the browser; grep confirms no `NEXT_PUBLIC_*`-prefixed service-role/secret variable exists anywhere in `src/`. This does not rule out a stray extra env var being set in the Vercel dashboard itself, which only a human with dashboard access can confirm.)
 
 ## Apply the existing production demo bootstrap
 
@@ -186,30 +186,24 @@ Use the already-committed file:
 supabase/production-demo-bootstrap.sql
 ```
 
-Apply it only to the intended hosted Supabase project:
+**Applied 2026-08-31, via the Supabase MCP's `execute_sql` against the hosted `quoram` project (`ijujoenmxkrynexbxzcm`) rather than `psql`/`REMOTE_DATABASE_URL`** -- an already-authenticated equivalent path to the same file content, run verbatim (the `begin`/`do $$...$$`/`commit` body unchanged), scoped to the same literal room id `'demo'`, with no schema/migration side effects. `REMOTE_DATABASE_URL` was never needed or handled.
 
-```bash
-psql "$REMOTE_DATABASE_URL" \
-  -v ON_ERROR_STOP=1 \
-  -f supabase/production-demo-bootstrap.sql
-```
-
-- [ ] `REMOTE_DATABASE_URL` was supplied only in the operator shell.
-- [ ] `REMOTE_DATABASE_URL` was not committed.
-- [ ] Full `supabase/seed.sql` was **not** run against hosted production.
-- [ ] Production demo bootstrap completed successfully.
+- [x] `REMOTE_DATABASE_URL` was supplied only in the operator shell. (N/A this run -- not used; see above.)
+- [x] `REMOTE_DATABASE_URL` was not committed. (N/A this run -- not used.)
+- [x] Full `supabase/seed.sql` was **not** run against hosted production. (Only the bootstrap file's own content was executed.)
+- [x] Production demo bootstrap completed successfully. (Verified immediately after: `select * from rooms where id = 'demo'` and the participants query both return the expected seeded state -- see next section.)
 
 ## Hosted smoke test
 
-Use a fresh/incognito browser.
+Use a fresh/incognito browser. **Everything below needs an actual browser and could not be verified through the tools available to me; the two items marked `[x]` were instead confirmed by direct read-only SQL against the hosted project immediately after applying the bootstrap, as the closest available proxy.**
 
 - [ ] `/room/demo` loads.
 - [ ] Anonymous session succeeds.
 - [ ] Founder/Product Lead seat is claimed.
-- [ ] Engineer simulation is present.
-- [ ] Product Designer simulation is present.
-- [ ] Growth simulation is present.
-- [ ] Security Expert is present as advisory/expert.
+- [x] Engineer simulation is present. (DB: `demo-engineer`, `kind: simulation`, active.)
+- [x] Product Designer simulation is present. (DB: `demo-designer`, `kind: simulation`, active.)
+- [x] Growth simulation is present. (DB: `demo-marketing` / "Growth Lead", `kind: simulation`, active.)
+- [x] Security Expert is present as advisory/expert. (DB: `demo-security`, `kind: expert`, `decision_role: advisor`, active.)
 - [ ] WebMCP meeting tools register.
 - [ ] Reset Demo works.
 - [ ] Reset returns the demo to a clean initial state.
@@ -242,10 +236,10 @@ Interpret before modifying more code:
 
 ### P0 exit gate
 
-- [ ] Hosted demo works from fresh incognito.
-- [ ] Reset works.
-- [ ] Normal create/join/realtime works.
-- [ ] No new production bootstrap implementation was created.
+- [ ] Hosted demo works from fresh incognito. (Blocking gap fixed -- the demo room now exists and is correctly seeded -- but the actual page load/WebMCP-registration/realtime behavior still needs a human with a real browser.)
+- [ ] Reset works. (Needs the browser pass above; the underlying `start_demo_scenario` function this reuses was exercised successfully by the bootstrap itself.)
+- [ ] Normal create/join/realtime works. (Unaffected by this change -- not independently re-verified this session.)
+- [x] No new production bootstrap implementation was created. (Ran the existing `supabase/production-demo-bootstrap.sql` verbatim; nothing new was written.)
 
 ---
 
@@ -351,53 +345,53 @@ What should I do next?
 
 ### Input phase
 
-- [ ] Phase goal included.
-- [ ] Each active human's readiness included.
-- [ ] Whether each participant has shared input is included.
-- [ ] `waitingFor` identifies participants not ready.
-- [ ] `canAdvance` is derived canonically.
-- [ ] Recommended next action is explicit.
+- [x] Phase goal included. (`phaseGoal`.)
+- [x] Each active human's readiness included. (`input.readiness[]`.)
+- [x] Whether each participant has shared input is included. (`readiness[].hasSharedInput`.)
+- [x] `waitingFor` identifies participants not ready.
+- [x] `canAdvance` is derived canonically. (Mirrors `advance_room_phase`'s exact joined/positioned/ready prerequisites for the `input -> proposals` transition -- see `supabase/migrations/20260830120000_owner_lifecycle_and_meeting_lock.sql`.)
+- [x] Recommended next action is explicit.
 
 ### Proposals phase
 
-- [ ] Active/candidate proposal status included.
-- [ ] Who proposed the current option is included.
-- [ ] Whether the phase has enough state to advance is included.
+- [x] Active/candidate proposal status included. (`proposals.hasActiveProposal`, `activeProposalId`, `activeProposalTitle`.)
+- [x] Who proposed the current option is included. (`proposals.proposedByParticipantId`.)
+- [x] Whether the phase has enough state to advance is included. (`canAdvance` = `hasActiveProposal`, matching the DB's only real gate for this transition.)
 
 ### Deliberation phase
 
-- [ ] Blocking concern count included.
-- [ ] Warning count included.
-- [ ] Concern ownership/raiser included.
-- [ ] `canAdvance` reflects unresolved blockers.
+- [x] Blocking concern count included. (`deliberation.blockingCount`.)
+- [x] Warning count included. (`deliberation.warningCount`.)
+- [x] Concern ownership/raiser included. (`deliberation.openConflicts[].raisedByName`/`raisedByActorId`/`raisedByActorType`.)
+- [x] `canAdvance` reflects unresolved blockers. (`blockingCount === 0`.)
 
 ### Alignment phase
 
-- [ ] Every active human is represented.
-- [ ] Shared/not-shared alignment status is explicit.
-- [ ] Current alignment choice is included when shared.
-- [ ] Missing alignments are explicit.
+- [x] Every active human is represented. (`alignment.alignment[]`, one entry per active human.)
+- [x] Shared/not-shared alignment status is explicit. (`alignment[].shared`.)
+- [x] Current alignment choice is included when shared. (`alignment[].choice`.)
+- [x] Missing alignments are explicit. (`alignment.missingParticipantIds`, also surfaced in `waitingFor`.) Note: per the product rule that alignment is informative and never mechanically gates a transition, `canAdvance` here is **not** false just because alignment is missing -- it mirrors `apply_room_phase_entry`'s real `voting -> approval` gate (active proposal, no open blocking conflict). `waitingFor` still names who hasn't shared, and `recommendedNextAction` says explicitly that this is a recommendation, not a hard block.
 
 ### Approval phase
 
-- [ ] Frozen decision hash included.
-- [ ] Required approvers included.
-- [ ] Completed approvers included.
-- [ ] Missing approvers included.
-- [ ] Human-confirmation requirement is explicit.
+- [x] Frozen decision hash included. (`approval.decisionHash`.)
+- [x] Required approvers included. (`approval.requiredApproverIds`.)
+- [x] Completed approvers included. (`approval.completedApproverIds`.)
+- [x] Missing approvers included. (`approval.missingApproverIds`, also in `waitingFor` by name.)
+- [x] Human-confirmation requirement is explicit. (`approval.humanConfirmationRequired: true`, always.)
 
 ### A2 tests
 
-- [ ] Coordination status tests for every phase.
-- [ ] Multi-participant readiness test.
-- [ ] Missing alignment test.
-- [ ] Missing approval test.
-- [ ] Removed participants do not count as pending work.
+- [x] Coordination status tests for every phase. (`tests/webmcp/coordination.test.ts`.)
+- [x] Multi-participant readiness test.
+- [x] Missing alignment test.
+- [x] Missing approval test.
+- [x] Removed participants do not count as pending work. (Explicit test; `activeHumans()` filters `status === "active"`.)
 
 ### A2 exit gate
 
-- [ ] An agent can always answer "what are we waiting for?" using one WebMCP read.
-- [ ] An agent never needs to navigate the 3D scene to determine whether the meeting advanced.
+- [x] An agent can always answer "what are we waiting for?" using one WebMCP read. (`get_coordination_status`, available in every phase incl. before a seat is claimed.)
+- [ ] An agent never needs to navigate the 3D scene to determine whether the meeting advanced. (Structurally true; pending the same manual Chrome WebMCP inspector pass noted under A1.)
 
 ---
 
@@ -421,31 +415,31 @@ Input:
 
 Return relevant canonical changes after the supplied observed room version:
 
-- [ ] participant joined/admitted;
-- [ ] participant removed;
-- [ ] role changed;
-- [ ] decision authority changed;
-- [ ] input/position shared;
-- [ ] readiness changed;
-- [ ] proposal created;
-- [ ] proposal revised/superseded;
-- [ ] concern raised;
-- [ ] concern resolved;
-- [ ] trade-off created;
-- [ ] alignment changed;
-- [ ] phase changed;
-- [ ] Security Expert finding raised/resolved/dispositioned;
-- [ ] decision candidate frozen;
-- [ ] approval recorded;
-- [ ] meeting finalized.
+- [x] participant joined/admitted; (`participant_joined` from `participant.seat_claimed`, `participant_admitted` from `join.admitted`.)
+- [x] participant removed; (`participant_removed` from `participant.removed`.)
+- [ ] role changed; (No such mutation exists in the codebase yet -- there is no operation that changes a human-readable `role` like "CTO" after admission. Nothing to map today; `ACTION_TYPE` in `src/domain/rooms/room-updates.ts` will need one row added once A6 introduces that operation. `decisionRole` changes, the other half of "role," are fully covered below.)
+- [x] decision authority changed; (`decision_role_changed` from `participant.decision_role_changed`; ownership transfer also covered as `ownership_transferred`.)
+- [x] input/position shared; (`input_shared` from `position.added`.)
+- [x] readiness changed; (`readiness_changed` from `participant.input_ready`.)
+- [x] proposal created; (`proposal_submitted` from `proposal.submitted`.)
+- [ ] proposal revised/superseded; (A revised proposal from `respond_to_concern` is created as a new `proposal.submitted` row referencing the original via `parentProposalId` -- it surfaces as another `proposal_submitted` update, and `tradeoff_proposed` covers the trade-off half of the same action. There is no distinct "superseded" audit action in the schema to project separately; left open rather than claiming coverage that does not exist.)
+- [x] concern raised; (`concern_raised` from `objection.raised`.)
+- [x] concern resolved; (`concern_resolved` from `conflict.resolved`.)
+- [x] trade-off created; (`tradeoff_proposed` from `tradeoff.proposed`.)
+- [x] alignment changed; (`alignment_changed` from `alignment.expressed`/`alignment.updated`.)
+- [x] phase changed; (`phase_changed` from `room.phase_advanced`/`demo.phase_advanced`.)
+- [x] Security Expert finding raised/resolved/dispositioned; (`expert_finding_raised`/`expert_finding_resolved`/`expert_finding_dispositioned`.)
+- [x] decision candidate frozen; (Carried on the same `phase_changed` update that enters `approval` -- `decisionHash` is populated from that event's own `result.decisionHash`, matching exactly what `apply_room_phase_entry` froze; not a separate audit action, so not a separate update type.)
+- [x] approval recorded; (`approval_recorded` from `approval.recorded`.)
+- [x] meeting finalized. (`meeting_finalized` from `decision.finalized`.)
 
 ### Implementation constraints
 
-- [ ] Use existing canonical room version/audit history.
-- [ ] Do not create a second event store.
-- [ ] Returned participant-authored text remains identified as untrusted room content.
-- [ ] Tool returns current room version.
-- [ ] Tool clearly indicates when no new updates exist.
+- [x] Use existing canonical room version/audit history. (`RoomState.activity`, already backed by `public.audit_events` -- no new table or column.)
+- [x] Do not create a second event store. (Confirmed: `computeRoomUpdates` only filters/labels `room.activity`.)
+- [x] Returned participant-authored text remains identified as untrusted room content. (Whole tool marked `untrustedContentHint: true`, same convention as `get_alignment`/`get_current_decision`/`get_waiting_participants`.)
+- [x] Tool returns current room version. (`data.currentRoomVersion` and the wrapper's own `roomVersion`.)
+- [x] Tool clearly indicates when no new updates exist. (`updateCount: 0`, `updates: []`, and an explicit "No new updates since version N." message.)
 
 ### Optional if time permits
 
@@ -455,26 +449,14 @@ Implement a bounded:
 wait_for_room_change
 ```
 
-Possible input:
-
-```json
-{
-  "afterVersion": 27,
-  "maxWaitSeconds": 15
-}
-```
-
-- [ ] Short bounded wait only.
-- [ ] No long-running/background agent infrastructure.
-- [ ] Timeout produces a normal "no change yet" response.
-- [ ] Result uses the same update projection as `get_room_updates`.
+- [ ] **Deferred.** Not implemented in this slice. The checklist's own cut list (§14) lists this as the first thing to cut if time is short, and it needs either an injectable clock/poll interval or a live Supabase stack to test correctly (a real multi-second `sleep` loop is not something to leave un-unit-tested) -- both are a reasonable follow-up, not a blocker for A3's exit gate below, which does not depend on it.
 
 ### A3 exit gate
 
-- [ ] Agent A acts and records room version.
-- [ ] Agent B acts.
-- [ ] Agent A requests updates since its previous version.
-- [ ] Agent A receives Agent B's relevant changes without DOM inspection.
+- [x] Agent A acts and records room version. (Demonstrated in `tests/webmcp/room-updates.test.ts`'s "returns Agent B's relevant change to Agent A" test.)
+- [x] Agent B acts.
+- [x] Agent A requests updates since its previous version. (`get_room_updates` with `sinceVersion`.)
+- [x] Agent A receives Agent B's relevant changes without DOM inspection. (Verified in the same test; broader manual two-agent verification still pending the live gate in §10.)
 
 ---
 

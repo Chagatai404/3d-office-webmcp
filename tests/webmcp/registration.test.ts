@@ -46,8 +46,10 @@ describe("centralized WebMCP capability registration", () => {
         "advance_discussion",
         "admit_participant",
         "enable_security_expert",
+        "get_coordination_status",
         "get_meeting_context",
         "get_my_attention_items",
+        "get_room_updates",
         "get_waiting_participants",
         "lock_meeting",
         "mark_my_input_ready",
@@ -292,6 +294,8 @@ describe("centralized WebMCP capability registration", () => {
   it("marks read tools read-only and every participant-content output untrusted", () => {
     for (const name of [
       "get_meeting_context",
+      "get_coordination_status",
+      "get_room_updates",
       "get_current_decision",
       "get_open_issues",
       "get_alignment",

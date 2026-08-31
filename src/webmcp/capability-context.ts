@@ -116,6 +116,8 @@ export const TOOL_AVAILABILITY: Record<string, Predicate> = {
   // historical rationale, preserved here): an agent that can read the room
   // can explain it before its human has a seat.
   get_meeting_context: inRoom,
+  get_coordination_status: inRoom,
+  get_room_updates: inRoom,
   get_current_decision: (c) => inRoom(c) && c.phase !== null && c.phase !== "input",
   get_my_attention_items: (c) => inRoom(c) && c.hasClaimedSeat && !c.isFinalized,
   get_open_issues: (c) => inRoom(c) && c.phase === "deliberation",

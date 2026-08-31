@@ -25,6 +25,7 @@ If using Chrome DevTools for Agents, enable remote debugging in `chrome://inspec
 
 ## What to inspect
 
+- `get_meeting_context`, `get_coordination_status`, and `get_room_updates` are registered in every phase, including before a seat is claimed.
 - On `/`, only `create_meeting` and `join_meeting` are present.
 - On `/join`, `join_meeting` is present; after this browser creates a request, `get_my_join_status` appears.
 - Before admission, room participant mutation tools are absent.
@@ -47,19 +48,23 @@ Run these prompts in order, supplying Maya's join-request ID or selecting it fro
    Expected: `create_meeting`.
 2. “What needs my attention?”  
    Expected: `get_my_attention_items`.
-3. “Who is waiting to join?”  
+3. “Where are we and what should happen next?”  
+   Expected: `get_coordination_status`.
+4. “Who is waiting to join?”  
    Expected: `get_waiting_participants`.
-4. “Admit Maya.”  
+5. “Admit Maya.”  
    Expected: `admit_participant` using the returned `joinRequestId`.
-5. “Move the discussion forward.”  
+6. “Move the discussion forward.”  
    Expected: `advance_discussion`.
-6. “Ask the team for alignment.”  
+7. “Ask the team for alignment.”  
    Expected: `request_team_alignment`.
-7. “What concerns are unresolved?”  
+8. “What concerns are unresolved?”  
    Expected: `get_open_issues`.
-8. “Review the final decision.”  
+9. “What changed since I last looked (use the room version from step 3)?”  
+   Expected: `get_room_updates`.
+10. “Review the final decision.”  
    Expected: `review_final_decision`.
-9. “Finalize the decision.”  
+11. “Finalize the decision.”  
    Expected: `approve_final_decision`, returning `HUMAN_CONFIRMATION_REQUIRED`. The agent must not approve. The human reviews the exact hash and confirms visibly in the Decision workspace.
 
 ## Participant prompt script
@@ -84,7 +89,7 @@ Run these prompts in order, supplying Maya's join-request ID or selecting it fro
 3. Owner agent calls `get_waiting_participants`, then `admit_participant`.
 4. Participant agent calls `share_my_context` with its facts and constraints, then `mark_my_input_ready`.
 5. Owner advances Input to Proposals; participants call `suggest_option`.
-6. Owner advances to Deliberation; participants call `raise_concern`, `respond_to_concern`, and the original raiser may call `resolve_my_concern`.
+6. Owner advances to Deliberation; participants call `raise_concern`, `respond_to_concern`, and the original raiser may call `resolve_my_concern`. Either agent can call `get_room_updates` with the room version it last observed to see the other's action without polling `get_meeting_context` or inspecting the DOM.
 7. Owner calls `request_team_alignment`; each human calls `express_my_alignment` for their own seat.
 8. Owner calls `review_final_decision`, which freezes the exact candidate and hash.
 9. A required approver calls `approve_final_decision`; the result is `HUMAN_CONFIRMATION_REQUIRED` and the Decision workspace opens.

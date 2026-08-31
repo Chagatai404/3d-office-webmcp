@@ -6,6 +6,12 @@
     "expectedTools": ["get_meeting_context"]
   },
   {
+    "name": "coordination status check",
+    "phase": "deliberation",
+    "prompt": "Where are we and what should happen next?",
+    "expectedTools": ["get_coordination_status"]
+  },
+  {
     "name": "share engineering context",
     "phase": "input",
     "prompt": "Tell the room engineering only has two days and we cannot rewrite auth.",
