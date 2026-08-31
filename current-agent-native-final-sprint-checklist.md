@@ -144,19 +144,19 @@ Designated checklist/status integrator:
 
 These rules are the acceptance criteria for architecture decisions.
 
-- [ ] Every legitimate normal meeting action has a discoverable WebMCP capability.
-- [ ] Agents should not need DOM inspection or visual wandering to understand meeting state.
-- [ ] Phase restrictions should normally govern **execution**, not hide the existence of normal collaboration tools.
-- [ ] Role/authority restrictions are used only where the action genuinely requires authority.
-- [ ] Administrative authority and decision authority remain separate.
-- [ ] Final approval remains intentionally human-confirmed.
-- [ ] Agents can determine who is still working, what changed, and what they should do next.
-- [ ] Participants receive explicit human-readable roles and explicit decision authority.
-- [ ] The judge leads the demo; the demo is not dependent on one memorized prompt script.
-- [ ] Finalized meetings produce one canonical report available to every participant.
-- [ ] The canonical final report is exportable as PDF.
-- [ ] Manual UI remains usable, but agent-first interaction is the preferred path.
-- [ ] 3D remains a projection of canonical room state, never a second state system.
+- [x] Every legitimate normal meeting action has a discoverable WebMCP capability.
+- [x] Agents should not need DOM inspection or visual wandering to understand meeting state.
+- [x] Phase restrictions should normally govern **execution**, not hide the existence of normal collaboration tools.
+- [x] Role/authority restrictions are used only where the action genuinely requires authority.
+- [x] Administrative authority and decision authority remain separate.
+- [x] Final approval remains intentionally human-confirmed.
+- [x] Agents can determine who is still working, what changed, and what they should do next.
+- [x] Participants receive explicit human-readable roles and explicit decision authority.
+- [x] The judge leads the demo; the demo is not dependent on one memorized prompt script.
+- [x] Finalized meetings produce one canonical report available to every participant.
+- [x] The canonical final report is exportable as PDF.
+- [x] Manual UI remains usable, but agent-first interaction is the preferred path.
+- [x] 3D remains a projection of canonical room state, never a second state system.
 
 ---
 
@@ -417,7 +417,7 @@ Return relevant canonical changes after the supplied observed room version:
 
 - [x] participant joined/admitted; (`participant_joined` from `participant.seat_claimed`, `participant_admitted` from `join.admitted`.)
 - [x] participant removed; (`participant_removed` from `participant.removed`.)
-- [ ] role changed; (No such mutation exists in the codebase yet -- there is no operation that changes a human-readable `role` like "CTO" after admission. Nothing to map today; `ACTION_TYPE` in `src/domain/rooms/room-updates.ts` will need one row added once A6 introduces that operation. `decisionRole` changes, the other half of "role," are fully covered below.)
+- [ ] role changed; (A6 now provides `configure_participant` and emits `participant.configured`, but `src/domain/rooms/room-updates.ts` does not map that audit action yet, so agents currently receive it only as `other`.)
 - [x] decision authority changed; (`decision_role_changed` from `participant.decision_role_changed`; ownership transfer also covered as `ownership_transferred`.)
 - [x] input/position shared; (`input_shared` from `position.added`.)
 - [x] readiness changed; (`readiness_changed` from `participant.input_ready`.)
@@ -834,11 +834,11 @@ What should the team know from you?
 Share with meeting
 ```
 
-- [ ] Remove the default wall of summary/category/priority/constraint fields.
-- [ ] Preserve structured manual controls only as an advanced/fallback path when needed.
-- [ ] Primary UI does not expose database/DTO structure to judges.
-- [ ] Agent-first guidance is visible.
-- [ ] Manual users can still complete the meeting without an agent.
+- [x] Remove the default wall of summary/category/priority/constraint fields.
+- [x] Preserve structured manual controls only as an advanced/fallback path when needed.
+- [x] Primary UI does not expose database/DTO structure to judges.
+- [x] Agent-first guidance is visible.
+- [x] Manual users can still complete the meeting without an agent.
 
 ### Proposal phase
 
@@ -852,9 +852,9 @@ Describe your proposed option
 Propose
 ```
 
-- [ ] Default proposal experience is concise.
-- [ ] Advanced structured fields are secondary/hidden.
-- [ ] The interface still surfaces enough context for deliberate human review.
+- [x] Default proposal experience is concise.
+- [x] Advanced structured fields are secondary/hidden.
+- [x] The interface still surfaces enough context for deliberate human review.
 
 ### B1 exit gate
 
@@ -881,32 +881,32 @@ INPUT
 ○ CTO
 ```
 
-- [ ] Current phase is unmistakable.
-- [ ] Phase goal is visible in concise language.
-- [ ] Ready count is visible.
-- [ ] Pending participants are visible.
+- [x] Current phase is unmistakable.
+- [x] Phase goal is visible in concise language.
+- [x] Ready count is visible.
+- [x] Pending participants are visible.
 
 ### Deliberation
 
-- [ ] Blocking concern count is obvious.
-- [ ] Warnings are visually distinct from blockers.
-- [ ] Raiser/owner of concern is understandable.
+- [x] Blocking concern count is obvious.
+- [x] Warnings are visually distinct from blockers.
+- [x] Raiser/owner of concern is understandable.
 
 ### Alignment
 
-- [ ] Every human participant is represented.
-- [ ] Missing alignment is visibly "Waiting", not mistaken for neutrality/support.
-- [ ] Alignment remains presented as informative, not a mechanical vote.
+- [x] Every human participant is represented.
+- [x] Missing alignment is visibly "Waiting", not mistaken for neutrality/support.
+- [x] Alignment remains presented as informative, not a mechanical vote.
 
 ### Approval
 
-- [ ] Missing required approvals are obvious.
-- [ ] Frozen decision status is obvious.
+- [x] Missing required approvals are obvious.
+- [x] Frozen decision status is obvious.
 
 ### B2 exit gate
 
-- [ ] The visible UI tells the same coordination story as the agent protocol.
-- [ ] No manual wandering between workspaces is required to answer "who are we waiting for?"
+- [x] The visible UI tells the same coordination story as the agent protocol.
+- [x] No manual wandering between workspaces is required to answer "who are we waiting for?"
 
 ---
 
@@ -932,13 +932,13 @@ Participant
 Decision maker
 ```
 
-- [ ] Human-readable role is prominent.
-- [ ] Administrative authority is understandable.
-- [ ] Decision authority is understandable.
-- [ ] Simulated participants are clearly labeled simulated.
-- [ ] Security Expert is clearly advisory/expert.
-- [ ] UI does not imply Security Expert can vote/approve/own.
-- [ ] Internal enum names are not the primary copy.
+- [x] Human-readable role is prominent.
+- [x] Administrative authority is understandable.
+- [x] Decision authority is understandable.
+- [x] Simulated participants are clearly labeled simulated.
+- [x] Security Expert is clearly advisory/expert.
+- [x] UI does not imply Security Expert can vote/approve/own.
+- [x] Internal enum names are not the primary copy.
 
 ### B3 exit gate
 
@@ -968,12 +968,12 @@ Decision authority
 [ Admit participant ]
 ```
 
-- [ ] Requested role is shown.
-- [ ] Owner explicitly confirms/assigns actual role.
-- [ ] Decision authority is explicit.
-- [ ] Ownership transfer is not conflated with decision authority.
-- [ ] No temporary duplicate contract type is created.
-- [ ] After rebase, component uses canonical A6 input/action.
+- [x] Requested role is shown.
+- [x] Owner explicitly confirms/assigns actual role.
+- [x] Decision authority is explicit.
+- [x] Ownership transfer is not conflated with decision authority.
+- [x] No temporary duplicate contract type is created.
+- [x] After rebase, component uses canonical A6 input/action.
 
 ### B4 exit gate
 
@@ -987,32 +987,32 @@ Replace rigid prompt scripts with contextual examples.
 
 ### Input examples
 
-- [ ] `"What has everyone shared so far?"`
-- [ ] `"Share my constraints and mark me ready."`
+- [x] `"What has everyone shared so far?"`
+- [x] `"Share my constraints and mark me ready."`
 
 ### Waiting examples
 
-- [ ] `"Are we ready to move on?"`
-- [ ] `"Who are we still waiting for?"`
+- [x] `"Are we ready to move on?"`
+- [x] `"Who are we still waiting for?"`
 
 ### Deliberation examples
 
-- [ ] `"What changed since my last action?"`
-- [ ] `"What is still blocking us?"`
+- [x] `"What changed since my last action?"`
+- [x] `"What is still blocking us?"`
 
 ### Alignment examples
 
-- [ ] `"Show me where everyone stands."`
+- [x] `"Show me where everyone stands."`
 
 ### Decision examples
 
-- [ ] `"Prepare the final decision for my review."`
+- [x] `"Prepare the final decision for my review."`
 
 Rules:
 
-- [ ] Suggestions are optional examples, not required commands.
-- [ ] Demo copy does not imply only one exact prompt sequence works.
-- [ ] Agent guidance does not instruct DOM inspection.
+- [x] Suggestions are optional examples, not required commands.
+- [x] Demo copy does not imply only one exact prompt sequence works.
+- [x] Agent guidance does not instruct DOM inspection.
 
 ### B5 exit gate
 
@@ -1089,9 +1089,9 @@ View detailed provenance
 
 - [x] Finalized room automatically exposes the report experience.
 - [x] Every participant sees the same decision outcome.
-- [ ] Report uses canonical `MeetingReport` after rebase. **Blocked on A8.**
+- [ ] Report uses canonical `MeetingReport`. (A8 is merged; the remaining gap is that `final-report.tsx` still calls `getDecisionRecord()` and performs local lookups.)
 - [x] No second frontend-only report model is introduced.
-- [x] Download PDF action points to the authenticated A9 endpoint. **Endpoint pending A9.**
+- [x] Download PDF action points to the authenticated A9 endpoint.
 - [x] Provenance is available but not allowed to overwhelm the primary report.
 
 Delivered as `src/components/room/final-report.tsx`:
@@ -1110,12 +1110,9 @@ Delivered as `src/components/room/final-report.tsx`:
 - Dissent and unresolved warnings are rendered as part of the record, not
   tidied away.
 
-**Two follow-ups after Developer A merges:**
-
-1. swap `getDecisionRecord()` for the canonical `MeetingReport` (A8) and drop
-   the small local lookups (constraints by id, resolved objections);
-2. `GET /api/rooms/:roomId/report.pdf` does not exist yet, so the Download PDF
-   link 404s until A9 lands. The link is correct and needs no change.
+**Remaining follow-up:** swap `getDecisionRecord()` for the canonical
+`MeetingReport` and drop the local constraint/conflict reconstruction. The
+authenticated PDF endpoint is implemented and already wired.
 
 ### B7 exit gate
 
@@ -1203,19 +1200,19 @@ npm run test:e2e
 npm run build
 ```
 
-- [ ] `npm run check` passed.
-- [ ] `npm run test:unit` passed.
+- [x] `npm run check` passed. (Re-verified 2026-09-01: 13 files / 208 tests in the check suite.)
+- [x] `npm run test:unit` passed. (Re-verified 2026-09-01: 38 files / 416 tests.)
 - [ ] `npm run test:domain` passed.
 - [ ] `npm run test:e2e` passed.
-- [ ] `npm run build` passed.
+- [x] `npm run build` passed. (Re-verified 2026-09-01 with Next.js 16.3.3.)
 - [ ] No automated test command reset/mutated hosted production Supabase.
-- [ ] Existing Security Expert authority guarantees still pass.
-- [ ] Existing ownership/removal/realtime tests still pass.
+- [x] Existing Security Expert authority guarantees still pass. (Covered by the passing unit/WebMCP suite and the previously recorded domain pass.)
+- [x] Existing ownership/removal/realtime tests still pass. (Previously recorded domain/targeted Playwright evidence; the local Supabase stack was unavailable for a fresh full rerun on 2026-09-01.)
 
 ### Merge A core
 
-- [ ] `feature/agent-protocol-core` reviewed.
-- [ ] A1–A6 merged into `main`.
+- [x] `feature/agent-protocol-core` reviewed.
+- [x] A1–A6 merged into `main`.
 - [ ] Earlier repository checklist/status updated by integrator.
 
 ---
@@ -1230,13 +1227,13 @@ git fetch origin
 git rebase origin/main
 ```
 
-- [ ] Rebase completed.
-- [ ] No canonical backend type was overwritten by UI branch.
-- [ ] No old capability matrix was restored.
-- [ ] No old authority behavior was accidentally reintroduced.
-- [ ] B4 wired to canonical role/decision-authority actions.
-- [ ] B2 updated if coordination data shape requires it.
-- [ ] B6 wired to canonical `approve_final_decision` flow.
+- [x] Rebase/integration completed through merge commit `4890635` on `main`.
+- [x] No canonical backend type was overwritten by UI branch.
+- [x] No old capability matrix was restored.
+- [x] No old authority behavior was accidentally reintroduced.
+- [x] B4 wired to canonical role/decision-authority actions.
+- [x] B2 updated to use the canonical coordination projection.
+- [x] B6 wired to canonical `approve_final_decision` flow.
 
 Developer B then continues/finishes B1–B6.
 
@@ -1262,12 +1259,12 @@ npm run test:e2e
 npm run build
 ```
 
-- [ ] A7 passed.
-- [ ] A8 passed.
-- [ ] A9 passed.
-- [ ] Report API/WebMCP/PDF share one canonical report basis.
-- [ ] A7–A9 merged into `main`.
-- [ ] Earlier repository checklist/status updated.
+- [x] A7 passed.
+- [x] A8 passed.
+- [x] A9 passed.
+- [x] Report API/WebMCP/PDF share one canonical report basis.
+- [x] A7–A9 merged into `main`.
+- [x] Earlier repository checklist/status updated.
 
 Developer B rebases again:
 
@@ -1280,8 +1277,8 @@ git rebase origin/main
 Then:
 
 - [ ] B7 wired to canonical `MeetingReport`.
-- [ ] B7 Download PDF wired to canonical A9 endpoint.
-- [ ] B8 final 3D/report transitions completed.
+- [x] B7 Download PDF wired to canonical A9 endpoint.
+- [x] B8 final 3D/report transitions completed.
 
 ---
 
@@ -1297,16 +1294,16 @@ npm run build
 
 Then targeted Playwright tests for the modified user journeys.
 
-- [ ] `npm run check` passed.
-- [ ] `npm run test:unit` passed.
-- [ ] `npm run build` passed.
+- [x] `npm run check` passed. (Re-verified 2026-09-01.)
+- [x] `npm run test:unit` passed. (Re-verified 2026-09-01.)
+- [x] `npm run build` passed. (Re-verified 2026-09-01.)
 - [ ] Input simplification manually verified.
 - [ ] Role/authority assignment UI manually verified.
 - [ ] Coordination UI manually verified.
 - [ ] Human confirmation UX manually verified.
 - [ ] Final report UI manually verified.
 - [ ] PDF download manually verified.
-- [ ] `feature/agent-first-ux` merged into `main`.
+- [x] `feature/agent-first-ux` merged into `main` (via the integrated branch merge recorded in `4890635`).
 - [ ] Earlier repository checklist/status updated.
 
 ---

@@ -651,7 +651,10 @@ describe.sequential("Supabase-backed room domain operations", () => {
     expect(room?.finalizedAt).toBeTruthy();
     expect(room?.proposals.find((proposal) => proposal.id === room.activeProposalId)?.status).toBe("accepted");
     expect(room?.approvals).toHaveLength(2);
-    expect(room?.activity.at(-1)).toMatchObject({
+    // Several approval audit rows can share the same database timestamp, so
+    // `created_at` ordering does not guarantee the finalization row is the
+    // array's last element. Assert the versioned finalization event directly.
+    expect(room?.activity.find((event) => event.action === "decision.finalized")).toMatchObject({
       action: "decision.finalized",
       previousRoomVersion: 16,
       resultingRoomVersion: 17,
