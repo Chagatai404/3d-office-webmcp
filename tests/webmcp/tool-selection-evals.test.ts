@@ -55,11 +55,11 @@ function availableFor(item: { phase: RoomState["phase"]; asOwner?: boolean }): s
         ? {
             proposal: {
               id: "proposal-1", participantId: "participant-owner", title: "t", summary: "s", rationale: "r",
-              expectedOutcomes: [], referencedConstraintIds: [], parentProposalId: null, status: "candidate",
+              expectedOutcomes: [], referencedConstraintIds: [], referencedSourceIds: [], parentProposalId: null, status: "candidate",
               createdAt: "2026-08-30T00:00:00.000Z",
             },
             rationale: "r", acceptedTradeoffs: [], unresolvedWarnings: [], alignments: [],
-            decisionPolicy: "owner_decides", owners: [], deadlines: [], actionItems: [], dissent: [],
+            decisionPolicy: "owner_decides", owners: [], deadlines: [], actionItems: [], dissent: [], sourceProvenance: [],
             expertAdvice: [],
             requiredApprovalParticipantIds: [selfParticipantId],
             decisionHash: "eval-hash-1", approvals: [],
@@ -100,7 +100,7 @@ describe("WebMCP tool-selection eval suite", () => {
     expect(inputTools.filter((name) => MUTATION_TOOL_NAMES.has(name))).toContain("share_my_context");
     expect(Object.keys(
       (tools.share_my_context!.inputSchema as { properties: Record<string, unknown> }).properties,
-    )).toEqual(["summary", "category", "priority", "constraints"]);
+    )).toEqual(["summary", "category", "priority", "referencedSourceIds", "constraints"]);
 
     expect(await executeTool(tools.share_my_context!, {
       summary: "Accessibility review must precede launch.",

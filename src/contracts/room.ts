@@ -84,6 +84,90 @@ export const joinRequestSchema = z
   .strict();
 export type JoinRequest = z.infer<typeof joinRequestSchema>;
 
+export const meetingSourceVisibilitySchema = z.enum([
+  "shared_room",
+  "private_to_participant",
+]);
+export type MeetingSourceVisibility = z.infer<typeof meetingSourceVisibilitySchema>;
+
+export const meetingSourceStatusSchema = z.enum([
+  "uploading",
+  "processing",
+  "ready",
+  "failed",
+  "removed",
+]);
+export type MeetingSourceStatus = z.infer<typeof meetingSourceStatusSchema>;
+
+export const meetingSourceSchema = z
+  .object({
+    id: idSchema,
+    roomId: idSchema,
+    uploadedByParticipantId: idSchema,
+    visibility: meetingSourceVisibilitySchema,
+    title: z.string().min(1),
+    filename: z.string().min(1),
+    mimeType: z.string().min(1),
+    byteSize: z.number().int().nonnegative(),
+    sha256: z.string().min(1),
+    status: meetingSourceStatusSchema,
+    summary: nullableTextSchema,
+    /**
+     * Human-readable reason a `failed` source could not be processed. Always
+     * server-generated and safe to show; never contains raw source text.
+     * `null` for every non-failed status.
+     */
+    errorMessage: nullableTextSchema,
+    createdAt: timestampSchema,
+    processedAt: timestampSchema.nullable(),
+    removedAt: timestampSchema.nullable(),
+  })
+  .strict();
+export type MeetingSource = z.infer<typeof meetingSourceSchema>;
+
+export const meetingSourceChunkSchema = z
+  .object({
+    id: idSchema,
+    sourceId: idSchema,
+    chunkIndex: z.number().int().nonnegative(),
+    text: z.string().min(1),
+    tokenEstimate: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MeetingSourceChunk = z.infer<typeof meetingSourceChunkSchema>;
+
+export const meetingSourceContentSchema = z
+  .object({
+    sourceId: idSchema,
+    chunks: z.array(meetingSourceChunkSchema),
+    nextCursor: z.string().min(1).nullable(),
+  })
+  .strict();
+export type MeetingSourceContent = z.infer<typeof meetingSourceContentSchema>;
+
+export const meetingSourceSearchResultSchema = z
+  .object({
+    sourceId: idSchema,
+    sourceTitle: z.string().min(1),
+    chunkId: idSchema,
+    chunkIndex: z.number().int().nonnegative(),
+    excerpt: z.string().min(1),
+  })
+  .strict();
+export type MeetingSourceSearchResult = z.infer<
+  typeof meetingSourceSearchResultSchema
+>;
+
+export const meetingSourceSearchResultsSchema = z
+  .object({
+    query: z.string().min(1),
+    results: z.array(meetingSourceSearchResultSchema),
+  })
+  .strict();
+export type MeetingSourceSearchResults = z.infer<
+  typeof meetingSourceSearchResultsSchema
+>;
+
 /**
  * `expert` is a distinct, non-human actor kind: an advisory service actor
  * (see `ExpertFinding` below), never an admitted human and never a
@@ -108,6 +192,12 @@ export const participantSchema = z
   .strict();
 export type Participant = z.infer<typeof participantSchema>;
 
+/**
+ * `referencedSourceIds` links a participant-owned input back to the meeting
+ * sources that informed it. It is provenance metadata only: it never grants a
+ * source any decision authority, and an unknown or non-visible id is rejected
+ * server-side rather than silently kept.
+ */
 export const positionSchema = z
   .object({
     id: idSchema,
@@ -115,6 +205,7 @@ export const positionSchema = z
     summary: z.string().min(1),
     category: nullableTextSchema,
     priority: nullableTextSchema,
+    referencedSourceIds: z.array(idSchema),
     createdAt: timestampSchema,
   })
   .strict();
@@ -127,6 +218,7 @@ export const constraintSchema = z
     category: z.string().min(1),
     text: z.string().min(1),
     priority: nullableTextSchema,
+    referencedSourceIds: z.array(idSchema),
     createdAt: timestampSchema,
   })
   .strict();
@@ -149,6 +241,7 @@ export const proposalSchema = z
     rationale: z.string().min(1),
     expectedOutcomes: z.array(z.string().min(1)),
     referencedConstraintIds: z.array(idSchema),
+    referencedSourceIds: z.array(idSchema),
     parentProposalId: idSchema.nullable(),
     status: proposalStatusSchema,
     createdAt: timestampSchema,
@@ -378,17 +471,101 @@ export const claimSeatInputSchema = z
   .strict();
 export type ClaimSeatInput = z.infer<typeof claimSeatInputSchema>;
 
+export const createMeetingSourceInputSchema = z
+  .object({
+    title: z.string().trim().min(1).max(160),
+    filename: z.string().trim().min(1).max(255),
+    mimeType: z.string().trim().min(1).max(160),
+    byteSize: z.number().int().nonnegative().max(25 * 1024 * 1024),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    visibility: meetingSourceVisibilitySchema,
+    chunks: z.array(z.string().trim().min(1).max(12_000)).max(200),
+    summary: nullableTextSchema,
+    /**
+     * When true, the source is created in `processing` with no chunks yet and
+     * a later `mark_meeting_source_processed` / `mark_meeting_source_failed`
+     * transition finishes it. Used for binary file types (`.pdf`, `.docx`)
+     * whose text is extracted out of band. When absent/false, `chunks` must be
+     * non-empty and the source is created `ready`.
+     */
+    expectsExtraction: z.boolean().optional(),
+    /**
+     * Server-only pointer to the private object-storage location of the raw
+     * bytes. Never projected back into `RoomState` (the canonical read DTO
+     * `meetingSourceSchema` has no storage fields) — it exists so the upload
+     * route can persist the storage convention alongside the metadata row.
+     */
+    storageBucket: z.string().trim().min(1).max(128).optional(),
+    storagePath: z.string().trim().min(1).max(1024).optional(),
+  })
+  .strict();
+export type CreateMeetingSourceInput = z.infer<
+  typeof createMeetingSourceInputSchema
+>;
+
+export const markMeetingSourceProcessedInputSchema = z
+  .object({
+    sourceId: idSchema,
+    chunks: z.array(z.string().trim().min(1).max(12_000)).min(1).max(200),
+    summary: nullableTextSchema,
+  })
+  .strict();
+export type MarkMeetingSourceProcessedInput = z.infer<
+  typeof markMeetingSourceProcessedInputSchema
+>;
+
+export const markMeetingSourceFailedInputSchema = z
+  .object({
+    sourceId: idSchema,
+    errorMessage: z.string().trim().min(1).max(500),
+  })
+  .strict();
+export type MarkMeetingSourceFailedInput = z.infer<
+  typeof markMeetingSourceFailedInputSchema
+>;
+
+export const readMeetingSourceContentInputSchema = z
+  .object({
+    sourceId: idSchema,
+    cursor: z.string().min(1).nullable(),
+    maxChunks: z.number().int().min(1).max(20),
+  })
+  .strict();
+export type ReadMeetingSourceContentInput = z.infer<
+  typeof readMeetingSourceContentInputSchema
+>;
+
+export const searchMeetingSourcesInputSchema = z
+  .object({
+    query: z.string().trim().min(1).max(240),
+    sourceIds: z.array(idSchema).max(20),
+    limit: z.number().int().min(1).max(20),
+  })
+  .strict();
+export type SearchMeetingSourcesInput = z.infer<
+  typeof searchMeetingSourcesInputSchema
+>;
+
+export const meetingSourceIdInputSchema = z
+  .object({
+    sourceId: idSchema,
+  })
+  .strict();
+export type MeetingSourceIdInput = z.infer<typeof meetingSourceIdInputSchema>;
+
 export const addPositionInputSchema = z
   .object({
     summary: z.string().min(1),
     category: nullableTextSchema,
     priority: nullableTextSchema,
+    referencedSourceIds: z.array(idSchema).max(20).optional(),
     constraints: z.array(
       z
         .object({
           category: z.string().min(1),
           text: z.string().min(1),
           priority: nullableTextSchema,
+          referencedSourceIds: z.array(idSchema).max(20).optional(),
         })
         .strict(),
     ),
@@ -403,6 +580,7 @@ export const submitProposalInputSchema = z
     rationale: z.string().min(1),
     expectedOutcomes: z.array(z.string().min(1)),
     referencedConstraintIds: z.array(idSchema),
+    referencedSourceIds: z.array(idSchema).max(20).optional(),
     parentProposalId: idSchema.nullable(),
   })
   .strict();
@@ -524,6 +702,27 @@ export const decisionActionItemSchema = z
   .strict();
 export type DecisionActionItem = z.infer<typeof decisionActionItemSchema>;
 
+/**
+ * A single meeting source's deterministic, hash-stable fingerprint embedded in
+ * a frozen `FinalDecisionCandidate`. Deliberately excludes the mutable
+ * `summary` / `title` / `filename` prose: a source's extracted summary can be
+ * regenerated without redefining an already-frozen decision hash. Only
+ * `shared_room`, non-removed sources are included — a private participant-only
+ * source never enters another participant's decision record.
+ */
+export const decisionSourceProvenanceSchema = z
+  .object({
+    sourceId: idSchema,
+    uploadedByParticipantId: idSchema,
+    visibility: meetingSourceVisibilitySchema,
+    sha256: z.string().min(1),
+    status: meetingSourceStatusSchema,
+  })
+  .strict();
+export type DecisionSourceProvenance = z.infer<
+  typeof decisionSourceProvenanceSchema
+>;
+
 export const finalDecisionCandidateSchema = z
   .object({
     proposal: proposalSchema,
@@ -546,6 +745,12 @@ export const finalDecisionCandidateSchema = z
      * hash stays reproducible.
      */
     dissent: z.array(z.string().min(1)),
+    /**
+     * Deterministic fingerprints of the shared meeting sources that were
+     * attached when the candidate was frozen. Provenance only: never counted
+     * toward approval authority and never a source of dissent.
+     */
+    sourceProvenance: z.array(decisionSourceProvenanceSchema),
     requiredApprovalParticipantIds: z.array(idSchema),
     /**
      * Deterministic expert advice relevant to this candidate's proposal
@@ -608,6 +813,7 @@ export const roomStateSchema = z
     approvals: z.array(approvalSchema),
     activity: z.array(activityEventSchema),
     expertFindings: z.array(expertFindingSchema),
+    sources: z.array(meetingSourceSchema),
   })
   .strict();
 export type RoomState = z.infer<typeof roomStateSchema>;
@@ -761,6 +967,59 @@ export interface RoomClient {
   ): () => void;
 
   claimSeat(roomId: string, input: ClaimSeatInput): Promise<ActionResult>;
+
+  /** Read source metadata visible to the authenticated participant. */
+  listMeetingSources?(
+    roomId: string,
+  ): Promise<ActionResult<MeetingSource[]>>;
+
+  /**
+   * Create a meeting source from already-extracted text chunks. Browser file
+   * upload helpers live outside this canonical JSON contract.
+   */
+  createMeetingSource?(
+    roomId: string,
+    input: CreateMeetingSourceInput,
+  ): Promise<ActionResult<MeetingSource>>;
+
+  /** Read source content in bounded chunks. */
+  readMeetingSourceContent?(
+    roomId: string,
+    input: ReadMeetingSourceContentInput,
+  ): Promise<ActionResult<MeetingSourceContent>>;
+
+  /** Search visible source chunks without trusting their text as instructions. */
+  searchMeetingSources?(
+    roomId: string,
+    input: SearchMeetingSourcesInput,
+  ): Promise<ActionResult<MeetingSourceSearchResults>>;
+
+  /**
+   * Finish a `processing` (or retry a `failed`) source by attaching its
+   * extracted text chunks. Uploader or room owner only, before finalization.
+   */
+  markMeetingSourceProcessed?(
+    roomId: string,
+    input: MarkMeetingSourceProcessedInput,
+  ): Promise<ActionResult<MeetingSource>>;
+
+  /** Record a retryable processing failure on a source. */
+  markMeetingSourceFailed?(
+    roomId: string,
+    input: MarkMeetingSourceFailedInput,
+  ): Promise<ActionResult<MeetingSource>>;
+
+  /** Make a private uploaded source visible to the room. */
+  shareMeetingSource?(
+    roomId: string,
+    sourceId: string,
+  ): Promise<ActionResult<MeetingSource>>;
+
+  /** Soft-remove a source the caller is allowed to manage. */
+  removeMeetingSource?(
+    roomId: string,
+    sourceId: string,
+  ): Promise<ActionResult>;
 
   addMyPosition(
     roomId: string,

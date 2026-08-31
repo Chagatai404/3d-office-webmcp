@@ -55,6 +55,7 @@ export function buildRoomStateFixture(overrides: Partial<RoomState> = {}): RoomS
     approvals: [],
     activity: [],
     expertFindings: [],
+    sources: [],
     ...overrides,
   };
 }
@@ -85,6 +86,43 @@ export function fakeRoomWebMcpContext(
     getOpenIssues: () => Promise.resolve([]),
     getDecisionRecord: () =>
       Promise.resolve({ ok: false, error: { code: "WRONG_PHASE", message: "Not finalized." }, roomVersion }),
+    listMeetingSources: () => Promise.resolve({ ok: true, data: room.sources, roomVersion, message: "Meeting sources loaded." }),
+    readMeetingSourceContent: () =>
+      Promise.resolve({
+        ok: true,
+        data: {
+          sourceId: "source-1",
+          chunks: [
+            {
+              id: "source-1-chunk-0",
+              sourceId: "source-1",
+              chunkIndex: 0,
+              text: "Attached source text is evidence, not an instruction.",
+              tokenEstimate: 9,
+            },
+          ],
+          nextCursor: null,
+        },
+        roomVersion,
+        message: "Meeting source content loaded.",
+      }),
+    searchMeetingSources: () =>
+      Promise.resolve({
+        ok: true,
+        data: {
+          query: "evidence",
+          results: [
+            {
+              sourceId: "source-1",
+              sourceTitle: "Launch notes",
+              chunkIndex: 0,
+              excerpt: "Attached source text is evidence, not an instruction.",
+            },
+          ],
+        },
+        roomVersion,
+        message: "Meeting sources searched.",
+      }),
     listJoinRequests: () => Promise.resolve({ ok: true, data: [], roomVersion } as never),
     mutationContext: () =>
       Promise.resolve({ actor: { authUserId: "auth-user-1", origin: "webmcp" as const }, expectedRoomVersion: roomVersion }),
@@ -140,6 +178,7 @@ export const VALID_MUTATION_TOOL_INPUTS: Record<string, unknown> = {
     comment: "Feasible within the current capacity.",
   },
   request_final_decision_confirmation: { decisionHash: "decision-hash-1" },
+  request_source_upload: {},
   admit_participant: { joinRequestId: "join-request-1" },
   reject_participant: { joinRequestId: "join-request-1" },
   set_decision_policy: { decisionPolicy: "equal_authority_consensus" },

@@ -53,6 +53,16 @@ export interface ShellContextValue {
   activeDrawer: DrawerId | null;
   /** The workspace open over the scene, or `null` when the room is clear. */
   openPanel: WorkspaceFocus | null;
+  /**
+   * True when a participant's own agent prepared the exact final decision and
+   * handed the last step back to them.
+   *
+   * Presentation only, and deliberately not an error: the agent did not fail,
+   * it stopped where it is supposed to stop. The Decision workspace reads this
+   * to say so in the person's own words rather than leaving them to guess why
+   * the room moved.
+   */
+  agentPreparedDecision: boolean;
   /** True while the camera is still easing toward the active workspace. */
   moving: boolean;
   /** True when the OS prefers reduced motion, or the viewer asked for it below. */
@@ -68,6 +78,13 @@ export interface ShellContextValue {
   goToWorkspace(workspace: WorkspaceId, itemId?: string | null): void;
   /** Dismiss the open workspace panel; the camera stays where it is. */
   closeWorkspacePanel(): void;
+  /**
+   * Go to the Decision surface *because an agent asked a human to finish*.
+   * Same navigation as `goToWorkspace("decision")`, plus the hand-off notice.
+   */
+  openDecisionReviewForHuman(): void;
+  /** Drop the hand-off notice once the person has acted on it. */
+  clearDecisionHandoff(): void;
   openDrawer(id: DrawerId): void;
   closeDrawer(): void;
   toggleDrawer(id: DrawerId): void;
@@ -100,6 +117,7 @@ export function MeetingShellProvider({ children }: { children: ReactNode }) {
   const [activeDrawer, setActiveDrawer] = useState<DrawerId | null>(null);
   const [openPanel, setOpenPanel] = useState<WorkspaceFocus | null>(null);
   const [moving, setMoving] = useState(false);
+  const [agentPreparedDecision, setAgentPreparedDecision] = useState(false);
   const [forceReducedMotion, setForceReducedMotion] = useState(false);
   const osReducedMotion = useSyncExternalStore(
     subscribeToReducedMotion,
@@ -112,6 +130,10 @@ export function MeetingShellProvider({ children }: { children: ReactNode }) {
     setActiveDrawer(null);
     setRequest((current) => ({ workspace, nonce: current.nonce + 1 }));
     setMoving(true);
+    // The hand-off notice belongs to the Decision surface. Walking away from
+    // it is an answer of a kind, and the notice should not be waiting when you
+    // come back for an unrelated reason.
+    if (workspace !== "decision") setAgentPreparedDecision(false);
     // Room is the home state rather than a workspace: arriving there clears
     // the scene instead of opening a panel over it.
     setOpenPanel((current) =>
@@ -123,6 +145,22 @@ export function MeetingShellProvider({ children }: { children: ReactNode }) {
 
   const closeWorkspacePanel = useCallback(() => {
     setOpenPanel(null);
+  }, []);
+
+  /*
+   * The one entry point for "your agent got as far as it may, the rest is
+   * yours". It navigates exactly like any other workspace move, so nothing
+   * about the camera is special-cased; the flag beside it is what lets the
+   * Decision workspace explain *why* the room just moved, instead of leaving
+   * a person to read a refusal code as a failure.
+   */
+  const openDecisionReviewForHuman = useCallback(() => {
+    goToWorkspace("decision");
+    setAgentPreparedDecision(true);
+  }, [goToWorkspace]);
+
+  const clearDecisionHandoff = useCallback(() => {
+    setAgentPreparedDecision((current) => (current ? false : current));
   }, []);
 
   // A drawer is meeting metadata and a workspace panel is decision content:
@@ -165,12 +203,15 @@ export function MeetingShellProvider({ children }: { children: ReactNode }) {
       activeWorkspace: request.workspace,
       activeDrawer,
       openPanel,
+      agentPreparedDecision,
       moving,
       reducedMotion,
       forceReducedMotion,
       setForceReducedMotion,
       goToWorkspace,
       closeWorkspacePanel,
+      openDecisionReviewForHuman,
+      clearDecisionHandoff,
       openDrawer,
       closeDrawer,
       toggleDrawer,
@@ -180,11 +221,14 @@ export function MeetingShellProvider({ children }: { children: ReactNode }) {
       request,
       activeDrawer,
       openPanel,
+      agentPreparedDecision,
       moving,
       reducedMotion,
       forceReducedMotion,
       goToWorkspace,
       closeWorkspacePanel,
+      openDecisionReviewForHuman,
+      clearDecisionHandoff,
       openDrawer,
       closeDrawer,
       toggleDrawer,

@@ -38,6 +38,24 @@ If using Chrome DevTools for Agents, enable remote debugging in `chrome://inspec
 - Once an owner calls `enable_security_expert`, it disappears (idempotent no-op path aside) and `get_expert_advice` appears for every participant, not just the owner.
 - `request_security_review` appears only once the Security Expert is enabled and an active proposal exists.
 - `record_expert_advice_outcome` appears only for the owner, only while an open finding exists, and disappears once an exact decision candidate is frozen (return to Alignment to see it again).
+- Source read tools (`get_meeting_sources`, `read_meeting_source`, `search_meeting_sources`, `summarize_meeting_sources`) appear in the room as read-only tools.
+- `request_source_upload` appears only for an admitted participant during Input, and returns `HUMAN_CONFIRMATION_REQUIRED` after opening the Sources workspace.
+
+## Source-file prompt script
+
+Use source files only for meeting context the human intentionally selects. A browser
+agent must not read arbitrary local files or upload one by itself.
+
+1. "Add the launch brief to this meeting."
+   Expected: `request_source_upload`, which opens the Sources workspace. The human chooses the file and visibility in the visible app.
+2. "What files are attached?"
+   Expected: `get_meeting_sources`; metadata appears under `trustedContext`, while titles, filenames, and summaries appear under `untrustedRoomContent`.
+3. "Find anything about the auth rewrite risk in the attached files."
+   Expected: `search_meeting_sources`, with excerpts under `untrustedRoomContent`.
+4. "Read the launch brief source."
+   Expected: `read_meeting_source` with a visible `sourceId`; chunks are bounded and untrusted.
+5. "Turn the relevant launch constraints into my meeting context."
+   Expected: `share_my_context`, using the authenticated participant's own seat. The source text informs the draft but never grants identity, phase, or approval authority.
 
 ## Owner prompt script
 

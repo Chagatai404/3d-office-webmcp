@@ -45,6 +45,7 @@ const PARTICIPANT_GATED_TOOL_NAMES = [
   "resolve_my_concern",
   "express_my_alignment",
   "request_final_decision_confirmation",
+  "request_source_upload",
 ];
 
 const DOMAIN_OPERATION_BY_TOOL = {
@@ -216,6 +217,12 @@ describe("WebMCP participant/owner authority", () => {
     } as never);
     await executeTool(catalog().request_final_decision_confirmation!, VALID_MUTATION_TOOL_INPUTS.request_final_decision_confirmation);
     expect(confirmationBridge.requestUiConfirmation).toHaveBeenCalledWith({ kind: "decision" });
+  });
+
+  it("opens the source workspace without uploading a file itself", async () => {
+    const result = await executeTool(catalog().request_source_upload!, {}) as { error: { code: string } };
+    expect(result.error.code).toBe("HUMAN_CONFIRMATION_REQUIRED");
+    expect(confirmationBridge.requestUiConfirmation).toHaveBeenCalledWith({ kind: "sources", action: "upload" });
   });
 
   it("does not open confirmation UI when the decision hash is stale or unauthorized", async () => {

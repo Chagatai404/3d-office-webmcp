@@ -171,6 +171,7 @@ function addEngineeringPosition(room: RoomState) {
     summary: "A reduced two-week scope is shippable.",
     category: "capacity",
     priority: "high",
+    referencedSourceIds: [],
     createdAt: demoTimestamp(9),
   };
   room.positions.push(position);
@@ -236,7 +237,7 @@ describe("waiting room readiness and organizer controls", () => {
     const readyButton = buttonNamed("My input is ready");
     expect(readyButton.disabled).toBe(true);
     expect(container.textContent).toContain(
-      "Publish at least one position before marking your input ready.",
+      "Share something with the meeting before marking your input ready.",
     );
   });
 
@@ -281,6 +282,7 @@ describe("waiting room readiness and organizer controls", () => {
       rationale: "It balances scope, quality, and launch timing.",
       expectedOutcomes: ["Faster first value"],
       referencedConstraintIds: ["constraint-1"],
+      referencedSourceIds: [],
       parentProposalId: null,
       status: "candidate",
       createdAt: demoTimestamp(10),

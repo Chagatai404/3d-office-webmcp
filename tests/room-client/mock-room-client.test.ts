@@ -21,6 +21,17 @@ const ENGINEER_POSITION = {
   ],
 };
 
+const SOURCE_INPUT = {
+  title: "Launch brief",
+  filename: "launch-brief.md",
+  mimeType: "text/markdown",
+  byteSize: 64,
+  sha256: "c".repeat(64),
+  visibility: "shared_room" as const,
+  chunks: ["Launch goal: improve onboarding without rewriting auth."],
+  summary: "Launch goal and engineering guardrail.",
+};
+
 describe("MockRoomClient", () => {
   let client: MockRoomClient;
 
@@ -87,6 +98,72 @@ describe("MockRoomClient", () => {
           added.some((entry) => entry.id === constraint.id),
       ),
     ).toBe(true);
+  });
+
+  it("adds meeting source metadata and keeps source text behind a content read", async () => {
+    const before = await client.getRoom("demo");
+    const result = await client.createMeetingSource("demo", SOURCE_INPUT);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const after = await client.getRoom("demo");
+    expect(after.version).toBe(before.version + 1);
+    expect(after.sources).toHaveLength(1);
+    expect(after.sources[0]).toMatchObject({
+      id: result.data.id,
+      uploadedByParticipantId: DEMO_SELF_PARTICIPANT_ID,
+      title: SOURCE_INPUT.title,
+      visibility: "shared_room",
+      status: "ready",
+    });
+    expect(JSON.stringify(after.sources[0])).not.toContain(SOURCE_INPUT.chunks[0]);
+
+    const sources = await client.listMeetingSources("demo");
+    expect(sources.ok).toBe(true);
+    if (!sources.ok) return;
+    expect(sources.data).toHaveLength(1);
+
+    const content = await client.readMeetingSourceContent("demo", {
+      sourceId: result.data.id,
+      cursor: null,
+      maxChunks: 5,
+    });
+    expect(content.ok).toBe(true);
+    if (!content.ok) return;
+    expect(content.data.chunks[0]?.text).toBe(SOURCE_INPUT.chunks[0]);
+  });
+
+  it("searches, shares, and removes meeting sources through the mock client", async () => {
+    const created = await client.createMeetingSource("demo", {
+      ...SOURCE_INPUT,
+      visibility: "private_to_participant",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const search = await client.searchMeetingSources("demo", {
+      query: "onboarding",
+      sourceIds: [],
+      limit: 5,
+    });
+    expect(search.ok).toBe(true);
+    if (!search.ok) return;
+    expect(search.data.results[0]).toMatchObject({
+      sourceId: created.data.id,
+      sourceTitle: SOURCE_INPUT.title,
+      chunkIndex: 0,
+    });
+
+    const shared = await client.shareMeetingSource("demo", created.data.id);
+    expect(shared.ok).toBe(true);
+    if (!shared.ok) return;
+    expect(shared.data.visibility).toBe("shared_room");
+
+    const removed = await client.removeMeetingSource("demo", created.data.id);
+    expect(removed.ok).toBe(true);
+    const after = await client.getRoom("demo");
+    expect(after.sources.find((source) => source.id === created.data.id)?.status).toBe("removed");
   });
 
   it("emits the updated snapshot to subscribers", async () => {

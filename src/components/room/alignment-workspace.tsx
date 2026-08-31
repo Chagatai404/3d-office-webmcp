@@ -130,8 +130,11 @@ export function AlignmentWorkspace() {
                   <span className="participant-name">{participant.name}</span>
                   <span className="participant-role">{participant.role}</span>
                 </div>
-                <span className={entry ? "tag" : "tag tag-muted"}>
-                  {entry ? ALIGNMENT_CHOICE_LABEL[entry.choice] : "Not shared yet"}
+                {/* "Waiting", never "neutral" and never blank: silence is
+                    not agreement, and a row that reads as empty invites
+                    exactly that misreading. */}
+                <span className={entry ? "tag" : "tag tag-waiting"}>
+                  {entry ? ALIGNMENT_CHOICE_LABEL[entry.choice] : "Waiting"}
                 </span>
               </li>
             );

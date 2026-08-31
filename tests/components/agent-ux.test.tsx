@@ -90,8 +90,14 @@ describe("browser-agent UX", () => {
     expect(container.textContent).toContain(
       "WebMCP is unavailable in this browser. You can still participate manually.",
     );
+    // B5: contextual examples for the phase the room is in, framed as
+    // examples rather than the one sequence that works.
     expect(container.textContent).toContain(
-      "Read this meeting and help me express my engineering constraints.",
+      "These are examples, not commands",
+    );
+    expect(container.textContent).toContain("What has everyone shared so far?");
+    expect(container.textContent).toContain(
+      "Share my constraints and mark me ready.",
     );
     expect(
       container.querySelector<HTMLButtonElement>(

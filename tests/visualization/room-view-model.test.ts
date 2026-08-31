@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RoomState } from "@/contracts/room";
 import { demoRoom, demoTimestamp } from "@/fixtures/demo-room";
+import { deriveCoordinationStatus } from "@/components/room/coordination";
 import { createRoomVisualizationState } from "@/visualization/room-view-model";
 
 function withDecision(overrides: Partial<RoomState>): RoomState {
@@ -15,6 +16,7 @@ const candidateProposal = {
   rationale: "Completion should improve before the campaign.",
   expectedOutcomes: ["Higher completion"],
   referencedConstraintIds: ["constraint-1"],
+  referencedSourceIds: [],
   parentProposalId: null,
   status: "candidate" as const,
   createdAt: demoTimestamp(4),
@@ -164,6 +166,7 @@ describe("createRoomVisualizationState", () => {
           deadlines: [],
           actionItems: [],
           dissent: [],
+          sourceProvenance: [],
           expertAdvice: [],
           requiredApprovalParticipantIds,
           decisionHash: "hash-current",
@@ -236,5 +239,89 @@ describe("createRoomVisualizationState", () => {
 
     expect(view.title).toBe(demoRoom.title);
     expect(view.brief).toBe(demoRoom.brief);
+  });
+});
+
+/**
+ * B8: what a seat in the 3D room is allowed to say.
+ *
+ * The scene marks the people the room is waiting on, and it reads that from
+ * the same derivation the DOM roster and the coordination strip read — so a
+ * marker on a chair can never disagree with the sentence printed above it.
+ * A seat is also not a place to invent pressure: where the room is short of a
+ * thing rather than a person, no chair is marked at all.
+ */
+describe("seat state", () => {
+  function waitedOnIds(room: RoomState): string[] {
+    return createRoomVisualizationState(room)
+      .participants.filter((participant) => participant.isWaitedOn)
+      .map((participant) => participant.id);
+  }
+
+  it("marks the humans who have not marked their input ready", () => {
+    expect(waitedOnIds(demoRoom)).toEqual([
+      "participant-product",
+      "participant-engineering",
+      "participant-marketing",
+    ]);
+  });
+
+  it("clears a seat as soon as that person is ready", () => {
+    const room = structuredClone(demoRoom);
+    room.participants = room.participants.map((participant) =>
+      participant.id === "participant-engineering"
+        ? { ...participant, isReady: true }
+        : participant,
+    );
+
+    const view = createRoomVisualizationState(room);
+    const engineer = view.participants.find(
+      (participant) => participant.id === "participant-engineering",
+    );
+    expect(engineer?.isReady).toBe(true);
+    expect(engineer?.isWaitedOn).toBe(false);
+  });
+
+  it("never marks a simulated teammate as somebody the room waits on", () => {
+    expect(waitedOnIds(demoRoom)).not.toContain("participant-design");
+  });
+
+  it("marks nobody while the room is short of an option rather than a person", () => {
+    expect(
+      waitedOnIds(withDecision({ phase: "proposals", proposals: [candidateProposal] })),
+    ).toEqual([]);
+    expect(waitedOnIds(withDecision({ phase: "deliberation" }))).toEqual([]);
+    expect(waitedOnIds(withDecision({ phase: "finalized" }))).toEqual([]);
+  });
+
+  it("marks the people who have not said where they stand", () => {
+    const room = withDecision({
+      phase: "voting",
+      activeProposalId: "proposal-1",
+      proposals: [candidateProposal],
+      alignments: [
+        {
+          proposalId: "proposal-1",
+          participantId: "participant-product",
+          choice: "support",
+          comment: null,
+          updatedAt: demoTimestamp(5),
+        },
+      ],
+    });
+
+    expect(waitedOnIds(room)).toEqual([
+      "participant-engineering",
+      "participant-marketing",
+    ]);
+  });
+
+  it("says exactly what the coordination status says, in every phase", () => {
+    for (const phase of ["input", "proposals", "deliberation", "voting", "finalized"] as const) {
+      const room = withDecision({ phase });
+      expect(waitedOnIds(room)).toEqual(
+        deriveCoordinationStatus(room).waitingParticipantIds,
+      );
+    }
   });
 });

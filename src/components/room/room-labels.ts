@@ -2,6 +2,9 @@ import type {
   ActionOrigin,
   ActorType,
   AlignmentChoice,
+  DecisionRole,
+  MeetingRole,
+  Participant,
   RoomPhase,
 } from "@/contracts/room";
 
@@ -46,6 +49,50 @@ export const PHASE_ORDER: readonly RoomPhase[] = [
   "approval",
   "finalized",
 ];
+
+/**
+ * The three separate things a participant "is", in the words a judge uses.
+ *
+ * `role` is free text the person chose (CEO, CTO, Designer). The two enums
+ * below are authority, and they are deliberately independent: administering
+ * the meeting is not the same as deciding its outcome. Nothing in the UI
+ * should print the raw enum value — read the label from here so "decision
+ * maker" never reaches a person as `decision_maker`.
+ */
+export const MEETING_ROLE_LABEL: Record<MeetingRole, string> = {
+  owner: "Owner",
+  cohost: "Co-host",
+  participant: "Participant",
+};
+
+export const MEETING_ROLE_NOTE: Record<MeetingRole, string> = {
+  owner: "Runs the meeting: admits people, assigns authority, moves the room forward.",
+  cohost: "Helps run the meeting alongside the owner.",
+  participant: "Takes part in the meeting without administrative controls.",
+};
+
+export const DECISION_ROLE_LABEL: Record<DecisionRole, string> = {
+  decision_maker: "Decision maker",
+  contributor: "Contributor",
+  advisor: "Advisor",
+};
+
+export const DECISION_ROLE_NOTE: Record<DecisionRole, string> = {
+  decision_maker: "May review and confirm the final decision.",
+  contributor: "Shapes the decision. Does not confirm it.",
+  advisor: "Advises only — never aligns, approves, or owns the meeting.",
+};
+
+/**
+ * `expert` is never described as a teammate here, and never as someone who
+ * could hold authority: the label itself says advisory, so a judge reading a
+ * participant card cannot mistake the Security Expert for a person who votes.
+ */
+export const PARTICIPANT_KIND_LABEL: Record<Participant["kind"], string> = {
+  human: "Person",
+  simulation: "Simulated teammate",
+  expert: "Security Expert · Advisory",
+};
 
 export const ORIGIN_LABEL: Record<ActionOrigin, string> = {
   manual_ui: "Manual",

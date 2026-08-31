@@ -8,7 +8,16 @@ import {
   previewFinalDecision,
 } from "@/domain/rooms/operations";
 import { getOpenIssues } from "@/domain/rooms/queries";
+import {
+  listMeetingSources,
+  readMeetingSourceContent,
+  searchMeetingSources,
+} from "@/domain/rooms/sources";
 import type { DomainActor, MutationContext } from "@/domain/rooms/repository";
+import type {
+  ReadMeetingSourceContentInput,
+  SearchMeetingSourcesInput,
+} from "@/contracts/room";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { SupabaseRoomRepository } from "@/lib/supabase/room-repository";
 
@@ -47,6 +56,21 @@ export class RoomWebMcpContext {
       await this.getActorUserId(),
       this.roomId,
     );
+  }
+
+  async listMeetingSources() {
+    const actor: DomainActor = { authUserId: await this.getActorUserId(), origin: "webmcp" };
+    return listMeetingSources(this.repository, this.roomId, actor);
+  }
+
+  async readMeetingSourceContent(input: ReadMeetingSourceContentInput) {
+    const actor: DomainActor = { authUserId: await this.getActorUserId(), origin: "webmcp" };
+    return readMeetingSourceContent(this.repository, this.roomId, input, actor);
+  }
+
+  async searchMeetingSources(input: SearchMeetingSourcesInput) {
+    const actor: DomainActor = { authUserId: await this.getActorUserId(), origin: "webmcp" };
+    return searchMeetingSources(this.repository, this.roomId, input, actor);
   }
 
   /**
