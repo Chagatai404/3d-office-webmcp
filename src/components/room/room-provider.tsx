@@ -177,6 +177,9 @@ export function RoomProvider({
   const [loadError, setLoadError] =
     useState<string | null>(null);
 
+  const [reloadAttempt, setReloadAttempt] =
+    useState(0);
+
   /**
    * Register browser-agent tools against the latest canonical room snapshot.
    *
@@ -187,31 +190,30 @@ export function RoomProvider({
 
   useEffect(() => {
     let active = true;
-
-    /**
-     * Subscribe first so a realtime update occurring during initial load
-     * cannot be missed.
-     */
-    const unsubscribe = client.subscribe(
-      roomId,
-      (next) => {
-        if (!active) return;
-
-        setRoom(next);
-        setLoadError(null);
-      },
-    );
+    let unsubscribe: (() => void) | undefined;
 
     client
       .getRoom(roomId)
       .then((next) => {
         if (!active) return;
 
-        /**
-         * If realtime already provided a newer snapshot,
-         * don't overwrite it with the initial request.
-         */
-        setRoom((current) => current ?? next);
+        setRoom(next);
+        setLoadError(null);
+        unsubscribe = client.subscribe(
+          roomId,
+          (updatedRoom) => {
+            if (!active) return;
+
+            setRoom(updatedRoom);
+            setLoadError(null);
+          },
+          () => {
+            if (!active) return;
+
+            setRoom(null);
+            setLoadError("The room could not be loaded.");
+          },
+        );
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -225,9 +227,9 @@ export function RoomProvider({
 
     return () => {
       active = false;
-      unsubscribe();
+      unsubscribe?.();
     };
-  }, [client, roomId]);
+  }, [client, reloadAttempt, roomId]);
 
   const actions = useMemo<RoomActions>(
     () => ({
@@ -342,19 +344,10 @@ export function RoomProvider({
     }, [room, actions]);
 
   const reload = useCallback(() => {
+    setRoom(null);
     setLoadError(null);
-
-    client
-      .getRoom(roomId)
-      .then(setRoom)
-      .catch((error: unknown) => {
-        setLoadError(
-          error instanceof Error
-            ? error.message
-            : "The room could not be loaded.",
-        );
-      });
-  }, [client, roomId]);
+    setReloadAttempt((attempt) => attempt + 1);
+  }, []);
 
   if (loadError) {
     return (

@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run tests/contracts tests/decision tests/webmcp",
     "test:webmcp": "vitest run tests/webmcp",
-    "test:domain": "supabase db reset && node scripts/wait-for-supabase.mjs && vitest run tests/domain",
+    "test:domain": "supabase db reset && node scripts/wait-for-supabase.mjs && vitest run tests/domain --no-file-parallelism",
     "test:e2e": "supabase db reset && node scripts/wait-for-supabase.mjs && playwright test",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",

@@ -1,6 +1,6 @@
 # Repository status
 
-Last updated: 2026-08-30 (Slice 6 / Gate 6 implementation).
+Last updated: 2026-08-31 (Slice 1 / Reliability Cleanup implementation).
 
 ## Core platform
 
@@ -281,6 +281,49 @@ Slice 6 adds one real, deterministic, server-side advisory actor and rebuilds
 See [`judge-demo.md`](judge-demo.md) for the exact judge-facing scenario,
 prompt script, and reset/limitation notes, and `backend-integration.md`'s
 Slice 6 section for the full architecture writeup.
+
+## Slice 1 / Reliability Cleanup
+
+The reliability cleanup is implemented without changing the database schema,
+Supabase migrations, room authority rules, or product scope:
+
+- non-2xx room reads now carry an internal typed status while keeping the
+  browser-facing message generic;
+- realtime refreshes treat 401/403/404 as terminal access loss: the cached
+  version and channel are cleared, subscribers are notified, and the expected
+  transition is not logged as `Room refresh failed`;
+- network, 5xx, and malformed-room failures still use the real refresh-error
+  path, with focused unit coverage for each case;
+- `RoomProvider` now performs the initial read before subscribing, and the
+  realtime client performs one reconciliation read only after `SUBSCRIBED`;
+- confirmed participant removal sends a data-free realtime invalidation so a
+  removed browser re-checks the protected room API even though RLS correctly
+  withholds the room-row change itself. The removed browser clears its room
+  snapshot, loses its WebMCP registrations, and shows the existing generic
+  unavailable-room surface without a reload;
+- both R3F canvases explicitly select `PCFShadowMap`; the dependency-owned
+  `THREE.Clock` warning remains intentionally untouched.
+
+Verification on 2026-08-31:
+
+- `npm run check`: passed (9 files, 151 tests);
+- `npm run test:unit`: passed (26 files, 273 tests, including 7 focused API
+  room-client reliability tests);
+- `npm run test:domain`: passed (7 files, 80 tests);
+- focused Playwright removal regression: passed (live unavailable transition,
+  stale captured tool fails `NOT_AUTHORIZED`, owner history/session preserved);
+- `npm run build`: passed (Next.js 16.3.3 production build);
+- no Supabase migration diff was introduced.
+
+The full Playwright gate is not self-certified in this run. An isolated full
+pass reached 10/13 tests; its three failures were cold-server/test-setup
+timeouts, not assertion regressions. The removal test then passed in isolation
+after the final change. A final clean full rerun was blocked when the local
+Supabase Docker stack lost its project network and failed to recreate its
+Realtime/REST containers. A backup-preserving stop/restart did not repair the
+stack, and destructive no-backup removal was not authorized. Re-run
+`npm run test:e2e` after repairing the local Supabase stack before marking the
+Gate 8 automated-suite item complete.
 
 ## Verification note
 
