@@ -101,3 +101,10 @@ The temporary scene should use procedural geometry only. Final authored assets
 should be small, intentional `.glb` files produced for this product and placed
 under `public/models/meeting-room/` only when they are actually wired into the
 runtime.
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0
+(AGPL-3.0-only).
+
+For commercial licensing inquiries, contact the project maintainers.
