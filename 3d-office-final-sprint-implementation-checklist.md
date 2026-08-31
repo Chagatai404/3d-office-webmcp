@@ -80,7 +80,6 @@ Before coding, all agents must treat the following as canonical.
 
 ## Shared branch assumptions
 
-- [ ] Start backend work from `ui-redesign-ata`.
 - [x] Do not resurrect obsolete desktop-shell / mini-office / free-roaming interaction patterns.
 - [x] Preserve the current simplified meeting-room visual direction.
 - [x] Treat `src/contracts/room.ts` as the canonical public integration contract.
