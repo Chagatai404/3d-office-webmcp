@@ -7,11 +7,12 @@ import {
   type BoardFaceRect,
   boardBodyRect,
   boardCardRects,
+  FACE_MORE_FOOTER,
   useBoardFaceTexture,
 } from "./textures";
 
 /** How much of a board's height the name band takes, when it has one. */
-const LABEL_BAND = 0.52;
+const LABEL_BAND = 0.4;
 
 /** The frame's border around the writing surface, and the board's thickness. */
 const FRAME_BORDER = 0.08;
@@ -51,7 +52,8 @@ export function Board({
   label,
   cards = [],
   columns = 4,
-  cardColor = SURFACE.card,
+  cardColor = SURFACE.boardCard,
+  more = 0,
   body,
   active = false,
   onPress,
@@ -65,6 +67,8 @@ export function Board({
   cards?: BoardCard[];
   columns?: number;
   cardColor?: string;
+  /** Items past what the grid shows, rolled into one "+N more" line. */
+  more?: number;
   /** A flowing paragraph shown instead of cards (Brief board). */
   body?: string;
   /** True when this is the workspace currently in camera focus. */
@@ -109,6 +113,7 @@ export function Board({
           band: label ? LABEL_BAND : 0,
           count: resolvedCards.length,
           columns,
+          footer: more > 0 ? FACE_MORE_FOOTER : 0,
         }).map((rect, index) => ({ key: index, rect, card: resolvedCards[index] ?? null }));
 
   const drawn = useBoardFaceTexture({
@@ -123,6 +128,7 @@ export function Board({
     cardColor,
     accentColor: SURFACE.accent,
     body,
+    more,
   });
 
   return (
