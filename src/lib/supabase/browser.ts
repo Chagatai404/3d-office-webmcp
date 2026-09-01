@@ -18,7 +18,11 @@ export function createBrowserSupabaseClient(): SupabaseClient {
     // sign-in can never leak into another's, while a same-tab reload still
     // keeps the same identity (mirrors the invite-link stash in
     // `room/invite-stash.ts` for the same reason).
-    auth: { persistSession: true, autoRefreshToken: true, storage: window.sessionStorage },
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      storage: typeof window === "undefined" ? undefined : window.sessionStorage,
+    },
   });
   return browserClient;
 }
