@@ -69,6 +69,17 @@ describe("boardCardRects", () => {
     }
   });
 
+  it("holds a footer strip clear below the grid when asked", () => {
+    const withoutFooter = boardCardRects({ ...face, count: 4, columns: 2 });
+    const withFooter = boardCardRects({ ...face, count: 4, columns: 2, footer: 0.4 });
+
+    // Same grid, shorter cards: the "+N more" line lives in the reserved strip.
+    expect(withFooter[0]?.height).toBeLessThan(withoutFooter[0]?.height ?? 0);
+    for (const rect of withFooter) {
+      expect(rect.y + rect.height).toBeLessThanOrEqual(face.height - 0.4 + 1e-9);
+    }
+  });
+
   it("draws and hits nothing where the cards cannot fit", () => {
     expect(boardCardRects({ ...face, count: 0, columns: 2 })).toEqual([]);
     expect(boardCardRects({ ...face, count: 4, columns: 0 })).toEqual([]);

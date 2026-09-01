@@ -37,6 +37,10 @@ export const SURFACE = {
   boardDark: "#2e2b27",
   boardLight: "#f8f6f1",
   card: "#e6e2d8",
+  /* Cards written on a board. Nearly white, so a card reads as a crisp note
+     laid on the near-white board rather than a faint patch the same value as
+     the surface under it. Distinct from `card` (nameplates, other surfaces). */
+  boardCard: "#fffefb",
   accent: "#d9f45b",
   attention: "#df8b5c",
   quiet: "#c7c2b8",

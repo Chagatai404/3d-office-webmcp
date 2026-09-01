@@ -46,17 +46,13 @@ import {
 } from "./textures";
 
 /** How many cards each text board shows before it rolls the rest into "+N more". */
-const CONSTRAINTS_ON_BOARD = 6;
+const CONSTRAINTS_ON_BOARD = 4;
 const PROPOSALS_ON_BOARD = 6;
 const ISSUES_ON_BOARD = 4;
 const SOURCES_ON_BOARD = 4;
 
-/** Adds a "+N more" tail card when `total` outruns what the board shows. */
-function withOverflow(cards: BoardCard[], total: number, shown: number): BoardCard[] {
-  return total > shown
-    ? [...cards, { text: `+${total - shown} more`, tone: "quiet" }]
-    : cards;
-}
+/** How many items a board of `shown` cards leaves for its "+N more" line. */
+const overflowCount = (total: number, shown: number) => Math.max(0, total - shown);
 
 /**
  * The collective decision space — one bright room, open along its front.
@@ -112,19 +108,19 @@ export function CentralMeetingRoom({
       : view.brief
     : "";
 
-  const constraintCards: BoardCard[] = withOverflow(
-    view.constraints.slice(0, CONSTRAINTS_ON_BOARD).map((constraint) => ({
+  const constraintCards: BoardCard[] = view.constraints
+    .slice(0, CONSTRAINTS_ON_BOARD)
+    .map((constraint) => ({
       id: constraint.id,
       label: constraint.category,
       text: constraint.text,
       tone: constraint.priority?.toLowerCase() === "high" ? "attention" : "default",
-    })),
-    view.constraints.length,
-    CONSTRAINTS_ON_BOARD,
-  );
+    }));
+  const constraintsMore = overflowCount(view.constraints.length, CONSTRAINTS_ON_BOARD);
 
-  const proposalCards: BoardCard[] = withOverflow(
-    view.proposals.slice(0, PROPOSALS_ON_BOARD).map((proposal) => ({
+  const proposalCards: BoardCard[] = view.proposals
+    .slice(0, PROPOSALS_ON_BOARD)
+    .map((proposal) => ({
       id: proposal.id,
       text: proposal.title,
       tone: proposal.isActive
@@ -132,23 +128,21 @@ export function CentralMeetingRoom({
         : proposal.status === "superseded"
           ? "quiet"
           : "default",
-    })),
-    view.proposals.length,
-    PROPOSALS_ON_BOARD,
-  );
+    }));
+  const proposalsMore = overflowCount(view.proposals.length, PROPOSALS_ON_BOARD);
 
-  const issueCards: BoardCard[] = withOverflow(
-    openConflicts.slice(0, ISSUES_ON_BOARD).map((conflict) => ({
+  const issueCards: BoardCard[] = openConflicts
+    .slice(0, ISSUES_ON_BOARD)
+    .map((conflict) => ({
       id: conflict.id,
       text: conflict.reason,
       tone: conflict.severity === "blocking" ? "attention" : "quiet",
-    })),
-    openConflicts.length,
-    ISSUES_ON_BOARD,
-  );
+    }));
+  const issuesMore = overflowCount(openConflicts.length, ISSUES_ON_BOARD);
 
-  const sourceCards: BoardCard[] = withOverflow(
-    view.sources.slice(0, SOURCES_ON_BOARD).map((source) => ({
+  const sourceCards: BoardCard[] = view.sources
+    .slice(0, SOURCES_ON_BOARD)
+    .map((source) => ({
       id: source.id,
       text: source.title,
       tone:
@@ -157,10 +151,8 @@ export function CentralMeetingRoom({
             ? "quiet"
             : "default"
           : "attention",
-    })),
-    view.sources.length,
-    SOURCES_ON_BOARD,
-  );
+    }));
+  const sourcesMore = overflowCount(view.sources.length, SOURCES_ON_BOARD);
 
   // The activity halo sits at whichever seat a browser agent most recently
   // acted from, so the pulse only ever claims real, recent agent activity.
@@ -230,6 +222,7 @@ export function CentralMeetingRoom({
             height={BOARDS.constraints.height}
             label={WORKSPACE_LABEL.constraints}
             cards={constraintCards}
+            more={constraintsMore}
             columns={2}
             active={activeWorkspace === "constraints"}
             onPress={
@@ -246,6 +239,7 @@ export function CentralMeetingRoom({
             height={BOARDS.proposals.height}
             label={WORKSPACE_LABEL.proposals}
             cards={proposalCards}
+            more={proposalsMore}
             columns={2}
             active={activeWorkspace === "proposals"}
             onPress={
@@ -262,6 +256,7 @@ export function CentralMeetingRoom({
             height={BOARDS.issues.height}
             label={WORKSPACE_LABEL.issues}
             cards={issueCards}
+            more={issuesMore}
             columns={1}
             active={activeWorkspace === "issues"}
             onPress={
@@ -278,6 +273,7 @@ export function CentralMeetingRoom({
             height={BOARDS.whiteboard.height}
             label={WORKSPACE_LABEL.whiteboard}
             cards={sourceCards}
+            more={sourcesMore}
             columns={2}
             cardColor="#dedad0"
             active={activeWorkspace === "whiteboard"}

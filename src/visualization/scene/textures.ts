@@ -206,12 +206,16 @@ export interface BoardFaceSpec {
   accentColor: string;
   /** A flowing paragraph drawn below the name band instead of cards (Brief). */
   body?: string | undefined;
+  /** How many further items the grid does not show — drawn as one "+N more" line. */
+  more?: number | undefined;
 }
 
 const FACE_MARGIN = 0.22;
 const FACE_GUTTER = 0.16;
 /** Gap between the name band's rule and the first line of a `body` paragraph. */
 const FACE_BODY_TOP_GAP = 0.28;
+/** Height reserved below the card grid for the "+N more" line, when there is one. */
+export const FACE_MORE_FOOTER = 0.3;
 /** Long side of the drawn face. Enough that the name stays crisp at the
  *  board's own camera pose without a 2048px canvas per board. */
 const FACE_RESOLUTION = 1536;
@@ -245,18 +249,22 @@ export function boardCardRects({
   band,
   count,
   columns,
+  footer = 0,
 }: {
   width: number;
   height: number;
   band: number;
   count: number;
   columns: number;
+  /** Height held clear below the grid (the "+N more" line lives there). */
+  footer?: number;
 }): BoardFaceRect[] {
   if (count <= 0 || columns <= 0) return [];
 
   const rows = Math.ceil(count / columns);
   const cardWidth = (width - 2 * FACE_MARGIN - (columns - 1) * FACE_GUTTER) / columns;
-  const cardHeight = (height - band - 2 * FACE_MARGIN - (rows - 1) * FACE_GUTTER) / rows;
+  const cardHeight =
+    (height - band - 2 * FACE_MARGIN - footer - (rows - 1) * FACE_GUTTER) / rows;
   if (cardWidth <= 0 || cardHeight <= 0) return [];
 
   return Array.from({ length: count }, (_, index) => ({
@@ -292,7 +300,10 @@ function toneFill(tone: BoardCardTone | undefined, cardColor: string, accentColo
     case "accent":
       return accentColor;
     case "attention":
-      return SURFACE.attention;
+      // A high-priority / blocked card is flagged with a left edge bar, not a
+      // full fill: a Constraints board where half the items are "high" was a
+      // wall of loud orange rectangles and read as a warning, not a list.
+      return cardColor;
     case "quiet":
       return SURFACE.quiet;
     default:
@@ -367,6 +378,7 @@ export function useBoardFaceTexture(spec: BoardFaceSpec): CanvasTexture | null {
     cardColor,
     accentColor,
     body,
+    more,
   } = spec;
 
   // `cards` is rebuilt every render by the scene, so the redraw keys off the
@@ -382,6 +394,7 @@ export function useBoardFaceTexture(spec: BoardFaceSpec): CanvasTexture | null {
     cardColor,
     accentColor,
     body,
+    more,
     cards,
   });
 
@@ -402,19 +415,19 @@ export function useBoardFaceTexture(spec: BoardFaceSpec): CanvasTexture | null {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     if (label) {
-      const size = px(0.3);
+      const size = px(0.24);
       ctx.font = `600 ${size}px ${FACE_FONT}`;
       ctx.fillStyle = ink;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.letterSpacing = `${size * 0.16}px`;
+      ctx.letterSpacing = `${size * 0.1}px`;
       ctx.fillText(label.toUpperCase(), canvas.width / 2, px(band / 2));
       ctx.letterSpacing = "0px";
 
       // A hairline under the name, the way a real board has a header rule.
       ctx.strokeStyle = ink;
-      ctx.globalAlpha = 0.18;
-      ctx.lineWidth = Math.max(1, px(0.008));
+      ctx.globalAlpha = 0.15;
+      ctx.lineWidth = Math.max(1, px(0.006));
       ctx.beginPath();
       ctx.moveTo(px(FACE_MARGIN), px(band));
       ctx.lineTo(canvas.width - px(FACE_MARGIN), px(band));
@@ -441,28 +454,62 @@ export function useBoardFaceTexture(spec: BoardFaceSpec): CanvasTexture | null {
         (line, index) => ctx.fillText(line, px(FACE_MARGIN), top + index * lineHeight),
       );
     } else if (cards.length > 0) {
-      const rects = boardCardRects({ width, height, band, count: cards.length, columns });
+      const overflow = more && more > 0 ? more : 0;
+      const footer = overflow ? FACE_MORE_FOOTER : 0;
+      const rects = boardCardRects({
+        width,
+        height,
+        band,
+        count: cards.length,
+        columns,
+        footer,
+      });
       if (rects.length > 0) {
         const pad = px(0.12);
-        const labelSize = px(0.1);
-        const textSize = px(0.135);
-        const textLine = textSize * 1.32;
+        const labelSize = px(0.105);
+        const textSize = px(0.14);
+        const textLine = textSize * 1.28;
+        const radius = px(0.04);
 
         cards.forEach((card, index) => {
           const rect = rects[index];
           if (!rect) return;
           const { x, y, width: cardWidth, height: cardHeight } = rect;
 
+          // A crisp note lifted off the surface: a soft shadow and a near-white
+          // fill, so the card reads as laid on the board rather than as a faint
+          // patch the same value as the board behind it.
+          ctx.save();
+          ctx.shadowColor = "rgba(46, 43, 39, 0.16)";
+          ctx.shadowBlur = px(0.055);
+          ctx.shadowOffsetY = px(0.018);
           ctx.fillStyle = toneFill(card.tone, cardColor, accentColor);
-          roundedRect(ctx, px(x), px(y), px(cardWidth), px(cardHeight), px(0.04));
+          roundedRect(ctx, px(x), px(y), px(cardWidth), px(cardHeight), radius);
           ctx.fill();
+          ctx.restore();
 
-          // The edge a written block has against the surface under it.
-          ctx.strokeStyle = ink;
-          ctx.globalAlpha = 0.1;
-          ctx.lineWidth = Math.max(1, px(0.006));
-          ctx.stroke();
-          ctx.globalAlpha = 1;
+          // A hairline settling the card onto the surface (the accent card is a
+          // bold fill and needs none).
+          if (card.tone !== "accent") {
+            ctx.strokeStyle = ink;
+            ctx.globalAlpha = 0.12;
+            ctx.lineWidth = Math.max(1, px(0.005));
+            roundedRect(ctx, px(x), px(y), px(cardWidth), px(cardHeight), radius);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+          }
+
+          // A restrained left-edge flag, clipped to the card's own corners, in
+          // place of flooding the whole card. Enough to pick the urgent items
+          // out of the grid at a glance without the board shouting.
+          if (card.tone === "attention") {
+            ctx.save();
+            roundedRect(ctx, px(x), px(y), px(cardWidth), px(cardHeight), radius);
+            ctx.clip();
+            ctx.fillStyle = SURFACE.attention;
+            ctx.fillRect(px(x), px(y), px(0.05), px(cardHeight));
+            ctx.restore();
+          }
 
           // The text is drawn dark: every card tone here is a light fill.
           const innerX = px(x) + pad;
@@ -475,14 +522,16 @@ export function useBoardFaceTexture(spec: BoardFaceSpec): CanvasTexture | null {
 
           if (card.label) {
             ctx.font = `600 ${labelSize}px ${FACE_FONT}`;
-            ctx.globalAlpha = 0.55;
+            ctx.globalAlpha = 0.5;
+            ctx.letterSpacing = `${labelSize * 0.06}px`;
             ctx.fillText(
               card.label.toUpperCase().slice(0, 34),
               innerX,
               cursorY,
             );
+            ctx.letterSpacing = "0px";
             ctx.globalAlpha = 1;
-            cursorY += labelSize * 1.6;
+            cursorY += labelSize * 1.55;
           }
 
           ctx.font = `500 ${textSize}px ${FACE_FONT}`;
@@ -492,6 +541,23 @@ export function useBoardFaceTexture(spec: BoardFaceSpec): CanvasTexture | null {
               ctx.fillText(line, innerX, cursorY + lineIndex * textLine),
           );
         });
+      }
+
+      // The rest of the list, as one quiet line under the grid — a pointer to
+      // the workspace, never a card competing with the real ones.
+      if (overflow) {
+        const size = px(0.135);
+        ctx.font = `500 ${size}px ${FACE_FONT}`;
+        ctx.fillStyle = ink;
+        ctx.globalAlpha = 0.5;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(
+          `+${overflow} more`,
+          px(FACE_MARGIN),
+          px(height - FACE_MARGIN - FACE_MORE_FOOTER / 2),
+        );
+        ctx.globalAlpha = 1;
       }
     } else {
       const size = px(0.15);

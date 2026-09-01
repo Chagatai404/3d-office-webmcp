@@ -44,29 +44,37 @@ const characterUrl = (id: string) => `/models/people/${id}.glb`;
  * by eye.
  *
  * Sampling `office-chair.glb` by height gives a seat pad whose top is at
- * y≈0.44, running from z −0.30 at the backrest to z +0.35 at the front lip;
- * the backrest's front face stands around z −0.29. Sampling a figure gives
- * a baked seated pose with the feet at y=0, the buttocks underside at y≈0.47,
- * and the buttocks spanning z −0.21 to +0.10 before the thighs carry forward
- * to the knees.
+ * y≈0.47, running from z −0.30 at the backrest to z +0.35 at the front lip.
+ * Sampling every figure's baked seated pose gives feet at y=0 and a
+ * hips/buttocks mass whose underside sits near y≈0.47 and whose rear face
+ * reaches back to z≈−0.37 — a good 15cm further back than an earlier draft of
+ * these figures, which is why the old `SIT_BACK` of −0.08 had buried the whole
+ * torso in the backrest and perched the pelvis on its top edge (the figure
+ * read as levitating in front of the seat).
  *
- * `SIT_BACK` was −0.24, which put the backside at z −0.45 — through the
- * backrest and off the back of the pad, so the figure read as hovering behind
- * its chair. −0.08 sits the buttocks over the rear half of the pad with the
- * lower back just off the backrest, which is how a person actually sits.
+ * +0.12 carries the figure forward until the buttocks sit over the middle of
+ * the pad with the lower back near — not through — the backrest, which is how
+ * a person actually sits in a task chair. Checked across all eight figures.
  */
-const SIT_BACK = -0.08;
+const SIT_BACK = 0.12;
 
 /**
- * The pose expects a 0.47 seat and the pad is at 0.44, so the figure drops
- * 3cm to close the gap. Split as 2cm here and 1cm left to the cushion: sinking
- * the feet 2cm into the rug pile is invisible, where a bottom floating a
- * finger's width above the pad is not.
+ * The baked pose sits a touch taller than this pad, so the figure drops to
+ * close the gap: −0.06 rests the thigh/buttock underside on the cushion while
+ * keeping both shoes on the floor. Any deeper and the backside visibly sinks
+ * through the cushion and a heel digs into the rug.
  */
-const SIT_DROP = -0.02;
+const SIT_DROP = -0.06;
 
 /** Feet rest on the rug — the same height the chair stands on. */
 const FEET_Y = RUG_TOP + SIT_DROP;
+
+/**
+ * The "you" ring lies on the rug and marks the seat, so it is anchored to the
+ * rug rather than to the figure — `SIT_DROP` sinks the feet a little into the
+ * pile, and the ring must not follow them under the floor.
+ */
+const RING_Y = RUG_TOP + 0.002;
 
 export function ParticipantAvatar({
   participant,
@@ -101,7 +109,7 @@ export function ParticipantAvatar({
       ) : null}
 
       {participant.isSelf ? (
-        <mesh position={[0, FEET_Y + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, RING_Y, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <torusGeometry args={[0.46, 0.045, 6, 24]} />
           <meshStandardMaterial
             color={color}
