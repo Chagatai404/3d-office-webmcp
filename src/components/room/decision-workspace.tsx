@@ -35,7 +35,10 @@ const DECISION_POLICY_LABEL: Record<RoomState["decisionPolicy"], string> = {
  * decision hash, and that hash is voided the moment the plan (or, under
  * `owner_decides`, the owner) changes underneath it.
  */
-export function DecisionWorkspace() {
+/** A seated participant's id, or `"input"` for the viewer's own review-and-approve tab. */
+export type DecisionWorkspaceTab = string;
+
+export function DecisionWorkspace({ tab }: { tab: DecisionWorkspaceTab }) {
   const { room } = useRoom();
 
   /*
@@ -43,11 +46,13 @@ export function DecisionWorkspace() {
    * and the record once it has been. One place in the room, one artifact: a
    * finalized meeting does not send anyone somewhere new to find out what was
    * decided, and there is no second surface that could disagree with this one.
+   * The record has no tabs of its own — there is nothing left to switch
+   * between once the room has one shared artifact.
    */
-  return room.phase === "finalized" ? <FinalReport /> : <DecisionReview />;
+  return room.phase === "finalized" ? <FinalReport /> : <DecisionReview tab={tab} />;
 }
 
-function DecisionReview() {
+function DecisionReview({ tab }: { tab: DecisionWorkspaceTab }) {
   const { room, self, actions } = useRoom();
   const { agentPreparedDecision, clearDecisionHandoff } = useShell();
 
@@ -84,6 +89,17 @@ function DecisionReview() {
   const ownerName =
     room.participants.find((participant) => participant.id === room.ownerParticipantId)?.name ??
     "the decision owner";
+  const viewedParticipant = tab !== "input" ? room.participants.find((participant) => participant.id === tab) : null;
+  const viewedIsApprover = Boolean(
+    viewedParticipant && decisionPreview?.requiredApprovalParticipantIds.includes(viewedParticipant.id),
+  );
+  const viewedHasApproved = Boolean(
+    viewedParticipant &&
+      decisionHash &&
+      decisionPreview?.approvals.some(
+        (approval) => approval.participantId === viewedParticipant.id && approval.decisionHash === decisionHash,
+      ),
+  );
 
   async function handlePreviewClick() {
     if (previewPending || !self) return;
@@ -112,172 +128,130 @@ function DecisionReview() {
       aria-labelledby="decision-heading"
       data-testid="decision-workspace"
     >
-      <h2 className="panel-heading" id="decision-heading">
-        Decision
+      <h2 className={viewedParticipant ? "panel-heading" : "visually-hidden"} id="decision-heading">
+        {viewedParticipant ? viewedParticipant.name : "Your input"}
       </h2>
 
-      {/* B6: an agent that stops here has not failed, and the room must not
-          look like it has. The tool returned `HUMAN_CONFIRMATION_REQUIRED`,
-          the shell brought the person to this surface, and this says why in
-          the person's own language rather than leaving a refusal code to be
-          read as a bug. */}
-      {agentPreparedDecision ? (
-        <aside className="decision-handoff" role="status" data-testid="agent-decision-handoff">
-          <strong className="decision-handoff-title">
-            Your agent prepared the final decision.
-          </strong>
+      {viewedParticipant ? (
+        <section aria-labelledby="policy-heading" data-testid="policy-panel">
           <p>
-            Review this exact decision before approving. Your agent went as far as it is allowed
-            to go — the last step is deliberately yours, and no agent can take it for you.
+            <span className="tag" data-testid="decision-policy-tag">
+              {DECISION_POLICY_LABEL[room.decisionPolicy]}
+            </span>
           </p>
-        </aside>
-      ) : null}
+          {room.decisionPolicy === "owner_decides" ? (
+            <p className="panel-note">
+              {viewedParticipant.id === room.ownerParticipantId
+                ? `${ownerName} is the decision owner.`
+                : `Not the decision owner. Only ${ownerName} can make the final decision.`}
+            </p>
+          ) : viewedIsApprover ? (
+            <p>
+              <span className={viewedHasApproved ? "status-pill status-pill-active" : "status-pill"}>
+                {viewedHasApproved ? "Approved" : "Waiting"}
+              </span>
+            </p>
+          ) : (
+            <p className="panel-note">Not a required decision-maker for this candidate.</p>
+          )}
+        </section>
+      ) : (
+        <>
+          {/* B6: an agent that stops here has not failed, and the room must not
+              look like it has. The tool returned `HUMAN_CONFIRMATION_REQUIRED`,
+              the shell brought the person to this surface, and this says why in
+              the person's own language rather than leaving a refusal code to be
+              read as a bug. */}
+          {agentPreparedDecision ? (
+            <aside className="decision-handoff" role="status" data-testid="agent-decision-handoff">
+              <strong className="decision-handoff-title">
+                Your agent prepared the final decision.
+              </strong>
+              <p>
+                Review this exact decision before approving. Your agent went as far as it is allowed
+                to go — the last step is deliberately yours, and no agent can take it for you.
+              </p>
+            </aside>
+          ) : null}
 
-      <section className="decision-section" aria-labelledby="policy-heading" data-testid="policy-panel">
-        <h3 className="panel-subheading" id="policy-heading">
-          Decision authority
-        </h3>
-        <p>
-          <span className="tag" data-testid="decision-policy-tag">
-            {DECISION_POLICY_LABEL[room.decisionPolicy]}
-          </span>
-        </p>
-        {room.decisionPolicy === "owner_decides" ? (
-          <p className="panel-note">
-            Decision owner: {ownerName}.{" "}
-            {isOwner
-              ? "You are the decision owner."
-              : "Only the decision owner can make the final decision. Others may review the exact candidate."}
-          </p>
-        ) : (
-          <DecisionMakerApprovalProgress room={room} decisionPreview={decisionPreview} />
-        )}
-      </section>
+          <section aria-labelledby="approval-heading" data-testid="approval-panel">
+            <h3 className="panel-subheading" id="approval-heading">
+              {room.decisionPolicy === "owner_decides" ? "Final preview and decision" : "Final preview and approval"}
+            </h3>
+            <button
+              className="button-quiet"
+              type="button"
+              disabled={!self || room.phase !== "approval" || previewPending}
+              onClick={handlePreviewClick}
+            >
+              {previewPending ? "Loading preview..." : "Refresh exact server preview"}
+            </button>
+            <ActionFeedback result={previewResult} />
 
-      <section className="decision-section" aria-labelledby="approval-heading" data-testid="approval-panel">
-        <h3 className="panel-subheading" id="approval-heading">
-          {room.decisionPolicy === "owner_decides" ? "Final preview and decision" : "Final preview and approval"}
-        </h3>
-        <button
-          className="button-quiet"
-          type="button"
-          disabled={!self || room.phase !== "approval" || previewPending}
-          onClick={handlePreviewClick}
-        >
-          {previewPending ? "Loading preview..." : "Refresh exact server preview"}
-        </button>
-        <ActionFeedback result={previewResult} />
-
-        {decisionPreview ? (
-          <>
-            <DecisionPreviewView room={room} preview={decisionPreview} />
-            {canAct ? (
+            {decisionPreview ? (
               <>
-                <label className="decision-confirm">
-                  <input
-                    type="checkbox"
-                    checked={confirmedDecisionHash === decisionHash}
-                    disabled={hasApprovedCurrentHash}
-                    onChange={(event) =>
-                      setConfirmedDecisionHash(event.target.checked ? decisionHash : null)
-                    }
-                  />
-                  <span>
-                    I reviewed this decision
-                    {/* The confirmation is bound to one exact frozen decision,
-                        and it says which — quietly, beside the tick, rather
-                        than as a hash a person is asked to read aloud. */}
-                    {decisionHash ? (
-                      <small className="decision-confirm-hash">
-                        Bound to {shortDecisionHash(decisionHash)}. If the plan changes, this
-                        confirmation is void.
-                      </small>
-                    ) : null}
-                  </span>
-                </label>
-                <button
-                  className="button decision-action"
-                  type="button"
-                  disabled={hasApprovedCurrentHash || approvalPending || confirmedDecisionHash !== decisionHash}
-                  onClick={handleApprovalClick}
-                  data-testid="confirm-approval"
-                >
-                  {hasApprovedCurrentHash
-                    ? room.decisionPolicy === "owner_decides"
-                      ? "Decision recorded"
-                      : "Approval already recorded"
-                    : approvalPending
-                      ? "Recording..."
-                      : room.decisionPolicy === "owner_decides"
-                        ? "Make final decision"
-                        : "Approve this decision"}
-                </button>
-                <p className="panel-note" data-testid="human-confirmation-note">
-                  This one step stays with a person on purpose. An agent can prepare the exact
-                  decision and bring it here; recording it takes your own confirmation.
-                </p>
+                <DecisionPreviewView room={room} preview={decisionPreview} />
+                {canAct ? (
+                  <>
+                    <label className="decision-confirm">
+                      <input
+                        type="checkbox"
+                        checked={confirmedDecisionHash === decisionHash}
+                        disabled={hasApprovedCurrentHash}
+                        onChange={(event) =>
+                          setConfirmedDecisionHash(event.target.checked ? decisionHash : null)
+                        }
+                      />
+                      <span>
+                        I reviewed this decision
+                        {/* The confirmation is bound to one exact frozen decision,
+                            and it says which — quietly, beside the tick, rather
+                            than as a hash a person is asked to read aloud. */}
+                        {decisionHash ? (
+                          <small className="decision-confirm-hash">
+                            Bound to {shortDecisionHash(decisionHash)}. If the plan changes, this
+                            confirmation is void.
+                          </small>
+                        ) : null}
+                      </span>
+                    </label>
+                    <button
+                      className="button decision-action"
+                      type="button"
+                      disabled={hasApprovedCurrentHash || approvalPending || confirmedDecisionHash !== decisionHash}
+                      onClick={handleApprovalClick}
+                      data-testid="confirm-approval"
+                    >
+                      {hasApprovedCurrentHash
+                        ? room.decisionPolicy === "owner_decides"
+                          ? "Decision recorded"
+                          : "Approval already recorded"
+                        : approvalPending
+                          ? "Recording..."
+                          : room.decisionPolicy === "owner_decides"
+                            ? "Make final decision"
+                            : "Approve this decision"}
+                    </button>
+                    <p className="panel-note" data-testid="human-confirmation-note">
+                      This one step stays with a person on purpose. An agent can prepare the exact
+                      decision and bring it here; recording it takes your own confirmation.
+                    </p>
+                  </>
+                ) : (
+                  <p className="panel-note">
+                    {room.decisionPolicy === "owner_decides"
+                      ? "Only the decision owner can make the final decision."
+                      : "Only a required decision-maker can approve this decision. Contributor alignment is visible but does not count as approval."}
+                  </p>
+                )}
               </>
             ) : (
-              <p className="panel-note">
-                {room.decisionPolicy === "owner_decides"
-                  ? "Only the decision owner can make the final decision."
-                  : "Only a required decision-maker can approve this decision. Contributor alignment is visible but does not count as approval."}
-              </p>
+              <p className="panel-empty">The final candidate appears here during decision review.</p>
             )}
-          </>
-        ) : (
-          <p className="panel-empty">The final candidate appears here during decision review.</p>
-        )}
-        <ActionFeedback result={approvalResult} />
-      </section>
-
+            <ActionFeedback result={approvalResult} />
+          </section>
+        </>
+      )}
     </section>
-  );
-}
-
-/**
- * `equal_authority_consensus` progress: every required decision-maker's
- * approval status against the current exact hash, never a percentage.
- */
-function DecisionMakerApprovalProgress({
-  room,
-  decisionPreview,
-}: {
-  room: RoomState;
-  decisionPreview: FinalDecisionPreview | null;
-}) {
-  const requiredIds =
-    decisionPreview?.requiredApprovalParticipantIds ??
-    room.participants
-      .filter(
-        (participant) =>
-          participant.status === "active" &&
-          participant.kind === "human" &&
-          participant.decisionRole === "decision_maker",
-      )
-      .map((participant) => participant.id);
-  const approvedIds = new Set((decisionPreview?.approvals ?? []).map((approval) => approval.participantId));
-
-  return (
-    <div data-testid="decision-maker-approvals">
-      <p className="panel-subheading">Decision-maker approvals</p>
-      <ul className="waiting-list">
-        {requiredIds.map((id) => {
-          const participant = room.participants.find((candidate) => candidate.id === id);
-          const approved = approvedIds.has(id);
-          return (
-            <li key={id} className="waiting-row">
-              <span className="participant-name">{participant?.name ?? id}</span>
-              <span className={approved ? "status-pill status-pill-active" : "status-pill"}>
-                {approved ? "Approved" : "Waiting"}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-      <p className="panel-note">
-        {approvedIds.size} of {requiredIds.length} required decision-makers have approved.
-      </p>
-    </div>
   );
 }

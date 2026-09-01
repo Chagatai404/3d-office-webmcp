@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { MouseEvent } from "react";
+import { BrandMark } from "@/components/shell/brand-mark";
 import { useFlowStage } from "@/components/onboarding/flow-stage";
 import { useOnboardingWebMcpTools } from "@/webmcp/register-tools";
 
@@ -47,7 +48,7 @@ export default function Home() {
     <main className="flow-page welcome" data-leaving={leaving ? "" : undefined}>
       <div className="welcome-lead">
         <Link className="flow-brand" href="/">
-          <span aria-hidden="true" className="flow-brand-mark" />
+          <BrandMark size={22} />
           <span className="flow-brand-name">Quorum</span>
           <span aria-hidden="true" className="flow-brand-divider" />
           <span className="flow-brand-tag">Decision rooms</span>

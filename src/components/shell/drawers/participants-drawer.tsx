@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ParticipantPanel } from "@/components/room/participant-panel";
 import { readInviteUrl } from "@/components/room/invite-stash";
-import { RoomStatusPanel } from "@/components/room/room-status";
 import { useRoom } from "@/components/room/room-provider";
 import {
   DECISION_ROLE_LABEL,
@@ -14,8 +13,7 @@ import { DrawerShell } from "./drawer-shell";
 
 export function ParticipantsDrawer() {
   return (
-    <DrawerShell label="Participants" title="Participants">
-      <RoomStatusPanel />
+    <DrawerShell label="Participants" title="Participants" dark>
       <OwnerWaitingRoom />
       <InviteLink />
       <ParticipantPanel />

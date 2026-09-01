@@ -27,9 +27,9 @@ insert into public.participants (
   id, room_id, name, role, kind, meeting_role, decision_role,
   required_for_approval, created_at
 ) values
-  ('demo-product', 'demo', 'Founder / Product Lead', 'Decision owner', 'human', 'owner', 'decision_maker', false, '2026-08-28T12:00:00Z'),
-  ('demo-engineer', 'demo', 'Engineer', 'Engineering', 'simulation', 'participant', 'advisor', true, '2026-08-28T12:00:00Z'),
-  ('demo-designer', 'demo', 'Product Designer', 'Design', 'simulation', 'participant', 'advisor', true, '2026-08-28T12:00:00Z'),
+  ('demo-product', 'demo', 'Founder / Product Lead', 'Decision owner', 'human', 'owner', 'decision_maker', true, '2026-08-28T12:00:00Z'),
+  ('demo-engineer', 'demo', 'Engineer', 'Engineering', 'simulation', 'participant', 'advisor', false, '2026-08-28T12:00:00Z'),
+  ('demo-designer', 'demo', 'Product Designer', 'Design', 'simulation', 'participant', 'advisor', false, '2026-08-28T12:00:00Z'),
   ('demo-marketing', 'demo', 'Growth Lead', 'Growth / Marketing', 'simulation', 'participant', 'advisor', false, '2026-08-28T12:00:00Z'),
   ('demo-security', 'demo', 'Security Expert', 'Security Expert · Advisory', 'expert', 'participant', 'advisor', false, '2026-08-28T12:00:00Z');
 

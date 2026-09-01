@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { ApiRoomOnboardingClient } from "@/clients/api-room-onboarding-client";
 import type { RoomOnboardingClient } from "@/clients/room-onboarding-client";
 import type { JoinRequest, RoomInvitePreview } from "@/contracts/room";
-import styles from "@/components/onboarding/onboarding.module.css";
 import {
   JOIN_REQUEST_CREATED_EVENT,
   readPendingJoinRequest,
@@ -140,58 +139,118 @@ export function JoinRoom({ roomId: routeRoomId, inviteToken = null, client: supp
   if (inviteToken && preview && !preview.inviteValid) return <JoinStatus title="This invitation can’t be used." detail="It may be invalid, expired, or revoked." rejected />;
 
   return (
-    <main className={styles.joinPage}>
-      <header className={styles.joinHeader}><Link className={styles.brand} href="/">Quorum</Link><span className={styles.secureLabel}>Secure waiting room</span></header>
-      <section className={styles.joinStage}>
-        <form className={styles.joinCard} onSubmit={submit} aria-label="Join meeting">
-          <div className={styles.joinCardIntro}>
-            <p className={styles.eyebrow}>{inviteToken ? "Invitation" : "Join meeting"}</p>
-            <h1>{preview?.inviteValid ? preview.title : "Request a seat"}</h1>
-            <p>{preview?.inviteValid ? preview.brief : "A valid passcode or invite lets you request admission. The owner decides who enters."}</p>
-          </div>
-          {!inviteToken ? <>
-            <div className={styles.pasteRow}>
-              <label htmlFor="invite-link">Paste your invite link</label>
-              <div className={styles.pasteField}>
-                <input
-                  id="invite-link"
-                  name="inviteLink"
-                  inputMode="url"
-                  autoComplete="off"
-                  placeholder="https://…/room/…/join?invite=…"
-                  value={linkDraft}
-                  onChange={(event) => setLinkDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      followInviteLink();
-                    }
-                  }}
-                />
-                <button type="button" className={styles.inlineButton} onClick={followInviteLink}>
-                  Continue
-                </button>
-              </div>
-              {linkError ? <p className={styles.linkHint} role="alert">{linkError}</p> : null}
-              <p className={styles.linkHint}>
-                The link is the whole invitation — it carries the room and skips the code below.
-              </p>
+    <form className="flow-card" onSubmit={submit} aria-label="Join meeting" noValidate>
+      <p className="flow-eyebrow">{inviteToken ? "Invitation" : "Join meeting"}</p>
+      <h1 className="flow-card-title">{preview?.inviteValid ? preview.title : "Request a seat"}</h1>
+      <p className="flow-card-lede">
+        {preview?.inviteValid
+          ? preview.brief
+          : "A valid passcode or invite lets you request admission. The owner decides who enters."}
+      </p>
+
+      {!inviteToken ? (
+        <fieldset className="flow-fieldset" disabled={pending}>
+          <legend className="visually-hidden">Find your meeting</legend>
+          <label className="flow-field" htmlFor="invite-link">
+            <span>Paste your invite link</span>
+            <div className="flow-share-field">
+              <input
+                id="invite-link"
+                name="inviteLink"
+                inputMode="url"
+                autoComplete="off"
+                placeholder="https://…/room/…/join?invite=…"
+                value={linkDraft}
+                onChange={(event) => setLinkDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    followInviteLink();
+                  }
+                }}
+              />
+              <button type="button" className="flow-copy-btn" onClick={followInviteLink}>
+                Continue
+              </button>
             </div>
-            <details className={styles.manualJoin}>
-              <summary>I only have a room code, not a link</summary>
-              <div className={styles.manualJoinBody}>
-                <label>Room ID<input name="roomId" value={roomId} onChange={(event) => setRoomId(event.target.value)} /></label>
-                <label>Passcode<input name="passcode" type="password" value={passcode} onChange={(event) => setPasscode(event.target.value)} /></label>
-              </div>
-            </details>
-          </> : null}
-          <label>Your name<input name="displayName" autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
-          <label>Your role<input name="role" value={role} onChange={(event) => setRole(event.target.value)} placeholder="Designer" /></label>
-          {error ? <div className={styles.claimFeedback} role="alert">{error}</div> : null}
-          <button className={styles.submitButton} type="submit" disabled={pending || (Boolean(inviteToken) && !preview?.inviteValid)}>{pending ? "Requesting…" : "Request admission"}</button>
-        </form>
-      </section>
-    </main>
+            {linkError ? (
+              <small className="flow-field-error" role="alert">{linkError}</small>
+            ) : (
+              <span className="flow-field-hint">
+                The link is the whole invitation — it carries the room and skips the code below.
+              </span>
+            )}
+          </label>
+
+          <details className="flow-reveal">
+            <summary>I only have a room code, not a link</summary>
+            <div className="flow-reveal-body">
+              <label className="flow-field">
+                <span>Room ID</span>
+                <input
+                  className="flow-input"
+                  name="roomId"
+                  value={roomId}
+                  onChange={(event) => setRoomId(event.target.value)}
+                />
+              </label>
+              <label className="flow-field">
+                <span>Passcode</span>
+                <input
+                  className="flow-input"
+                  name="passcode"
+                  type="password"
+                  value={passcode}
+                  onChange={(event) => setPasscode(event.target.value)}
+                />
+              </label>
+            </div>
+          </details>
+        </fieldset>
+      ) : null}
+
+      <fieldset className="flow-fieldset" disabled={pending}>
+        <legend className="visually-hidden">Your details</legend>
+        <label className="flow-field">
+          <span>Your name</span>
+          <input
+            className="flow-input"
+            name="displayName"
+            autoComplete="name"
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+          />
+        </label>
+        <label className="flow-field">
+          <span>Your role</span>
+          <input
+            className="flow-input"
+            name="role"
+            value={role}
+            onChange={(event) => setRole(event.target.value)}
+            placeholder="e.g. Designer"
+          />
+        </label>
+      </fieldset>
+
+      {error ? (
+        <div className="flow-alert" role="alert">
+          <strong>We couldn’t submit your request.</strong>
+          <span>{error}</span>
+        </div>
+      ) : null}
+
+      <div className="flow-form-actions">
+        <button
+          className="flow-btn flow-btn-primary"
+          type="submit"
+          disabled={pending || (Boolean(inviteToken) && !preview?.inviteValid)}
+        >
+          {pending ? "Requesting…" : "Request admission"}
+        </button>
+        <Link className="flow-btn flow-btn-ghost" href="/">Cancel</Link>
+      </div>
+    </form>
   );
 }
 
@@ -216,5 +275,16 @@ function parseInviteLink(value: string): string | null {
 }
 
 function JoinStatus({ title, detail, rejected = false }: { title: string; detail: string; rejected?: boolean }) {
-  return <main className={styles.joinPage}><section className={styles.joinStage}><div className={styles.joinStateCard} role="status"><p className={styles.eyebrow}>{rejected ? "Request closed" : "Waiting room"}</p><h1>{title}</h1><p>{detail}</p>{rejected ? <Link className={styles.secondaryAction} href="/">Back to start</Link> : null}</div></section></main>;
+  return (
+    <section className="flow-card" role="status" aria-labelledby="join-status-title">
+      <p className="flow-eyebrow">{rejected ? "Request closed" : "Waiting room"}</p>
+      <h1 className="flow-card-title" id="join-status-title">{title}</h1>
+      <p className="flow-card-lede">{detail}</p>
+      {rejected ? (
+        <p>
+          <Link className="flow-text-link" href="/">Back to start</Link>
+        </p>
+      ) : null}
+    </section>
+  );
 }

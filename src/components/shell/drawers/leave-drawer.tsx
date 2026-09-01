@@ -10,7 +10,7 @@ export function LeaveDrawer() {
   const { closeDrawer } = useShell();
 
   return (
-    <DrawerShell label="Leave the room" title="Leave the room?">
+    <DrawerShell label="Leave the room" title="Leave the room?" dark>
       <p className="drawer-note">
         Your constraints, objections, and alignment stay exactly as they are. Your seat stays yours —
         you can walk back in from the same link.

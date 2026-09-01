@@ -68,7 +68,7 @@ afterEach(async () => {
 
 describe("input phase", () => {
   it("asks one question with one box", async () => {
-    await mount(<PositionsPanel />, "input");
+    await mount(<PositionsPanel tab="input" />, "input");
 
     expect(container.textContent).toContain("What should the team know from you?");
     expect(
@@ -84,7 +84,7 @@ describe("input phase", () => {
   });
 
   it("keeps the structured fields reachable, behind a disclosure", async () => {
-    await mount(<PositionsPanel />, "input");
+    await mount(<PositionsPanel tab="input" />, "input");
 
     const details = container.querySelector("details");
     expect(details).not.toBeNull();
@@ -101,7 +101,7 @@ describe("input phase", () => {
 
 describe("proposals phase", () => {
   it("asks for the option in the proposer's own words", async () => {
-    await mount(<ProposalsWorkspace />, "proposals");
+    await mount(<ProposalsWorkspace tab="input" />, "proposals");
 
     expect(container.textContent).toContain("Describe your proposed option");
     expect(
@@ -117,7 +117,7 @@ describe("proposals phase", () => {
   });
 
   it("moves title, rationale and outcomes into the optional refinement", async () => {
-    await mount(<ProposalsWorkspace />, "proposals");
+    await mount(<ProposalsWorkspace tab="input" />, "proposals");
 
     const details = container.querySelector("details");
     expect(details?.open).toBe(false);

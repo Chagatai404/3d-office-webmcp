@@ -13,13 +13,13 @@ import { useRoom } from "./room-provider";
  */
 export function RoomSummary() {
   const { room, visualization } = useRoom();
-  const { goToWorkspace } = useShell();
+  const { goToWorkspace, chromeHidden } = useShell();
   const openConflicts = visualization.conflicts.filter((conflict) => conflict.status === "open");
   const blocking = openConflicts.filter((conflict) => conflict.severity === "blocking").length;
   const coordination = deriveCoordinationStatus(room);
 
   return (
-    <div className="room-summary">
+    <div className="room-summary" data-hidden={chromeHidden || undefined}>
       <span className="room-summary-fact">
         <span className="room-summary-label">Deciding</span>
         <span className="room-summary-value">{room.title}</span>

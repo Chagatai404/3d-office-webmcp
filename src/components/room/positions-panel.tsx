@@ -63,7 +63,10 @@ function toNullable(value: string): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
-export function PositionsPanel() {
+/** A seated participant's id, or `"input"` for the viewer's own compose tab. */
+export type PositionsPanelTab = string;
+
+export function PositionsPanel({ tab }: { tab: PositionsPanelTab }) {
   const { room, self, actions } = useRoom();
   const fieldId = useId();
   const webMcpAvailability = useSyncExternalStore(
@@ -189,80 +192,82 @@ export function PositionsPanel() {
     setReadyResult(actionResult);
   }
 
-  return (
-    <section className="panel-block" aria-labelledby="positions-heading">
-      <h2 className="panel-heading" id="positions-heading">
-        What the team has shared
-      </h2>
+  if (tab !== "input") {
+    const owner = room.participants.find((participant) => participant.id === tab);
+    const theirPositions = room.positions.filter((position) => position.participantId === tab);
 
-      {room.positions.length === 0 ? (
-        <p className="panel-empty">Nobody has shared anything with the meeting yet.</p>
-      ) : (
-        <ul className="position-list">
-          {room.positions.map((position) => {
-            const owner = room.participants.find(
-              (participant) => participant.id === position.participantId,
-            );
-            const owned = room.constraints.filter(
-              (constraint) => constraint.participantId === position.participantId,
-            );
+    return (
+      <section className="panel-block" aria-labelledby="positions-heading">
+        <h2 className="panel-heading" id="positions-heading">
+          {owner?.name ?? "Participant"}
+        </h2>
 
-            return (
-              <li key={position.id} className="position-item">
-                <p className="position-owner">
-                  {owner?.name ?? "Unknown participant"}
-                  <span className="position-owner-role">
-                    {owner?.role ?? "Unassigned"}
-                  </span>
-                  {position.category ? (
-                    <span className="tag">{position.category}</span>
-                  ) : null}
-                  {position.priority ? (
-                    <span className="tag">{position.priority} priority</span>
-                  ) : null}
-                </p>
-                <p className="position-summary">{position.summary}</p>
-                {position.referencedSourceIds.length > 0 ? (
-                  <p className="position-sources">
-                    From:{" "}
-                    {position.referencedSourceIds
-                      .map(
-                        (id) =>
-                          room.sources.find((source) => source.id === id)?.title ??
-                          "a removed source",
-                      )
-                      .join(", ")}
+        {theirPositions.length === 0 ? (
+          <p className="panel-empty">Nothing shared yet.</p>
+        ) : (
+          <ul className="position-list">
+            {theirPositions.map((position) => {
+              const owned = room.constraints.filter(
+                (constraint) => constraint.participantId === position.participantId,
+              );
+
+              return (
+                <li key={position.id} className="position-item">
+                  <p className="position-owner">
+                    {position.category ? (
+                      <span className="tag">{position.category}</span>
+                    ) : null}
+                    {position.priority ? (
+                      <span className="tag">{position.priority} priority</span>
+                    ) : null}
                   </p>
-                ) : null}
-                {owned.length > 0 ? (
-                  <ul className="constraint-list">
-                    {owned.map((constraint) => (
-                      <li
-                        key={constraint.id}
-                        className="constraint-item"
-                        /* Named so pressing this constraint on the wall board
-                           opens the workspace at this row. */
-                        data-board-item={constraint.id}
-                      >
-                        <span className="constraint-category">
-                          {constraint.category}
-                        </span>
-                        <span>{constraint.text}</span>
-                        {constraint.priority ? (
-                          <span className="tag tag-muted">
-                            {constraint.priority}
+                  <p className="position-summary">{position.summary}</p>
+                  {position.referencedSourceIds.length > 0 ? (
+                    <p className="position-sources">
+                      From:{" "}
+                      {position.referencedSourceIds
+                        .map(
+                          (id) =>
+                            room.sources.find((source) => source.id === id)?.title ??
+                            "a removed source",
+                        )
+                        .join(", ")}
+                    </p>
+                  ) : null}
+                  {owned.length > 0 ? (
+                    <ul className="constraint-list">
+                      {owned.map((constraint) => (
+                        <li
+                          key={constraint.id}
+                          className="constraint-item"
+                          /* Named so pressing this constraint on the wall board
+                             opens the workspace at this row. */
+                          data-board-item={constraint.id}
+                        >
+                          <span className="constraint-category">
+                            {constraint.category}
                           </span>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                          <span>{constraint.text}</span>
+                          {constraint.priority ? (
+                            <span className="tag tag-muted">
+                              {constraint.priority}
+                            </span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+    );
+  }
 
+  return (
+    <>
       <form className="position-form" onSubmit={handleSubmit}>
         <h3 className="panel-subheading input-question">
           What should the team know from you?
@@ -496,6 +501,6 @@ export function PositionsPanel() {
 
         <ActionFeedback result={readyResult} />
       </div>
-    </section>
+    </>
   );
 }

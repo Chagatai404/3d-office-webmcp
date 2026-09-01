@@ -7,12 +7,16 @@ import { RoomSummary } from "@/components/room/room-summary";
 import type { SceneInteraction } from "@/visualization/scene/scene-interaction";
 import { subscribeToUiConfirmation } from "@/webmcp/confirmation-bridge";
 import { AttentionAlerts } from "./attention-alerts";
+import { AttentionToasts } from "./attention-toasts";
+import { BackToRoomButton } from "./back-to-room-button";
+import { BoardSidePanel } from "./board-side-panel";
+import { ChromeToggle } from "./chrome-toggle";
 import { DrawerHost } from "./drawers/drawer-host";
 import { MeetingShellProvider, useShell } from "./shell-provider";
+import { useAutoAdvancePhase } from "./use-auto-advance-phase";
 import { usePhaseFollow } from "./use-phase-follow";
 import { MeetingToolbar } from "./meeting-toolbar";
 import { WorkspaceDock } from "./workspace-dock";
-import { WorkspacePanel } from "./workspace-panel";
 
 /**
  * The room as a place rather than a page.
@@ -56,6 +60,11 @@ function World() {
   // The room follows the meeting: when the canonical phase changes, the camera
   // stands where the work now is, rather than leaving people to find it.
   usePhaseFollow();
+
+  // The room moves itself through its procedural phases -- see
+  // `useAutoAdvancePhase` for which transitions this covers and why
+  // Decision review is deliberately left out.
+  useAutoAdvancePhase();
 
   // Bridges a sensitive WebMCP tool's "prepare, don't complete" refusal to
   // the exact visible confirmation surface: open the Participants drawer for
@@ -103,9 +112,12 @@ function World() {
       </div>
 
       <MeetingToolbar />
+      <ChromeToggle />
+      <BackToRoomButton />
+      <AttentionToasts />
       <AttentionAlerts />
       {activeWorkspace === "room" ? <RoomSummary /> : null}
-      <WorkspacePanel />
+      <BoardSidePanel />
       <DrawerHost />
       <WorkspaceDock />
     </div>

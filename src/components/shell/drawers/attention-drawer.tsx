@@ -22,6 +22,7 @@ export function AttentionDrawer() {
       label="Needs you"
       title="Needs you"
       subtitle={items.length === 0 ? "You're all caught up" : `${items.length} item${items.length === 1 ? "" : "s"}`}
+      dark
     >
       {items.length === 0 ? (
         <p className="panel-note">Nothing needs your attention right now. Your agent can keep going.</p>

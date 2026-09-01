@@ -484,6 +484,13 @@ select {
   font-size: 0.82rem;
 }
 
+.alignment-choice-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
 .panel-empty {
   margin: 0;
   color: var(--muted);
@@ -738,6 +745,12 @@ select {
 .participant-role {
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.participant-status {
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 0.76rem;
 }
 
 .participant-tags {
@@ -1474,7 +1487,7 @@ select {
 
 .activity-body {
   display: grid;
-  gap: 0.08rem;
+  gap: 0.3rem;
   min-width: 0;
 }
 
@@ -1530,6 +1543,68 @@ select {
 
 .meeting-toolbar > * {
   pointer-events: auto;
+}
+
+.meeting-toolbar[data-hidden="true"] {
+  opacity: 0;
+  transform: translateY(-0.6rem);
+  pointer-events: none;
+}
+
+.meeting-toolbar {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.chrome-toggle {
+  position: absolute;
+  top: 1.35rem;
+  right: 1.6rem;
+  z-index: 41;
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-quiet);
+  box-shadow: 0 6px 20px rgba(46, 43, 39, 0.09);
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chrome-toggle:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+/* The one thing hiding the toolbar and dock must not also take away: a way
+   back to the room from wherever the camera is standing. Only shown when
+   there is somewhere to go back from. */
+.back-to-room {
+  position: absolute;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  z-index: 41;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.68rem 1.1rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-quiet);
+  box-shadow: 0 10px 28px rgba(46, 43, 39, 0.18);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.back-to-room:hover {
+  background: #fff;
 }
 
 .toolbar-chip {
@@ -1703,7 +1778,7 @@ select {
   padding: 0;
   font: inherit;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -1789,6 +1864,13 @@ select {
   backdrop-filter: blur(10px);
   box-shadow: 0 14px 36px rgba(46, 43, 39, 0.13);
   animation: sceneFadeUp 0.3s ease-out;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.room-summary[data-hidden="true"] {
+  opacity: 0;
+  transform: translateX(-50%) translateY(0.6rem);
+  pointer-events: none;
 }
 
 @keyframes sceneFadeUp {
@@ -1959,6 +2041,72 @@ select {
   cursor: pointer;
 }
 
+.join-toasts {
+  position: absolute;
+  top: 4.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 36;
+  display: grid;
+  gap: 0.5rem;
+  width: min(26rem, calc(100% - 3rem));
+}
+
+.join-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.9rem;
+  background: var(--dark);
+  color: var(--dark-ink);
+  box-shadow: 0 12px 32px rgba(46, 43, 39, 0.24);
+  animation: sceneFadeUp 0.22s ease-out, joinToastOut 0.2s ease-in 5.8s forwards;
+}
+
+@keyframes joinToastOut {
+  to {
+    opacity: 0;
+    transform: translateY(-0.4rem);
+  }
+}
+
+.join-toast-summary {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.join-toast-review {
+  flex-shrink: 0;
+  padding: 0.4rem 0.7rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: var(--accent);
+  color: var(--dark);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.join-toast-dismiss {
+  flex-shrink: 0;
+  padding: 0.15rem;
+  border: 0;
+  background: none;
+  color: rgba(241, 238, 231, 0.7);
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.join-toast-dismiss:hover {
+  color: var(--dark-ink);
+}
+
 /* The toolbar chip stops being a quiet label while something is waiting. */
 .toolbar-attention-active {
   animation: attentionPulse 2.4s ease-in-out infinite;
@@ -2094,6 +2242,232 @@ select {
   color: var(--text);
 }
 
+/* ---------------------------------------------------------- board panel */
+
+/* The six board workspaces, on a side rail instead of the centred stage: no
+   scrim, so the room and its board stay visible, and the panel sits on
+   whichever side the board is not on (constraints/sources/alignment sit
+   left, so their panel is `-right`; proposals/issues/decision sit right, so
+   theirs is `-left`). Same toolbar/dock clearance as `.meeting-drawer`, so
+   nothing here ever covers the chrome that says where you are. */
+.board-panel {
+  position: absolute;
+  top: 5.5rem;
+  bottom: 7.3rem;
+  z-index: 28;
+  display: flex;
+  flex-direction: column;
+  width: min(26rem, calc(50% - 2rem));
+  border-radius: 1.5rem;
+  background: var(--surface-strong);
+  box-shadow: 0 24px 60px rgba(46, 43, 39, 0.22);
+  overflow: hidden;
+  animation: sceneFadeUp 0.22s ease-out;
+}
+
+.board-panel-left {
+  left: 1.5rem;
+}
+
+.board-panel-right {
+  right: 1.5rem;
+}
+
+.board-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem 1.5rem 1.1rem;
+}
+
+/* Sans-serif and bold, like the toolbar chip above the scene, rather than
+   the app's serif display face -- the panel is chrome the toolbar already
+   set the tone for, not a reading surface like the brief. */
+.board-panel-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* Every heading in the panel, not just `.panel-heading` -- a plain h3 like
+   "Raise an objection" would otherwise fall through to the site-wide
+   `h1, h2, h3 { font-family: var(--font-display) }` rule and land back on
+   the serif face this panel is deliberately staying off of. */
+.board-panel-body h1,
+.board-panel-body h2,
+.board-panel-body h3 {
+  font-family: var(--font-sans);
+}
+
+.board-panel-body .panel-heading {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.board-panel-body .input-question {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.board-panel-close {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.board-panel-close:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.board-panel .coordination-strip {
+  padding-right: 1.15rem;
+}
+
+.board-panel-tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 1rem 1rem 0;
+}
+
+.board-panel-tabs-slide {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.board-panel-tabs-slide:hover {
+  background: rgba(46, 43, 39, 0.06);
+  color: var(--text);
+}
+
+.board-panel-tabs {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0 0.5rem;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  /* The slide buttons are the intended way through a long tab list; this
+     just keeps a stray trackpad swipe from feeling broken. */
+  scrollbar-width: none;
+}
+
+.board-panel-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.board-panel-tab {
+  flex: 0 0 auto;
+  padding: 0.7rem 0.85rem;
+  border: 0;
+  border-radius: 0.9rem;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.board-panel-tab:hover {
+  background: rgba(46, 43, 39, 0.06);
+}
+
+.board-panel-tab[aria-selected="true"] {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  color: var(--text);
+}
+
+/* The one tab that always stands out: whatever else a person came to read,
+   this is where they add their own. */
+.board-panel-tab-input {
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+}
+
+.board-panel-tab-input:hover {
+  background: var(--accent-bg);
+  filter: brightness(0.97);
+}
+
+.board-panel-tab-input[aria-selected="true"] {
+  background: var(--dark);
+  color: var(--accent);
+  box-shadow: none;
+}
+
+.board-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.25rem 1.5rem 1.75rem;
+}
+
+.board-panel-body .panel-block {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* The upload form's three-column grid was sized for the old, wide centred
+   modal. The side panel is always narrow, regardless of window width, so it
+   stacks unconditionally here rather than waiting for a viewport breakpoint
+   that a narrow panel on a wide screen never crosses. */
+.board-panel-body .source-form {
+  grid-template-columns: 1fr;
+}
+
+.board-panel-body .source-form .button {
+  justify-self: start;
+}
+
+@media (max-width: 68rem) {
+  .board-panel {
+    top: 5rem;
+    bottom: 8.6rem;
+  }
+}
+
+@media (max-width: 48rem) {
+  /* No room for a side rail beside a 3D scene on a phone: the panel takes
+     over as a full-width sheet, same treatment `.meeting-drawer` gets. */
+  .board-panel {
+    left: 0;
+    right: 0;
+    width: auto;
+    top: 4.6rem;
+    bottom: 8.8rem;
+    border-radius: 1.1rem 1.1rem 0 0;
+    z-index: 50;
+  }
+}
+
 /* The row a board press opened the workspace at, so the item you touched on
    the wall is the item your eye lands on here. An outline rather than a ring
    or a fill: it takes no layout space, it clears the row's own left rule and
@@ -2144,6 +2518,16 @@ select {
 .meeting-drawer-dark {
   background: var(--dark);
   color: var(--dark-ink);
+  scrollbar-color: rgba(241, 238, 231, 0.35) transparent;
+}
+
+.meeting-drawer-dark::-webkit-scrollbar-thumb {
+  background: rgba(241, 238, 231, 0.35);
+  border-radius: 999px;
+}
+
+.meeting-drawer-dark::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .drawer-head {
@@ -2242,6 +2626,194 @@ select {
 
 .meeting-drawer-dark .drawer-section-label {
   color: var(--accent);
+}
+
+/* Content shared with the light drawers, restyled to stay legible once the
+   drawer itself goes dark. Same convention as the rows above: translucent
+   white overlays rather than new colors, so every metadata tab reads as one
+   surface regardless of which drawer it is. */
+/* `.admission-choice`'s checked state paints a light accent chip
+   (`--accent-bg`) for the decision-authority radios -- the label text
+   above it has no color of its own, so it inherits the drawer's white
+   `--dark-ink` and disappears against that light chip once selected. */
+.meeting-drawer-dark .admission-choice:has(input:checked) .admission-choice-label {
+  color: var(--accent-ink);
+}
+
+/* `.admission-choice`'s resting border is `var(--border)`, a light-theme
+   hairline that all but disappears against the dark drawer -- unselected
+   the box read as bare text with no card around it at all. */
+.meeting-drawer-dark .admission-choice {
+  border-color: rgba(241, 238, 231, 0.24);
+}
+
+.meeting-drawer-dark .panel-block,
+.meeting-drawer-dark .participant-row,
+.meeting-drawer-dark .admission-card,
+.meeting-drawer-dark .drawer-help-list li {
+  background: rgba(241, 238, 231, 0.08);
+  border-color: rgba(241, 238, 231, 0.14);
+}
+
+.meeting-drawer-dark .participant-row-self {
+  background: rgba(217, 244, 91, 0.14);
+  border-color: var(--accent);
+}
+
+.meeting-drawer-dark .panel-note,
+.meeting-drawer-dark .panel-empty,
+.meeting-drawer-dark .participant-role,
+.meeting-drawer-dark .drawer-checklist,
+.meeting-drawer-dark .drawer-role-authority dd {
+  color: rgba(241, 238, 231, 0.68);
+}
+
+.meeting-drawer-dark .tag {
+  border-color: rgba(241, 238, 231, 0.3);
+  color: rgba(241, 238, 231, 0.75);
+}
+
+.meeting-drawer-dark .drawer-role-seat {
+  background: rgba(241, 238, 231, 0.1);
+}
+
+.meeting-drawer-dark .button,
+.meeting-drawer-dark button:not(.drawer-close):not(.button-quiet) {
+  background: var(--accent);
+  color: var(--dark);
+}
+
+.meeting-drawer-dark .button-quiet {
+  border-color: rgba(241, 238, 231, 0.3);
+  color: rgba(241, 238, 231, 0.85);
+}
+
+.meeting-drawer-dark .button-quiet:hover {
+  background: rgba(241, 238, 231, 0.1);
+  color: var(--dark-ink);
+}
+
+.meeting-drawer-dark input,
+.meeting-drawer-dark select {
+  background: rgba(241, 238, 231, 0.08);
+  border-color: rgba(241, 238, 231, 0.24);
+  color: var(--dark-ink);
+}
+
+/* `.flow-share-field input` (the invite-link box, reused from the join
+   flow's own paste-link field) and `.admission-field input` (the "Assign
+   role" box on a waiting-room request) each set their own light-surface
+   background at equal selector specificity and come later in the file, so
+   they win the cascade over the rule above unless named explicitly here too. */
+.meeting-drawer-dark .flow-share-field input,
+.meeting-drawer-dark .admission-field input {
+  background: rgba(241, 238, 231, 0.08);
+  border-color: rgba(241, 238, 231, 0.24);
+  color: var(--dark-ink);
+}
+
+/* Sections inside a drawer (Waiting room, Invite link, Participants, ...)
+   render as plain `.panel-block`s with no box of their own, so the gap
+   between them otherwise depends on whatever margin their first piece of
+   content happens to carry -- a paragraph collapses through at 0.85rem, a
+   list at 0. Setting it here makes the rhythm the same regardless. */
+.meeting-drawer .panel-block + .panel-block {
+  margin-top: 1.5rem;
+}
+
+/* `CoordinationStatus`'s full-size card, shown at the top of the
+   Participants drawer -- its own surface color, separate from
+   `.panel-block`, so it needs the same translucent-white treatment named
+   explicitly rather than inheriting it. */
+.meeting-drawer-dark .coordination {
+  background: rgba(241, 238, 231, 0.08);
+  border-color: rgba(241, 238, 231, 0.14);
+}
+
+.meeting-drawer-dark .coordination-goal,
+.meeting-drawer-dark .coordination-facts dt,
+.meeting-drawer-dark .coordination-legend,
+.meeting-drawer-dark .coordination-person-mark {
+  color: rgba(241, 238, 231, 0.68);
+}
+
+.meeting-drawer-dark .coordination-person {
+  background: rgba(241, 238, 231, 0.06);
+}
+
+.meeting-drawer-dark .coordination-person-done {
+  background: rgba(217, 244, 91, 0.14);
+}
+
+.meeting-drawer-dark .coordination-person-done .coordination-person-mark {
+  color: var(--accent);
+}
+
+/* `ActivityLedger`'s own card surfaces, same translucent-white treatment as
+   the rest of the dark drawer content. */
+.meeting-drawer-dark .latest-agent-actions,
+.meeting-drawer-dark .activity-item {
+  background: rgba(241, 238, 231, 0.08);
+  border-color: rgba(241, 238, 231, 0.14);
+}
+
+.meeting-drawer-dark .latest-agent-participant span,
+.meeting-drawer-dark .latest-agent-empty,
+.meeting-drawer-dark .activity-meta,
+.meeting-drawer-dark .activity-actor-name {
+  color: rgba(241, 238, 231, 0.68);
+}
+
+/* Each origin's "ink" (`--accent-ink`, `--agent-ink`, etc.) is tuned for
+   text on the light cream surface, and `.origin-*` sets it as `color` on
+   the whole activity row -- every child without its own color inherits it.
+   On the dark drawer that reads as washed-out, near-invisible text, so
+   each gets a lightened, dark-bg-safe counterpart here, same hue. */
+.meeting-drawer-dark .origin-manual_ui {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.meeting-drawer-dark .origin-webmcp {
+  border-color: #8fb8dd;
+  color: #8fb8dd;
+}
+
+.meeting-drawer-dark .origin-simulation {
+  border-color: #c3aee0;
+  color: #c3aee0;
+}
+
+.meeting-drawer-dark .origin-expert_service {
+  border-color: #e0c86a;
+  color: #e0c86a;
+}
+
+.meeting-drawer-dark .origin-system {
+  border-color: rgba(241, 238, 231, 0.4);
+  color: rgba(241, 238, 231, 0.68);
+}
+
+/* `RoomStatusPanel`'s own facts/phase-rail, same top-of-drawer treatment. */
+.meeting-drawer-dark .room-facts dt {
+  color: var(--accent);
+}
+
+.meeting-drawer-dark .room-facts-sub,
+.meeting-drawer-dark .phase-focus {
+  color: rgba(241, 238, 231, 0.68);
+}
+
+.meeting-drawer-dark .phase-step {
+  background: rgba(241, 238, 231, 0.08);
+  border-color: rgba(241, 238, 231, 0.14);
+  color: rgba(241, 238, 231, 0.68);
+}
+
+.meeting-drawer-dark .phase-step-current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--dark);
 }
 
 .drawer-actions {
@@ -2393,6 +2965,13 @@ select {
   border-radius: 1.5rem;
   background: var(--surface-quiet);
   box-shadow: 0 18px 48px rgba(46, 43, 39, 0.16);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.workspace-dock[data-hidden="true"] {
+  opacity: 0;
+  transform: translateX(-50%) translateY(0.6rem);
+  pointer-events: none;
 }
 
 .workspace-tabs {
@@ -2838,6 +3417,20 @@ select {
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--muted-2);
+}
+
+/* A secondary action with nothing to it but the words -- for the one place
+   a whole button would outweigh what it does (leaving a status screen). */
+.flow-text-link {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.flow-text-link:hover {
+  color: var(--text);
 }
 
 .flow-actions {
@@ -4364,7 +4957,7 @@ select {
 
 .drawer-role-authority {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.7rem;
   margin: 0.5rem 0 0;
 }
 
@@ -4374,7 +4967,7 @@ select {
 }
 
 .drawer-role-authority dd {
-  margin: 0.1rem 0 0;
+  margin: 0.3rem 0 0;
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.4;
@@ -4425,7 +5018,7 @@ select {
 
 .admission-field {
   display: grid;
-  gap: 0.3rem;
+  gap: 0.4rem;
   margin: 0;
   padding: 0;
   border: 0;
@@ -4456,15 +5049,15 @@ select {
 }
 
 .admission-authority {
-  gap: 0.4rem;
+  gap: 0.6rem;
 }
 
 .admission-choice {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: baseline;
-  gap: 0.15rem 0.5rem;
-  padding: 0.45rem 0.55rem;
+  gap: 0.35rem 0.6rem;
+  padding: 0.7rem 0.85rem;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   cursor: pointer;

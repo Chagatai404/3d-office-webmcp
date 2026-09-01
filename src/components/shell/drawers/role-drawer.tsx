@@ -16,7 +16,7 @@ export function RoleDrawer() {
   const { openDrawer } = useShell();
 
   return (
-    <DrawerShell label="My role" title="My role">
+    <DrawerShell label="My role" title="My role" dark>
       {self ? (
         <div className="drawer-role-seat">
           <span className="drawer-role-seat-label">Your seat</span>

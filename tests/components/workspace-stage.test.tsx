@@ -105,11 +105,19 @@ describe("the workspace panel over the room", () => {
 
   it("clears the panel on the way back to the room", async () => {
     await mountShell();
-    await act(async () => shell.goToWorkspace("brief"));
+    await act(async () => shell.goToWorkspace("constraints"));
     await act(async () => shell.goToWorkspace("room"));
 
     expect(shell.openPanel).toBeNull();
     expect(shell.activeWorkspace).toBe("room");
+  });
+
+  it("moves the camera to brief without opening a panel over it", async () => {
+    await mountShell();
+    await act(async () => shell.goToWorkspace("brief"));
+
+    expect(shell.openPanel).toBeNull();
+    expect(shell.activeWorkspace).toBe("brief");
   });
 
   it("closes without moving the camera back", async () => {

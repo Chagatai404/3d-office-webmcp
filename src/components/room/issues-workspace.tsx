@@ -6,8 +6,11 @@ import { ActionFeedback } from "./action-feedback";
 import { ConflictList } from "./decision-shared";
 import { useRoom } from "./room-provider";
 
+/** A seated participant's id, or `"input"` for the viewer's own compose tab. */
+export type IssuesWorkspaceTab = string;
+
 /** The Issues workspace: objections, trade-offs, and explicit resolution. */
-export function IssuesWorkspace() {
+export function IssuesWorkspace({ tab }: { tab: IssuesWorkspaceTab }) {
   const { room, self, actions } = useRoom();
   const fieldId = useId();
   const activeProposal = room.proposals.find((proposal) => proposal.id === room.activeProposalId) ?? null;
@@ -99,46 +102,64 @@ export function IssuesWorkspace() {
     setResolutionResult(result);
   }
 
+  if (tab !== "input") {
+    const owner = room.participants.find((participant) => participant.id === tab);
+    const theirConflicts = openConflicts.filter((conflict) => conflict.raisedByActorId === tab);
+
+    return (
+      <section
+        className="panel-block decision-panel"
+        aria-labelledby="issues-heading"
+        data-testid="issues-workspace"
+      >
+        <h2 className="panel-heading" id="issues-heading">
+          {owner?.name ?? "Participant"}
+        </h2>
+        {/* Blocking and warning are counted separately and said in words: a
+            room with three warnings and no blockers is not stuck, and a single
+            number cannot tell anyone which of the two they are looking at. */}
+        <p
+          className={blockingOpenCount > 0 ? "issues-tally issues-tally-blocked" : "issues-tally"}
+          data-testid="issues-tally"
+        >
+          <span className="issues-tally-primary">
+            {blockingOpenCount === 0
+              ? "Nothing blocking"
+              : `${blockingOpenCount} blocking objection${blockingOpenCount === 1 ? "" : "s"}`}
+          </span>
+          <span className="issues-tally-secondary">
+            {warningOpenCount === 0
+              ? "no open warnings"
+              : `${warningOpenCount} open warning${warningOpenCount === 1 ? "" : "s"}, not blocking`}
+          </span>
+        </p>
+        <p className="panel-note">
+          {blockingOpenCount === 0
+            ? "Alignment can open. Warnings travel with the decision instead of stopping it."
+            : "Alignment opens once every blocking objection is settled."}
+        </p>
+
+        <ConflictList room={room} conflicts={theirConflicts} />
+      </section>
+    );
+  }
+
   return (
     <section
       className="panel-block decision-panel"
       aria-labelledby="issues-heading"
       data-testid="issues-workspace"
     >
-      <h2 className="panel-heading" id="issues-heading">
-        Issues
+      <h2 className="visually-hidden" id="issues-heading">
+        Your input
       </h2>
-      {/* Blocking and warning are counted separately and said in words: a
-          room with three warnings and no blockers is not stuck, and a single
-          number cannot tell anyone which of the two they are looking at. */}
-      <p
-        className={blockingOpenCount > 0 ? "issues-tally issues-tally-blocked" : "issues-tally"}
-        data-testid="issues-tally"
-      >
-        <span className="issues-tally-primary">
-          {blockingOpenCount === 0
-            ? "Nothing blocking"
-            : `${blockingOpenCount} blocking objection${blockingOpenCount === 1 ? "" : "s"}`}
-        </span>
-        <span className="issues-tally-secondary">
-          {warningOpenCount === 0
-            ? "no open warnings"
-            : `${warningOpenCount} open warning${warningOpenCount === 1 ? "" : "s"}, not blocking`}
-        </span>
-      </p>
-      <p className="panel-note">
-        {blockingOpenCount === 0
-          ? "Alignment can open. Warnings travel with the decision instead of stopping it."
-          : "Alignment opens once every blocking objection is settled."}
-      </p>
 
       <form
-        className="decision-section decision-form"
+        className="decision-form"
         data-testid="objection-form"
         onSubmit={handleObjectionSubmit}
       >
-        <h3 className="panel-subheading">Objections</h3>
-        <ConflictList room={room} conflicts={openConflicts} />
+        <h3 className="panel-subheading">Raise an objection</h3>
         <fieldset disabled={!self || room.phase !== "deliberation" || !activeProposal || objectionPending}>
           <label htmlFor={`${fieldId}-objection-reason`}>What concern should the room address?</label>
           <textarea id={`${fieldId}-objection-reason`} name="reason" rows={3} required />
@@ -175,7 +196,7 @@ export function IssuesWorkspace() {
       </form>
 
       <form
-        className="decision-section decision-form"
+        className="decision-form"
         data-testid="tradeoff-form"
         onSubmit={handleTradeoffSubmit}
       >

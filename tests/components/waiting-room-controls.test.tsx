@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { demoRoom, demoTimestamp } from "@/fixtures/demo-room";
 import { PositionsPanel } from "@/components/room/positions-panel";
 import { RoomProvider } from "@/components/room/room-provider";
-import { RoomStatusPanel } from "@/components/room/room-status";
+import { OwnerPhaseControls } from "@/components/room/room-status";
+import { useAutoAdvancePhase } from "@/components/shell/use-auto-advance-phase";
 import { setRoomClientForTests } from "@/room-client/room-client";
 import type {
   ActionResult,
@@ -193,6 +194,11 @@ function organizerReadyRoom(): RoomState {
   return seed;
 }
 
+function AutoAdvanceProbe() {
+  useAutoAdvancePhase();
+  return null;
+}
+
 async function mount(ui: React.ReactNode, client: RoomClient) {
   setRoomClientForTests(client);
   await act(async () => {
@@ -233,7 +239,7 @@ afterEach(async () => {
 describe("waiting room readiness and organizer controls", () => {
   it("keeps the ready button disabled before the participant has a position", async () => {
     await mount(
-      <PositionsPanel />,
+      <PositionsPanel tab="input" />,
       new B3RoomClient(seedRoom("participant-engineering")),
     );
 
@@ -250,7 +256,7 @@ describe("waiting room readiness and organizer controls", () => {
     const client = new B3RoomClient(seed);
     client.updateReadyFromAction = false;
 
-    await mount(<PositionsPanel />, client);
+    await mount(<PositionsPanel tab="input" />, client);
     await click(buttonNamed("My input is ready"));
 
     expect(client.readyCalls).toBe(1);
@@ -263,14 +269,31 @@ describe("waiting room readiness and organizer controls", () => {
     expect(container.textContent).toContain("✓ Ready for deliberation");
   });
 
-  it("calls the production phase action for organizer controls", async () => {
+  it("advances Input to Proposals on its own once every required participant is ready", async () => {
     const client = new B3RoomClient(organizerReadyRoom());
 
-    await mount(<RoomStatusPanel />, client);
-    await click(buttonNamed("Start proposals"));
+    await mount(<AutoAdvanceProbe />, client);
 
     expect(client.advanceRoomPhaseCalls).toEqual(["proposals"]);
     expect(client.advanceDemoPhaseCalls).toEqual([]);
+  });
+
+  it("does not auto-advance while a required participant still has no position", async () => {
+    const client = new B3RoomClient(seedRoom("participant-product"));
+
+    await mount(<AutoAdvanceProbe />, client);
+
+    expect(client.advanceRoomPhaseCalls).toEqual([]);
+  });
+
+  it("auto-advances from a non-organizer participant's own session too -- this is procedural progression, not owner administration", async () => {
+    const seed = organizerReadyRoom();
+    seed.selfParticipantId = "participant-engineering";
+    const client = new B3RoomClient(seed);
+
+    await mount(<AutoAdvanceProbe />, client);
+
+    expect(client.advanceRoomPhaseCalls).toEqual(["proposals"]);
   });
 
   it("lets the organizer move a room into decision review regardless of alignment completeness", async () => {
@@ -311,7 +334,7 @@ describe("waiting room readiness and organizer controls", () => {
     );
     const client = new B3RoomClient(seed);
 
-    await mount(<RoomStatusPanel />, client);
+    await mount(<OwnerPhaseControls />, client);
     await click(buttonNamed("Review decision"));
 
     expect(client.advanceRoomPhaseCalls).toEqual(["approval"]);
@@ -319,16 +342,31 @@ describe("waiting room readiness and organizer controls", () => {
 
   it("does not show organizer CTAs to a non-organizer participant", async () => {
     await mount(
-      <RoomStatusPanel />,
+      <OwnerPhaseControls />,
       new B3RoomClient(seedRoom("participant-engineering")),
     );
 
     expect(container.textContent).not.toContain("Organizer waiting room");
-    expect(container.textContent).not.toContain("Start proposals");
+    expect(container.textContent).not.toContain("Review decision");
   });
 
-  it("renders useful feedback when the server rejects a phase advance", async () => {
+  it("renders useful feedback when the server rejects entering decision review", async () => {
     const seed = organizerReadyRoom();
+    seed.phase = "voting";
+    seed.activeProposalId = "proposal-1";
+    seed.proposals.push({
+      id: "proposal-1",
+      participantId: "participant-product",
+      title: "Two-week accessible onboarding scope",
+      summary: "Ship a narrower onboarding update.",
+      rationale: "It balances scope, quality, and launch timing.",
+      expectedOutcomes: ["Faster first value"],
+      referencedConstraintIds: ["constraint-1"],
+      referencedSourceIds: [],
+      parentProposalId: null,
+      status: "candidate",
+      createdAt: demoTimestamp(10),
+    });
     const client = new B3RoomClient(seed);
     client.phaseResult = {
       ok: false,
@@ -340,8 +378,8 @@ describe("waiting room readiness and organizer controls", () => {
       roomVersion: seed.version,
     };
 
-    await mount(<RoomStatusPanel />, client);
-    await click(buttonNamed("Start proposals"));
+    await mount(<OwnerPhaseControls />, client);
+    await click(buttonNamed("Review decision"));
 
     const alert = container.querySelector('[role="alert"]');
     expect(alert?.textContent).toContain("Not authorized");

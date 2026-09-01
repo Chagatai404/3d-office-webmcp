@@ -18,7 +18,7 @@ import { useAttentionItems } from "./use-attention-items";
  */
 export function MeetingToolbar() {
   const { room, self, demoSeatClaimBlocked, claimDemoSeat } = useRoom();
-  const { activeWorkspace, moving, openDrawer, goToWorkspace } = useShell();
+  const { activeWorkspace, moving, chromeHidden, openDrawer, goToWorkspace } = useShell();
   const attentionItems = useAttentionItems();
   const [spectatorNoticeDismissed, setSpectatorNoticeDismissed] = useState(false);
   const [claimingSeat, setClaimingSeat] = useState(false);
@@ -56,7 +56,7 @@ export function MeetingToolbar() {
   }, [room.activity]);
 
   return (
-    <div className="meeting-toolbar">
+    <div className="meeting-toolbar" data-hidden={chromeHidden || undefined}>
       <span className="toolbar-chip">
         <span className="toolbar-chip-dot" aria-hidden="true" />
         <span>{room.title}</span>

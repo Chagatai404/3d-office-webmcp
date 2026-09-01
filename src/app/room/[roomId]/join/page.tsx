@@ -1,4 +1,5 @@
 import { JoinRoom } from "@/components/onboarding/join-room";
+import { FlowPageChrome } from "@/components/onboarding/flow-page-chrome";
 
 export default async function JoinRoomPage({
   params,
@@ -10,5 +11,9 @@ export default async function JoinRoomPage({
   const [{ roomId }, query] = await Promise.all([params, searchParams]);
   const inviteToken = typeof query.invite === "string" ? query.invite : null;
 
-  return <JoinRoom roomId={roomId} inviteToken={inviteToken} />;
+  return (
+    <FlowPageChrome backHref="/" brandLabel="Join meeting" step="Request a seat">
+      <JoinRoom roomId={roomId} inviteToken={inviteToken} />
+    </FlowPageChrome>
+  );
 }

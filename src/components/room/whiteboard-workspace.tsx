@@ -34,7 +34,10 @@ function sourceStatusLabel(source: MeetingSource): string {
   return "Uploading";
 }
 
-export function WhiteboardWorkspace() {
+/** A seated participant's id, or `"input"` for the viewer's own upload tab. */
+export type WhiteboardWorkspaceTab = string;
+
+export function WhiteboardWorkspace({ tab }: { tab: WhiteboardWorkspaceTab }) {
   const { room, self, actions } = useRoom();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
@@ -146,88 +149,98 @@ export function WhiteboardWorkspace() {
     }
   }
 
+  if (tab === "input") {
+    return (
+      <section className="panel-block source-workspace" aria-labelledby="sources-heading" data-testid="whiteboard-workspace">
+        <h2 className="visually-hidden" id="sources-heading">Add a source</h2>
+
+        <form className="source-form" onSubmit={onUpload}>
+          <label className="source-field">
+            <span>File</span>
+            <input
+              type="file"
+              accept={ACCEPTED_SOURCE_TYPES}
+              disabled={!canUpload || busy}
+              onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)}
+            />
+          </label>
+          <label className="source-field">
+            <span>Title</span>
+            <input
+              type="text"
+              value={title}
+              placeholder={file?.name ?? "Optional display name"}
+              disabled={!canUpload || busy}
+              onChange={(event) => setTitle(event.currentTarget.value)}
+            />
+          </label>
+          <label className="source-field">
+            <span>Visibility</span>
+            <select
+              value={visibility}
+              disabled={!canUpload || busy}
+              onChange={(event) => setVisibility(event.currentTarget.value as MeetingSourceVisibility)}
+            >
+              <option value="shared_room">Shared with room</option>
+              <option value="private_to_participant">Private to me</option>
+            </select>
+          </label>
+          <button type="submit" className="button" disabled={!canUpload || busy}>
+            {busy ? "Attaching..." : "Attach source"}
+          </button>
+        </form>
+
+        {!canUpload ? (
+          <p className="panel-empty">Sources can be attached by an admitted participant while the room is in Input.</p>
+        ) : null}
+        {notice ? <p className="source-notice" role="status">{notice}</p> : null}
+        {error ? <p className="source-error" role="alert">{error}</p> : null}
+
+        <form className="source-search" onSubmit={searchSources}>
+          <input
+            type="search"
+            value={query}
+            placeholder="Search attached sources"
+            onChange={(event) => setQuery(event.currentTarget.value)}
+          />
+          <button type="submit" className="button-quiet">Search</button>
+        </form>
+
+        {searchResult ? (
+          <div className="source-search-results" aria-live="polite">
+            {searchResult.results.length === 0 ? (
+              <p className="panel-empty">No source excerpts matched.</p>
+            ) : (
+              searchResult.results.map((result) => (
+                <article key={`${result.sourceId}-${result.chunkIndex}`} className="source-excerpt">
+                  <span>{result.sourceTitle}</span>
+                  <p>{result.excerpt}</p>
+                </article>
+              ))
+            )}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+  const owner = room.participants.find((participant) => participant.id === tab);
+  const theirSources = sources.filter((source) => source.uploadedByParticipantId === tab);
+
   return (
     <section className="panel-block source-workspace" aria-labelledby="sources-heading" data-testid="whiteboard-workspace">
       <div className="source-workspace-head">
         <div>
-          <h2 className="panel-heading" id="sources-heading">Sources</h2>
-          <p className="panel-note">Files attached before discussion starts, readable by people and their agents.</p>
+          <h2 className="panel-heading" id="sources-heading">{owner?.name ?? "Participant"}</h2>
         </div>
-        <span className="source-count">{sources.length}</span>
+        <span className="source-count">{theirSources.length}</span>
       </div>
 
-      <form className="source-form" onSubmit={onUpload}>
-        <label className="source-field">
-          <span>File</span>
-          <input
-            type="file"
-            accept={ACCEPTED_SOURCE_TYPES}
-            disabled={!canUpload || busy}
-            onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)}
-          />
-        </label>
-        <label className="source-field">
-          <span>Title</span>
-          <input
-            type="text"
-            value={title}
-            placeholder={file?.name ?? "Optional display name"}
-            disabled={!canUpload || busy}
-            onChange={(event) => setTitle(event.currentTarget.value)}
-          />
-        </label>
-        <label className="source-field">
-          <span>Visibility</span>
-          <select
-            value={visibility}
-            disabled={!canUpload || busy}
-            onChange={(event) => setVisibility(event.currentTarget.value as MeetingSourceVisibility)}
-          >
-            <option value="shared_room">Shared with room</option>
-            <option value="private_to_participant">Private to me</option>
-          </select>
-        </label>
-        <button type="submit" className="button" disabled={!canUpload || busy}>
-          {busy ? "Attaching..." : "Attach source"}
-        </button>
-      </form>
-
-      {!canUpload ? (
-        <p className="panel-empty">Sources can be attached by an admitted participant while the room is in Input.</p>
-      ) : null}
-      {notice ? <p className="source-notice" role="status">{notice}</p> : null}
-      {error ? <p className="source-error" role="alert">{error}</p> : null}
-
-      <form className="source-search" onSubmit={searchSources}>
-        <input
-          type="search"
-          value={query}
-          placeholder="Search attached sources"
-          onChange={(event) => setQuery(event.currentTarget.value)}
-        />
-        <button type="submit" className="button-quiet">Search</button>
-      </form>
-
-      {searchResult ? (
-        <div className="source-search-results" aria-live="polite">
-          {searchResult.results.length === 0 ? (
-            <p className="panel-empty">No source excerpts matched.</p>
-          ) : (
-            searchResult.results.map((result) => (
-              <article key={`${result.sourceId}-${result.chunkIndex}`} className="source-excerpt">
-                <span>{result.sourceTitle}</span>
-                <p>{result.excerpt}</p>
-              </article>
-            ))
-          )}
-        </div>
-      ) : null}
-
       <div className="source-list">
-        {sources.length === 0 ? (
-          <p className="panel-empty">No source files are attached yet.</p>
+        {theirSources.length === 0 ? (
+          <p className="panel-empty">No source files attached yet.</p>
         ) : (
-          sources.map((source) => {
+          theirSources.map((source) => {
             const canManage =
               self !== null &&
               (source.uploadedByParticipantId === self.id ||

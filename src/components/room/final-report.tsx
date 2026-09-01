@@ -249,7 +249,7 @@ export function FinalReport() {
         {report.expertAdvice.length === 0 ? (
           <p className="panel-empty">The Security Expert raised nothing against this decision.</p>
         ) : (
-          <ExpertAdviceList advice={report.expertAdvice} />
+          <ExpertAdviceList room={room} advice={report.expertAdvice} />
         )}
         <p className="panel-note">
           Advisory only. The Security Expert never aligned, approved, or owned any part of this
