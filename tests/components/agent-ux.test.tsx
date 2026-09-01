@@ -85,7 +85,7 @@ afterEach(async () => {
 
 describe("browser-agent UX", () => {
   it("keeps manual input available when document.modelContext is missing", async () => {
-    await mount(<PositionsPanel />);
+    await mount(<PositionsPanel tab="input" />);
 
     expect(container.textContent).toContain(
       "WebMCP is unavailable in this browser. You can still participate manually.",
@@ -116,7 +116,7 @@ describe("browser-agent UX", () => {
       executeTool: async () => "",
     };
 
-    await mount(<PositionsPanel />);
+    await mount(<PositionsPanel tab="input" />);
 
     expect(container.textContent).toContain(
       "Browser agent tools available for this phase",

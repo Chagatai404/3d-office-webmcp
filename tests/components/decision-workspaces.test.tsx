@@ -478,10 +478,13 @@ afterEach(async () => {
 describe("proposals workspace", () => {
   it("shows the active candidate and submits proposals in the proposals phase", async () => {
     const client = new FakeRoomClient(roomInPhase("proposals"));
-    await mount(client, <ProposalsWorkspace />);
+    // The active proposal belongs to participant-product.
+    await mount(client, <ProposalsWorkspace tab="participant-product" />);
 
     expect(container.textContent).toContain("On the table");
     expect(container.textContent).toContain("candidate board");
+
+    await mount(client, <ProposalsWorkspace tab="input" />);
 
     // B1: the primary surface is one description. Title and rationale are
     // taken from the proposer's own words unless they refine them.
@@ -509,7 +512,7 @@ describe("proposals workspace", () => {
 
   it("prefers an explicitly refined title and rationale over the derived ones", async () => {
     const client = new FakeRoomClient(roomInPhase("proposals"));
-    await mount(client, <ProposalsWorkspace />);
+    await mount(client, <ProposalsWorkspace tab="input" />);
 
     const form = byTestId<HTMLFormElement>("proposal-form");
     setValue(
@@ -539,7 +542,7 @@ describe("proposals workspace", () => {
 describe("issues workspace", () => {
   it("keeps objection and tradeoff records behind optional disclosures", async () => {
     const client = new FakeRoomClient(roomInPhase("deliberation"));
-    await mount(client, <IssuesWorkspace />);
+    await mount(client, <IssuesWorkspace tab="input" />);
 
     const objectionForm = byTestId<HTMLFormElement>("objection-form");
     const tradeoffForm = byTestId<HTMLFormElement>("tradeoff-form");
@@ -577,7 +580,7 @@ describe("issues workspace", () => {
 
   it("keeps objections, tradeoffs, and explicit resolutions as separate actions", async () => {
     const client = new FakeRoomClient(roomInPhase("deliberation"));
-    await mount(client, <IssuesWorkspace />);
+    await mount(client, <IssuesWorkspace tab="input" />);
 
     setValue(
       byTestId<HTMLFormElement>("objection-form").querySelector<HTMLTextAreaElement>(
@@ -593,6 +596,7 @@ describe("issues workspace", () => {
       "Keep the accessibility review and narrow the first release instead.",
     );
     await submit("tradeoff-form");
+
     setValue(
       byTestId<HTMLElement>("resolution-panel").querySelector<HTMLTextAreaElement>(
         "textarea",
@@ -628,7 +632,9 @@ describe("issues workspace", () => {
       },
     ]);
     // B2: blockers and warnings are counted separately and named in words,
-    // so "1 blocking" can never be read as "1 issue, unspecified".
+    // so "1 blocking" can never be read as "1 issue, unspecified". The tally
+    // is part of the per-participant view, not the input tab just used.
+    await mount(client, <IssuesWorkspace tab="participant-engineering" />);
     expect(byTestId("issues-tally").textContent).toContain("1 blocking objection");
     expect(byTestId("issues-tally").textContent).toContain("no open warnings");
     expect(container.textContent).toContain(
@@ -642,7 +648,7 @@ describe("issues workspace", () => {
       conflict.severity = "warning";
     }
     const client = new FakeRoomClient(seed);
-    await mount(client, <IssuesWorkspace />);
+    await mount(client, <IssuesWorkspace tab="participant-engineering" />);
 
     expect(byTestId("issues-tally").textContent).toContain("Nothing blocking");
     expect(byTestId("issues-tally").textContent).toContain("1 open warning, not blocking");
@@ -655,7 +661,7 @@ describe("issues workspace", () => {
 describe("alignment workspace", () => {
   it("shares only the current participant's alignment and states it is not a vote", async () => {
     const client = new FakeRoomClient(roomInPhase("voting"));
-    await mount(client, <AlignmentWorkspace />);
+    await mount(client, <AlignmentWorkspace tab="input" />);
 
     await click(byTestId<HTMLButtonElement>("alignment-choice-strong_objection"));
 
@@ -674,7 +680,7 @@ describe("alignment workspace", () => {
     const room = roomInPhase("voting");
     room.selfParticipantId = room.ownerParticipantId;
     const client = new FakeRoomClient(room);
-    await mount(client, <AlignmentWorkspace />);
+    await mount(client, <AlignmentWorkspace tab="input" />);
 
     expect(byTestId("owner-alignment-summary")).toBeTruthy();
     expect(container.textContent).not.toContain("Winner");
@@ -686,7 +692,7 @@ describe("alignment workspace", () => {
 describe("decision workspace", () => {
   it("binds approval to the exact current decision hash and resets on hash change", async () => {
     const client = new FakeRoomClient(roomInPhase("approval"));
-    await mount(client, <DecisionWorkspace />);
+    await mount(client, <DecisionWorkspace tab="input" />);
 
     await click(buttonNamed("Refresh exact server preview"));
     expect(client.previewCalls).toBe(1);
@@ -719,7 +725,7 @@ describe("decision workspace", () => {
    */
   it("becomes the shared report once the room is finalized, without being asked", async () => {
     const client = new FakeRoomClient(roomInPhase("finalized"));
-    await mount(client, <DecisionWorkspace />);
+    await mount(client, <DecisionWorkspace tab="input" />);
 
     expect(client.reportCalls).toBe(1);
     expect(client.recordCalls).toBe(1);
@@ -752,7 +758,7 @@ describe("decision workspace", () => {
       missingApprovalParticipantIds: [room.ownerParticipantId],
     };
     const client = new FakeRoomClient(room);
-    await mount(client, <DecisionWorkspace />);
+    await mount(client, <DecisionWorkspace tab="input" />);
 
     await click(buttonNamed("Refresh exact server preview"));
 
@@ -784,7 +790,7 @@ describe("decision workspace", () => {
 describe("human final approval", () => {
   it("explains the hand-off when an agent prepared the decision, without implying the agent failed", async () => {
     const client = new FakeRoomClient(roomInPhase("approval"));
-    await mount(client, <DecisionWorkspace />);
+    await mount(client, <DecisionWorkspace tab="input" />);
 
     expect(container.querySelector('[data-testid="agent-decision-handoff"]')).toBeNull();
 
@@ -804,7 +810,7 @@ describe("human final approval", () => {
 
   it("still requires the person's own confirmation after an agent hand-off", async () => {
     const client = new FakeRoomClient(roomInPhase("approval"));
-    await mount(client, <DecisionWorkspace />);
+    await mount(client, <DecisionWorkspace tab="input" />);
     await act(async () => {
       shell.openDecisionReviewForHuman();
     });
@@ -830,7 +836,7 @@ describe("human final approval", () => {
 
   it("names the exact decision the tick is bound to", async () => {
     const client = new FakeRoomClient(roomInPhase("approval"));
-    await mount(client, <DecisionWorkspace />);
+    await mount(client, <DecisionWorkspace tab="input" />);
 
     expect(byTestId("approval-panel").textContent).toContain("Bound to hash-v1");
     expect(byTestId("approval-panel").textContent).toContain("this confirmation is void");
@@ -838,7 +844,7 @@ describe("human final approval", () => {
 
   it("drops the hand-off notice when the person walks somewhere else", async () => {
     const client = new FakeRoomClient(roomInPhase("approval"));
-    await mount(client, <DecisionWorkspace />);
+    await mount(client, <DecisionWorkspace tab="input" />);
     await act(async () => {
       shell.openDecisionReviewForHuman();
     });
@@ -862,7 +868,7 @@ describe("human final approval", () => {
 describe("final decision report", () => {
   it("lays out the decision in reading order, not as a state dump", async () => {
     const client = new FakeRoomClient(roomInPhase("finalized"));
-    await mount(client, <DecisionWorkspace />);
+    await mount(client, <DecisionWorkspace tab="input" />);
 
     const report = byTestId("final-report");
     for (const heading of [
@@ -885,7 +891,7 @@ describe("final decision report", () => {
 
   it("keeps dissent and warnings in the record rather than tidying them away", async () => {
     const client = new FakeRoomClient(roomInPhase("finalized"));
-    await mount(client, <DecisionWorkspace />);
+    await mount(client, <DecisionWorkspace tab="input" />);
 
     expect(byTestId("final-report").textContent).toContain(
       "Marketing raised a concern until launch copy is reviewed.",
@@ -895,7 +901,7 @@ describe("final decision report", () => {
 
   it("offers the PDF from the authenticated server endpoint", async () => {
     const client = new FakeRoomClient(roomInPhase("finalized"));
-    await mount(client, <DecisionWorkspace />);
+    await mount(client, <DecisionWorkspace tab="input" />);
 
     const pdf = [...container.querySelectorAll("a")].find((anchor) =>
       anchor.textContent?.includes("Download PDF"),
@@ -907,7 +913,7 @@ describe("final decision report", () => {
 
   it("keeps provenance available without letting it crowd the report", async () => {
     const client = new FakeRoomClient(roomInPhase("finalized"));
-    await mount(client, <DecisionWorkspace />);
+    await mount(client, <DecisionWorkspace tab="input" />);
 
     const provenance = byTestId<HTMLDetailsElement>("report-provenance");
     expect(provenance.open).toBe(false);
@@ -917,7 +923,7 @@ describe("final decision report", () => {
 
   it("shows every participant the same decision hash", async () => {
     const first = new FakeRoomClient(roomInPhase("finalized"));
-    await mount(first, <DecisionWorkspace />);
+    await mount(first, <DecisionWorkspace tab="input" />);
     const seenByEngineer = byTestId("report-hash").textContent;
 
     await act(async () => {
@@ -927,7 +933,7 @@ describe("final decision report", () => {
 
     const other = roomInPhase("finalized");
     other.selfParticipantId = "participant-marketing";
-    await mount(new FakeRoomClient(other), <DecisionWorkspace />);
+    await mount(new FakeRoomClient(other), <DecisionWorkspace tab="input" />);
 
     expect(byTestId("report-hash").textContent).toBe(seenByEngineer);
     expect(seenByEngineer).toContain("hash-v1");

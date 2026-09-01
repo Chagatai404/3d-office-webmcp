@@ -14,7 +14,6 @@ import {
   DECISION_ROLE_LABEL,
   DECISION_ROLE_NOTE,
   MEETING_ROLE_LABEL,
-  MEETING_ROLE_NOTE,
   PARTICIPANT_KIND_LABEL,
 } from "./room-labels";
 import type { VisualParticipant } from "@/visualization/room-view-model";
@@ -43,20 +42,12 @@ type PendingAction =
  */
 export function ParticipantPanel() {
   const { room, self, visualization, actions } = useRoom();
-  const { participants, constraints } = visualization;
+  const { participants } = visualization;
   const isOwner = self?.meetingRole === "owner";
 
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ActionResult<unknown> | null>(null);
-
-  const constraintCounts = new Map<string, number>();
-  for (const constraint of constraints) {
-    constraintCounts.set(
-      constraint.participantId,
-      (constraintCounts.get(constraint.participantId) ?? 0) + 1,
-    );
-  }
 
   const openSeats = room.participants.filter(
     (participant) => participant.kind === "human" && participant.status === "active" && !participant.isClaimed,
@@ -134,25 +125,28 @@ export function ParticipantPanel() {
                   {participant.name}
                   {participant.isSelf ? (
                     <span className="tag tag-self">You</span>
+                  ) : participant.meetingRole === "owner" ? (
+                    <span className="tag tag-owner">Owner</span>
                   ) : null}
                 </span>
-                <span className="participant-role">{participant.role}</span>
+                <span className="participant-role">
+                  {participant.role}
+                  {participant.kind === "simulation" ? ` · ${PARTICIPANT_KIND_LABEL.simulation}` : ""}
+                  {participant.kind === "expert" ? ` · ${PARTICIPANT_KIND_LABEL.expert}` : ""}
+                </span>
               </div>
 
               {/* An advisory actor has no administrative or decision
                   authority to state. Printing "Participant · Advisor" beside
                   the Security Expert's name suggests a seat at the table it
                   does not have; the advisory line below says what it is. */}
-              {participant.kind === "expert" ? null : (
-                <div className="participant-authority">
-                  <span
-                    className={
-                      participant.meetingRole === "owner" ? "tag tag-owner" : "tag"
-                    }
-                    title={MEETING_ROLE_NOTE[participant.meetingRole]}
-                  >
-                    {MEETING_ROLE_LABEL[participant.meetingRole]}
-                  </span>
+              {participant.kind === "expert" ? (
+                <p className="participant-advisory">
+                  Advises the room on the option currently on the table. Never aligns, never
+                  approves, and can never hold the meeting.
+                </p>
+              ) : (
+                <>
                   {canManage ? (
                     <label className="decision-role-select">
                       Decision authority
@@ -174,58 +168,21 @@ export function ParticipantPanel() {
                     </label>
                   ) : (
                     <span
-                      className={
-                        participant.decisionRole === "decision_maker" ? "tag" : "tag tag-muted"
-                      }
+                      className="participant-role"
                       title={DECISION_ROLE_NOTE[participant.decisionRole]}
                     >
-                      {DECISION_ROLE_LABEL[participant.decisionRole]}
+                      {MEETING_ROLE_LABEL[participant.meetingRole]} · {DECISION_ROLE_LABEL[participant.decisionRole]}
                     </span>
                   )}
-                </div>
-              )}
-
-              <div className="participant-tags">
-                <span className="tag">Seat {participant.seatIndex + 1}</span>
-                {participant.kind === "expert" ? (
-                  <span className="tag tag-expert">{PARTICIPANT_KIND_LABEL.expert}</span>
-                ) : participant.kind === "simulation" ? (
-                  <span className="tag tag-simulation">{PARTICIPANT_KIND_LABEL.simulation}</span>
-                ) : (
-                  <span className="tag">{PARTICIPANT_KIND_LABEL.human}</span>
-                )}
-              </div>
-
-              {participant.kind === "expert" ? (
-                <p className="participant-advisory">
-                  Advises the room on the option currently on the table. Never aligns, never
-                  approves, and can never hold the meeting.
-                </p>
-              ) : (
-                <dl className="participant-state">
-                  <div>
-                    <dt>Shared with the room</dt>
-                    <dd>{constraintCounts.get(participant.id) ?? 0}</dd>
-                  </div>
-                  <div>
-                    <dt>Alignment</dt>
-                    <dd>
-                      {participant.alignment
-                        ? ALIGNMENT_CHOICE_LABEL[participant.alignment]
-                        : "Waiting"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Approval</dt>
-                    <dd>
-                      {!participant.isRequiredApprover
-                        ? "Not required"
-                        : participant.hasApprovedCurrentDecision
-                          ? "Approved"
-                          : "Not confirmed yet"}
-                    </dd>
-                  </div>
-                </dl>
+                  <p className="participant-status">
+                    {participant.alignment
+                      ? `Aligned: ${ALIGNMENT_CHOICE_LABEL[participant.alignment]}`
+                      : "Alignment: waiting"}
+                    {participant.isRequiredApprover
+                      ? ` · ${participant.hasApprovedCurrentDecision ? "Approved" : "Approval not confirmed"}`
+                      : ""}
+                  </p>
+                </>
               )}
 
               {canManage ? (

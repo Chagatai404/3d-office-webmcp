@@ -65,6 +65,9 @@ export interface ShellContextValue {
   agentPreparedDecision: boolean;
   /** True while the camera is still easing toward the active workspace. */
   moving: boolean;
+  /** True when the toolbar and workspace dock are hidden, for an unobstructed view of the room. */
+  chromeHidden: boolean;
+  toggleChrome(): void;
   /** True when the OS prefers reduced motion, or the viewer asked for it below. */
   reducedMotion: boolean;
   /** The viewer's own override, independent of the OS preference. */
@@ -117,6 +120,7 @@ export function MeetingShellProvider({ children }: { children: ReactNode }) {
   const [activeDrawer, setActiveDrawer] = useState<DrawerId | null>(null);
   const [openPanel, setOpenPanel] = useState<WorkspaceFocus | null>(null);
   const [moving, setMoving] = useState(false);
+  const [chromeHidden, setChromeHidden] = useState(false);
   const [agentPreparedDecision, setAgentPreparedDecision] = useState(false);
   const [forceReducedMotion, setForceReducedMotion] = useState(false);
   const osReducedMotion = useSyncExternalStore(
@@ -134,10 +138,12 @@ export function MeetingShellProvider({ children }: { children: ReactNode }) {
     // it is an answer of a kind, and the notice should not be waiting when you
     // come back for an unrelated reason.
     if (workspace !== "decision") setAgentPreparedDecision(false);
-    // Room is the home state rather than a workspace: arriving there clears
-    // the scene instead of opening a panel over it.
+    // Room has no panel because it is the home state; Brief has no panel
+    // because the board already carries the whole brief -- pressing it is a
+    // camera move to read it up close, not something that needs a card of
+    // its own layered over the room.
     setOpenPanel((current) =>
-      workspace === "room"
+      workspace === "room" || workspace === "brief"
         ? null
         : { workspace, itemId, nonce: (current?.nonce ?? 0) + 1 },
     );
@@ -192,6 +198,10 @@ export function MeetingShellProvider({ children }: { children: ReactNode }) {
     setActiveDrawer((current) => (current === id ? null : id));
   }, []);
 
+  const toggleChrome = useCallback(() => {
+    setChromeHidden((current) => !current);
+  }, []);
+
   const handleArrive = useCallback((workspace: WorkspaceId) => {
     setMoving((current) => (current ? false : current));
     void workspace;
@@ -205,6 +215,8 @@ export function MeetingShellProvider({ children }: { children: ReactNode }) {
       openPanel,
       agentPreparedDecision,
       moving,
+      chromeHidden,
+      toggleChrome,
       reducedMotion,
       forceReducedMotion,
       setForceReducedMotion,
@@ -223,6 +235,8 @@ export function MeetingShellProvider({ children }: { children: ReactNode }) {
       openPanel,
       agentPreparedDecision,
       moving,
+      chromeHidden,
+      toggleChrome,
       reducedMotion,
       forceReducedMotion,
       goToWorkspace,

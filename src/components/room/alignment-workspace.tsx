@@ -24,7 +24,10 @@ const ALIGNMENT_CHOICES: readonly AlignmentChoice[] = [
  * strong objections, and missing perspectives before acting — see the Decision
  * workspace for how each `DecisionPolicy` actually uses this information.
  */
-export function AlignmentWorkspace() {
+/** A seated participant's id, or `"input"` for the viewer's own compose tab. */
+export type AlignmentWorkspaceTab = string;
+
+export function AlignmentWorkspace({ tab }: { tab: AlignmentWorkspaceTab }) {
   const { room, self, actions } = useRoom();
   const activeProposal = room.proposals.find((proposal) => proposal.id === room.activeProposalId) ?? null;
   const selfAlignment =
@@ -53,9 +56,7 @@ export function AlignmentWorkspace() {
     setResult(outcome);
   }
 
-  const activeHumans = room.participants.filter(
-    (participant) => participant.status === "active" && participant.kind === "human",
-  );
+  const activeHumans = room.participants.filter((participant) => participant.status === "active");
   const alignmentsForActive = activeProposal
     ? room.alignments.filter((alignment) => alignment.proposalId === activeProposal.id)
     : [];
@@ -67,17 +68,56 @@ export function AlignmentWorkspace() {
     self?.id === room.ownerParticipantId && self.meetingRole === "owner",
   );
 
+  if (tab !== "input") {
+    const participant = activeHumans.find((candidate) => candidate.id === tab);
+    const entry = alignmentByParticipant.get(tab);
+
+    return (
+      <section
+        className="panel-block decision-panel"
+        aria-labelledby="alignment-heading"
+        data-testid="alignment-workspace"
+      >
+        <h2 className="panel-heading" id="alignment-heading">
+          {participant?.name ?? "Participant"}
+        </h2>
+
+        {participant?.kind === "expert" ? (
+          <SecurityReviewSection
+            findings={
+              activeProposal
+                ? room.expertFindings.filter((finding) => finding.proposalId === activeProposal.id)
+                : []
+            }
+          />
+        ) : (
+          <ul className="participant-list" data-testid="alignment-summary">
+            <li className="participant-row">
+              {/* "Waiting", never "neutral" and never blank: silence is not
+                  agreement, and a row that reads as empty invites exactly
+                  that misreading. */}
+              <span className={entry ? "tag" : "tag tag-waiting"}>
+                {entry ? ALIGNMENT_CHOICE_LABEL[entry.choice] : "Waiting"}
+              </span>
+              {entry?.comment ? <p className="panel-note">{entry.comment}</p> : null}
+            </li>
+          </ul>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section
       className="panel-block decision-panel"
       aria-labelledby="alignment-heading"
       data-testid="alignment-workspace"
     >
-      <h2 className="panel-heading" id="alignment-heading">
-        Alignment
+      <h2 className="visually-hidden" id="alignment-heading">
+        Your input
       </h2>
 
-      <div className="decision-section" data-testid="alignment-form">
+      <div data-testid="alignment-form">
         <p className="panel-subheading">How do you feel about this direction?</p>
         {selfAlignment ? (
           <p className="decision-current">
@@ -103,50 +143,21 @@ export function AlignmentWorkspace() {
             </button>
           ))}
         </div>
-        <label htmlFor="alignment-comment">Optional note</label>
-        <input
-          id="alignment-comment"
-          value={comment}
-          disabled={disabled}
-          onChange={(event) => setComment(event.target.value)}
-        />
+        <label className="source-field" htmlFor="alignment-comment">
+          <span>Optional note</span>
+          <input
+            id="alignment-comment"
+            value={comment}
+            disabled={disabled}
+            onChange={(event) => setComment(event.target.value)}
+          />
+        </label>
         <p className="panel-note">
           Sharing alignment tells the responsible decision authority how you feel. It is not a vote — it does
           not by itself decide anything, and a strong objection is never outweighed by a count of supporters.
         </p>
         <ActionFeedback result={result} />
       </div>
-
-      <div className="decision-section" aria-labelledby="alignment-summary-heading" data-testid="alignment-summary">
-        <h3 className="panel-subheading" id="alignment-summary-heading">
-          Team alignment
-        </h3>
-        <ul className="participant-list">
-          {activeHumans.map((participant) => {
-            const entry = alignmentByParticipant.get(participant.id);
-            return (
-              <li key={participant.id} className="participant-row">
-                <div className="participant-identity">
-                  <span className="participant-name">{participant.name}</span>
-                  <span className="participant-role">{participant.role}</span>
-                </div>
-                {/* "Waiting", never "neutral" and never blank: silence is
-                    not agreement, and a row that reads as empty invites
-                    exactly that misreading. */}
-                <span className={entry ? "tag" : "tag tag-waiting"}>
-                  {entry ? ALIGNMENT_CHOICE_LABEL[entry.choice] : "Waiting"}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
-      {activeProposal ? (
-        <SecurityReviewSection
-          findings={room.expertFindings.filter((finding) => finding.proposalId === activeProposal.id)}
-        />
-      ) : null}
 
       {isOwner ? (
         <OwnerAlignmentSummary

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ActionResult, DecisionPolicy } from "@/contracts/room";
 import { ActionFeedback } from "@/components/room/action-feedback";
 import { useRoom } from "@/components/room/room-provider";
+import { OwnerPhaseControls } from "@/components/room/room-status";
 import { useShell } from "../shell-provider";
 import { DrawerShell } from "./drawer-shell";
 
@@ -51,7 +52,7 @@ export function SettingsDrawer() {
   }
 
   return (
-    <DrawerShell label="Settings" title="Settings">
+    <DrawerShell label="Settings" title="Settings" dark>
       <div className="drawer-row drawer-toggle-row">
         <span>
           Meeting access
@@ -93,6 +94,8 @@ export function SettingsDrawer() {
         </label>
       ))}
       {isOwner ? <ActionFeedback result={policyResult} /> : null}
+
+      <OwnerPhaseControls />
 
       <label className="drawer-row drawer-toggle-row">
         <input

@@ -10,12 +10,21 @@ import type { WorkspaceId } from "@/visualization/scene/camera-poses";
  * used would be a bug waiting to happen.
  */
 export interface AttentionTarget {
-  drawer?: "participants";
+  drawer?: "participants" | "settings";
   workspace?: WorkspaceId;
 }
 
 export function targetFor(item: AttentionItem, phase: RoomPhase): AttentionTarget {
-  const routes: Record<AttentionItemType, AttentionTarget> = {
+  if (item.type === "owner_progress_required") {
+    // Input, Proposals, and Deliberation now advance themselves the moment
+    // this item's own condition is met (see `useAutoAdvancePhase`), so a
+    // person only ever actually sees this one for Alignment -- where it
+    // points at Settings, home to the one phase transition still manual:
+    // "Review decision".
+    return phase === "voting" ? { drawer: "settings" } : { workspace: "room" };
+  }
+
+  const routes: Record<Exclude<AttentionItemType, "owner_progress_required">, AttentionTarget> = {
     input_required: { workspace: "constraints" },
     admission_request: { drawer: "participants" },
     conflict_requires_human: { workspace: "issues" },
@@ -23,16 +32,6 @@ export function targetFor(item: AttentionItem, phase: RoomPhase): AttentionTarge
     owner_decision_required: { workspace: "decision" },
     consensus_approval_required: { workspace: "decision" },
     expert_advice_needs_disposition: { workspace: "alignment" },
-    owner_progress_required: {
-      workspace:
-        phase === "proposals"
-          ? "proposals"
-          : phase === "deliberation"
-            ? "issues"
-            : phase === "voting"
-              ? "alignment"
-              : "room",
-    },
   };
   return routes[item.type];
 }

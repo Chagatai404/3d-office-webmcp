@@ -28,8 +28,10 @@ const EXPERT_ADVICE_STATUS_LABEL: Record<FinalDecisionCandidate["expertAdvice"][
  * that authority.
  */
 export function ExpertAdviceList({
+  room,
   advice,
 }: {
+  room: RoomState;
   advice: readonly FinalDecisionCandidate["expertAdvice"][number][];
 }) {
   if (advice.length === 0) return null;
@@ -39,7 +41,8 @@ export function ExpertAdviceList({
       <ul>
         {advice.map((entry) => (
           <li key={entry.findingId}>
-            {entry.title} — {EXPERT_ADVICE_STATUS_LABEL[entry.status]}
+            {entry.title} ({proposalLabel(room, entry.proposalId)}) —{" "}
+            {EXPERT_ADVICE_STATUS_LABEL[entry.status]}
             {entry.resolutionRationale ? `: ${entry.resolutionRationale}` : ""}
           </li>
         ))}
@@ -218,7 +221,7 @@ export function DecisionPreviewView({
         empty="No unresolved warnings."
       />
       <DecisionList title="Dissent" entries={preview.dissent} empty="No dissent recorded." />
-      <ExpertAdviceList advice={preview.expertAdvice} />
+      <ExpertAdviceList room={room} advice={preview.expertAdvice} />
       <DecisionList
         title="Required approvers"
         entries={preview.requiredApprovalParticipantIds.map((id) => participantLabel(room, id))}

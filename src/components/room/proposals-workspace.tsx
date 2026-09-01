@@ -39,7 +39,10 @@ export function deriveProposalTitle(description: string): string {
   return `${lastSpace > 40 ? clipped.slice(0, lastSpace) : clipped}…`;
 }
 
-export function ProposalsWorkspace() {
+/** A seated participant's id, or `"input"` for the viewer's own compose tab. */
+export type ProposalsWorkspaceTab = string;
+
+export function ProposalsWorkspace({ tab }: { tab: ProposalsWorkspaceTab }) {
   const { room, self, actions } = useRoom();
   const fieldId = useId();
   const activeProposal = room.proposals.find((proposal) => proposal.id === room.activeProposalId) ?? null;
@@ -89,28 +92,48 @@ export function ProposalsWorkspace() {
     }
   }
 
+  if (tab !== "input") {
+    const owner = room.participants.find((participant) => participant.id === tab);
+    const theirProposals = room.proposals.filter((proposal) => proposal.participantId === tab);
+
+    return (
+      <section
+        className="panel-block decision-panel"
+        aria-labelledby="proposals-heading"
+        data-testid="proposals-workspace"
+      >
+        <h2 className="panel-heading" id="proposals-heading">
+          {owner?.name ?? "Participant"}
+        </h2>
+
+        {theirProposals.length === 0 ? (
+          <p className="panel-empty">No option proposed yet.</p>
+        ) : (
+          theirProposals.map((proposal) => (
+            <div key={proposal.id}>
+              {proposal.id === activeProposal?.id ? (
+                <p className="panel-note">On the table now — the candidate board shows this one.</p>
+              ) : null}
+              <ActiveProposalView room={room} proposal={proposal} />
+            </div>
+          ))
+        )}
+      </section>
+    );
+  }
+
   return (
     <section
       className="panel-block decision-panel"
       aria-labelledby="proposals-heading"
       data-testid="proposals-workspace"
     >
-      <h2 className="panel-heading" id="proposals-heading">
-        Proposals
+      <h2 className="visually-hidden" id="proposals-heading">
+        Your input
       </h2>
 
-      <section className="decision-section" aria-labelledby="active-proposal-heading">
-        <h3 className="panel-subheading" id="active-proposal-heading">
-          On the table
-        </h3>
-        <ActiveProposalView room={room} proposal={activeProposal} />
-        <p className="panel-note">
-          The candidate board reads this same active proposal from the canonical room snapshot.
-        </p>
-      </section>
-
       <form
-        className="decision-section decision-form"
+        className="decision-form"
         data-testid="proposal-form"
         onSubmit={handleProposalSubmit}
       >

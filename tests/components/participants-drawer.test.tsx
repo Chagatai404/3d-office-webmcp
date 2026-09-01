@@ -503,7 +503,7 @@ describe("participant role presentation", () => {
     );
     expect(expertRow?.textContent).toContain("Advisory");
     expect(expertRow?.textContent).toContain("Never aligns, never approves");
-    expect(expertRow?.querySelector(".participant-state")).toBeNull();
+    expect(expertRow?.querySelector(".participant-status")).toBeNull();
 
     // And the owner's controls never reach an advisory actor: it can never
     // be promoted into human decision authority through this panel.

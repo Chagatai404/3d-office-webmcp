@@ -34,15 +34,29 @@ export interface CameraPose {
   target: [number, number, number];
 }
 
+/*
+ * Six of these eight poses now share the frame with a side panel
+ * (`BoardSidePanel`) instead of a full-screen scrim: constraints/whiteboard/
+ * alignment get a panel on the right, proposals/issues/decision get one on
+ * the left (see `PANEL_SIDE` in `board-side-panel.tsx`, mirroring these
+ * boards' wall positions in `meeting-room-layout.ts`). Each of those six has
+ * its look-at target nudged a few units toward the panel's side, away from
+ * the board's true centre, so the board's on-screen position lands in the
+ * half of the frame the panel leaves clear rather than sitting dead-centre
+ * behind it. Position is left untouched -- only the aim point pans, the way
+ * `fitPoseToFrame` below only ever nudges a target rather than moving the
+ * camera itself. Room and brief have no panel and keep their original,
+ * centred aim.
+ */
 export const CAMERA_POSES: Record<WorkspaceId, CameraPose> = {
   room: { position: [0.4, 7.2, 15.6], target: [0, 1.1, 0] },
   brief: { position: [0, 2.9, 1.2], target: [0, 2.5, -6] },
-  constraints: { position: [-1.4, 2.8, 0.6], target: [-8, 2.3, 0] },
-  proposals: { position: [1.4, 2.8, 0.6], target: [8, 2.3, 0] },
-  issues: { position: [2.6, 2.7, -0.8], target: [6.4, 2.2, -5.4] },
-  whiteboard: { position: [-2.6, 2.7, -0.8], target: [-6.4, 2.2, -5.4] },
-  alignment: { position: [-3.4, 2.5, 8.4], target: [-3.4, 1.05, 4.8] },
-  decision: { position: [3.4, 2.3, 8.2], target: [3.4, 1.15, 4.8] },
+  constraints: { position: [-1.4, 2.8, 0.6], target: [-6.7, 2.3, 0] },
+  proposals: { position: [1.4, 2.8, 0.6], target: [6.7, 2.3, 0] },
+  issues: { position: [2.6, 2.7, -0.8], target: [5.2, 2.2, -5.4] },
+  whiteboard: { position: [-2.6, 2.7, -0.8], target: [-5.2, 2.2, -5.4] },
+  alignment: { position: [-3.4, 2.5, 8.4], target: [-2.8, 1.05, 4.8] },
+  decision: { position: [3.4, 2.3, 8.2], target: [2.8, 1.15, 4.8] },
 };
 
 /**

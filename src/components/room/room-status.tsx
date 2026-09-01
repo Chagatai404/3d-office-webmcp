@@ -1,19 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import type { ActionResult, Participant, RoomPhase } from "@/contracts/room";
+import type { ActionResult, Participant, RoomPhase, RoomState } from "@/contracts/room";
 import { ActionFeedback } from "./action-feedback";
-import { CoordinationStatus } from "./coordination-status";
 import { useRoom } from "./room-provider";
 import { PHASE_LABEL, PHASE_ORDER } from "./room-labels";
 
 /**
- * Where the room is in its six phases, and who you are inside it.
+ * The owner's one remaining manual step: entering Decision review.
  *
- * The HUD carries the short version permanently; this is the full rail, for
- * when someone wants to see the whole sequence rather than the current step.
+ * Input→Proposals, Proposals→Deliberation, and Deliberation→Alignment are
+ * procedural -- `useAutoAdvancePhase` fires them itself the moment their one
+ * structural precondition is met, the same "any active participant may call
+ * this" transitions `advance_discussion` and `request_team_alignment`
+ * already document for agents. Alignment→Decision review does not: freezing
+ * the exact candidate for a final decision is a choice someone makes on
+ * purpose, not a checkbox that happens to fill itself in, so it keeps its
+ * button here. When it becomes available, `owner_progress_required` (see
+ * `domain/rooms/attention.ts`) surfaces it as a persistent alert too, so
+ * reaching this button does not depend on remembering to check Settings.
+ *
+ * This used to sit inside a larger "phase & room status" display in the
+ * Participants drawer, alongside a phase rail and the coordination card --
+ * both already shown elsewhere (the dock's tabs, and each workspace's own
+ * `CoordinationStatus` strip), so Participants now shows only the roster.
  */
-export function RoomStatusPanel() {
+export function OwnerPhaseControls() {
   const { room, self, actions } = useRoom();
   const [pendingPhase, setPendingPhase] = useState<RoomPhase | null>(null);
   const [phaseResult, setPhaseResult] = useState<ActionResult<unknown> | null>(
@@ -23,12 +35,7 @@ export function RoomStatusPanel() {
   const isOwner = Boolean(
     self?.id === room.ownerParticipantId && self.meetingRole === "owner",
   );
-  const participantPositionIds = new Set(
-    room.positions.map((position) => position.participantId),
-  );
-  const blockingConflicts = room.conflicts.filter(
-    (conflict) => conflict.status === "open" && conflict.severity === "blocking",
-  );
+  if (!isOwner) return null;
 
   async function handlePhaseAdvance(phase: RoomPhase) {
     if (pendingPhase) return;
@@ -40,115 +47,24 @@ export function RoomStatusPanel() {
   }
 
   return (
-    <section className="panel-block" aria-labelledby="status-heading">
-      <h2 className="panel-heading" id="status-heading">
-        Phase &amp; room status
-      </h2>
+    <div className="organizer-panel" aria-labelledby="organizer-heading">
+      <h3 className="panel-subheading" id="organizer-heading">
+        Decision review
+      </h3>
 
-      <dl className="room-facts">
-        <div>
-          <dt>You are</dt>
-          <dd>
-            {self ? (
-              <>
-                {self.name}
-                <span className="room-facts-sub">{self.role}</span>
-              </>
-            ) : (
-              <>
-                Observing
-                <span className="room-facts-sub">No seat claimed</span>
-              </>
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>Room version</dt>
-          <dd>
-            {room.version}
-            <span className="room-facts-sub">Server authoritative</span>
-          </dd>
-        </div>
-      </dl>
+      <div className="phase-control-group" aria-label="Owner phase controls">
+        <PhaseAdvanceButton
+          phase="approval"
+          label="Review decision"
+          currentPhase={room.phase}
+          pendingPhase={pendingPhase}
+          reason={approvalDisabledReason(room)}
+          onAdvance={handlePhaseAdvance}
+        />
+      </div>
 
-      <ol className="phase-rail" aria-label="Room phase">
-        {PHASE_ORDER.map((phase) => {
-          const isCurrent = phase === room.phase;
-          return (
-            <li
-              key={phase}
-              className={isCurrent ? "phase-step phase-step-current" : "phase-step"}
-              aria-current={isCurrent ? "step" : undefined}
-            >
-              <span className="phase-step-name">{PHASE_LABEL[phase]}</span>
-              {isCurrent ? (
-                <span className="visually-hidden"> (current phase)</span>
-              ) : null}
-            </li>
-          );
-        })}
-      </ol>
-
-      {/* The same coordination story the protocol tells, for everyone in the
-          room rather than the owner alone: a contributor should never have to
-          ask the owner who the room is waiting for. */}
-      <CoordinationStatus />
-
-      {isOwner ? (
-        <div className="organizer-panel" aria-labelledby="organizer-heading">
-          <h3 className="panel-subheading" id="organizer-heading">
-            Owner phase controls
-          </h3>
-
-          <div className="phase-control-group" aria-label="Owner phase controls">
-            <PhaseAdvanceButton
-              phase="proposals"
-              label="Start proposals"
-              currentPhase={room.phase}
-              pendingPhase={pendingPhase}
-              reason={proposalsDisabledReason(room.participants, participantPositionIds)}
-              onAdvance={handlePhaseAdvance}
-            />
-            <PhaseAdvanceButton
-              phase="deliberation"
-              label="Start deliberation"
-              currentPhase={room.phase}
-              pendingPhase={pendingPhase}
-              reason={
-                room.activeProposalId
-                  ? null
-                  : "Choose or publish an active proposal before deliberation."
-              }
-              onAdvance={handlePhaseAdvance}
-            />
-            <PhaseAdvanceButton
-              phase="voting"
-              label="Open Alignment"
-              currentPhase={room.phase}
-              pendingPhase={pendingPhase}
-              reason={
-                blockingConflicts.length === 0
-                  ? null
-                  : `${blockingConflicts.length} blocking objection${
-                      blockingConflicts.length === 1 ? "" : "s"
-                    } must be resolved before Alignment.`
-              }
-              onAdvance={handlePhaseAdvance}
-            />
-            <PhaseAdvanceButton
-              phase="approval"
-              label="Review decision"
-              currentPhase={room.phase}
-              pendingPhase={pendingPhase}
-              reason={approvalDisabledReason(room)}
-              onAdvance={handlePhaseAdvance}
-            />
-          </div>
-
-          <ActionFeedback result={phaseResult} />
-        </div>
-      ) : null}
-    </section>
+      <ActionFeedback result={phaseResult} />
+    </div>
   );
 }
 
@@ -246,6 +162,14 @@ function proposalsDisabledReason(
   }
 
   return null;
+}
+
+/** Whether Input has met its one structural precondition for Proposals -- every required decision-maker joined, published, and marked ready. Shared with `useAutoAdvancePhase`, which fires the transition itself once this is true. */
+export function proposalsReady(room: RoomState): boolean {
+  const participantPositionIds = new Set(
+    room.positions.map((position) => position.participantId),
+  );
+  return proposalsDisabledReason(room.participants, participantPositionIds) === null;
 }
 
 /**

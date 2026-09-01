@@ -51,7 +51,7 @@ const DRAWER_ITEMS: Array<{ id: DrawerId; label: string; accent?: boolean }> = [
 
 export function WorkspaceDock() {
   const { room, self, visualization } = useRoom();
-  const { activeWorkspace, activeDrawer, goToWorkspace, toggleDrawer } = useShell();
+  const { activeWorkspace, activeDrawer, chromeHidden, goToWorkspace, toggleDrawer } = useShell();
   // People waiting in the lobby are the one piece of drawer state urgent
   // enough to show on the closed drawer's own button: admission is blocking,
   // and only the owner can clear it.
@@ -77,7 +77,11 @@ export function WorkspaceDock() {
   };
 
   return (
-    <nav className="workspace-dock" aria-label="Meeting workspaces and controls">
+    <nav
+      className="workspace-dock"
+      aria-label="Meeting workspaces and controls"
+      data-hidden={chromeHidden || undefined}
+    >
       <div className="workspace-tabs" role="tablist" aria-label="Meeting workspaces">
         {WORKSPACE_IDS.map((workspace) => {
           const selected = activeWorkspace === workspace;

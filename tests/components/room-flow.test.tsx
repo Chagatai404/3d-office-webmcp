@@ -3,7 +3,7 @@ import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ParticipantPanel } from "@/components/room/participant-panel";
-import { PositionsPanel } from "@/components/room/positions-panel";
+import { PositionsPanel, type PositionsPanelTab } from "@/components/room/positions-panel";
 import { RoomProvider, useRoom } from "@/components/room/room-provider";
 import { setRoomClientForTests } from "@/room-client/room-client";
 import { MockRoomClient } from "@/room-client/mock-room-client";
@@ -36,13 +36,13 @@ function VisualizationProbe() {
   return null;
 }
 
-async function mountRoom() {
+async function mountRoom(tab: PositionsPanelTab = "input") {
   await act(async () => {
     root.render(
       <RoomProvider roomId="demo">
         <VisualizationProbe />
         <ParticipantPanel />
-        <PositionsPanel />
+        <PositionsPanel tab={tab} />
       </RoomProvider>,
     );
   });
@@ -132,7 +132,8 @@ afterEach(async () => {
 
 describe("adding a constraint through the room client", () => {
   it("renders the seeded room from the client, not from fixtures", async () => {
-    await mountRoom();
+    // participant-design (Lina Duarte) owns the constraint this test looks for.
+    await mountRoom("participant-design");
 
     expect(container.textContent).toContain("Maya Okonkwo");
     expect(container.textContent).toContain("Emre Yilmaz");
@@ -181,11 +182,13 @@ describe("adding a constraint through the room client", () => {
     expect(engineerConstraints).toHaveLength(2);
     expect(engineerConstraints[0]?.category).toBe("capacity");
 
-    // The same snapshot reaches the DOM.
+    // "Recorded" is the input tab's own submit feedback; the new constraint
+    // itself reaches the DOM under its owner's own tab.
+    expect(container.textContent).toContain("Recorded");
+    await mountRoom("participant-engineering");
     expect(container.textContent).toContain(
       "Implementation capacity is roughly one engineer for two weeks.",
     );
-    expect(container.textContent).toContain("Recorded");
 
     // And the activity ledger's source gained exactly one event.
     expect(after.recentActivity.at(-1)?.action).toBe("position.added");

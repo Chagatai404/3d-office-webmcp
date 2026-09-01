@@ -36,8 +36,16 @@ describe("camera poses", () => {
     expect(CAMERA_POSES.room).toEqual({ position: [0.4, 7.2, 15.6], target: [0, 1.1, 0] });
   });
 
-  it("matches the imported design's exact decision pose", () => {
-    expect(CAMERA_POSES.decision).toEqual({ position: [3.4, 2.3, 8.2], target: [3.4, 1.15, 4.8] });
+  it("keeps the decision pose's position from the imported design, panned for the side panel", () => {
+    // The six workspaces that share the frame with `BoardSidePanel` have
+    // their target panned a few units toward the panel's side, away from
+    // the board's true centre -- see the comment on `CAMERA_POSES`. Position
+    // is untouched, so this still checks the imported design's vantage
+    // point; only the aim point is intentionally no longer the literal
+    // import.
+    expect(CAMERA_POSES.decision.position).toEqual([3.4, 2.3, 8.2]);
+    expect(CAMERA_POSES.decision.target[1]).toBe(1.15);
+    expect(CAMERA_POSES.decision.target[2]).toBe(4.8);
   });
 });
 

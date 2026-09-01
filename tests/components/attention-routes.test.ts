@@ -55,15 +55,18 @@ describe("targetFor", () => {
     expect(targetFor(item("owner_decision_required"), "approval").workspace).toBe("decision");
   });
 
-  it("follows the phase for the owner's next step", () => {
-    const cases: Array<[RoomPhase, string]> = [
-      ["proposals", "proposals"],
-      ["deliberation", "issues"],
-      ["voting", "alignment"],
-      ["input", "room"],
-    ];
-    for (const [phase, workspace] of cases) {
-      expect(targetFor(item("owner_progress_required", phase), phase).workspace).toBe(workspace);
+  it("points Alignment's owner-progress item at Settings, home of the one manual transition left", () => {
+    expect(targetFor(item("owner_progress_required", "voting"), "voting")).toEqual({
+      drawer: "settings",
+    });
+  });
+
+  it("falls back to the room for the phases that now advance themselves", () => {
+    const cases: RoomPhase[] = ["input", "proposals", "deliberation"];
+    for (const phase of cases) {
+      expect(targetFor(item("owner_progress_required", phase), phase)).toEqual({
+        workspace: "room",
+      });
     }
   });
 });

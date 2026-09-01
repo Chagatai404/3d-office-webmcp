@@ -15,7 +15,7 @@ export function HelpDrawer() {
   const isDemo = room.demoMode !== null;
 
   return (
-    <DrawerShell label="How this room works" title="How this room works">
+    <DrawerShell label="How this room works" title="How this room works" dark>
       <p className="drawer-note">
         You are in one meeting, about one decision. Each part of the decision lives on its own
         surface in this room.
