@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Manrope, Newsreader } from "next/font/google";
 import type { ReactNode } from "react";
+import { MobileNotice } from "@/components/shell/mobile-notice";
 import "./styles.css";
 
 const newsreader = Newsreader({
@@ -33,7 +34,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en" className={`${newsreader.variable} ${manrope.variable} ${jetBrainsMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <MobileNotice />
+        {children}
+      </body>
     </html>
   );
 }
