@@ -1,8 +1,18 @@
-# 3D Office WebMCP — Canonical Shared Context
+# Quorum (3D Office WebMCP) — Canonical Shared Context
+
+> **⚠ Design-history document, not a description of shipped behavior.** Large
+> parts of this file predate the Alignment/DecisionPolicy authority model and
+> still describe an earlier universal-voting plan (`Vote`, "participants
+> vote", a `VOTING` phase presented as literal voting). That model was
+> replaced — the canonical contract has no `Vote` type any more. For what is
+> actually shipped, read [`README.md`](README.md),
+> [`docs/status.md`](docs/status.md), and [`src/contracts/room.ts`](src/contracts/room.ts)
+> instead; treat this file as architecture/design history that explains *why*
+> decisions were made, not a source of truth for current runtime behavior.
 
 > **Hackathon:** OpenAI WebMCP Challenge  
 > **Purpose:** source of truth for product, domain, WebMCP, browser UI, 3D
-> presentation, testing, and demo decisions.
+> presentation, testing, and demo decisions **at the time it was written**.
 >
 > This document supersedes the earlier multi-office / desktop-window / 2D floor
 > plan direction. Backend authority and decision mechanics remain intact; the

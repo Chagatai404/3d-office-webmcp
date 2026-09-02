@@ -27,8 +27,8 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "3D Office WebMCP",
-  description: "A shared decision room for humans and browser agents.",
+  title: "Quorum — Agent-Native Decision Rooms",
+  description: "A shared decision room for humans and their browser agents.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

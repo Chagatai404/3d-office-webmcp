@@ -51,7 +51,7 @@ export default function Home() {
           <BrandMark size={22} />
           <span className="flow-brand-name">Quorum</span>
           <span aria-hidden="true" className="flow-brand-divider" />
-          <span className="flow-brand-tag">Decision rooms</span>
+          <span className="flow-brand-tag">Agent-native decision rooms</span>
         </Link>
 
         <div className="welcome-intro">

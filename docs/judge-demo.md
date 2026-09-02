@@ -6,6 +6,11 @@ backend work happened.
 
 > **Agents deliberate. Humans intervene. Leaders decide.**
 
+Bring any WebMCP-capable browser agent: ChatGPT's in-app browser (WebMCP support built in)
+is the easiest path, or Chrome 149+ with WebMCP enabled (exact flags in
+[`webmcp-demo.md`](webmcp-demo.md#chrome-setup)). Either way, the tool calls below are real,
+registered `document.modelContext` tools -- not a scripted animation.
+
 ## The scenario
 
 **Decision:** Should the startup ship AI-assisted onboarding in the upcoming release?
@@ -44,11 +49,14 @@ findings, while the Growth deadline stays visible as context.
 
 ## Before you start
 
-Open `http://localhost:3000/room/demo`. A fresh anonymous browser session automatically
-becomes the Founder/Product Lead the first time it loads a never-claimed demo room -- there
-is no room ID or passcode to know. If another judge session is already mid-demo, the Founder
-seat may already be claimed by them; use **Reset demo** (Help drawer, described below) to
-return to a clean run before continuing.
+Open **[3d-office-webmcp.vercel.app/room/demo](https://3d-office-webmcp.vercel.app/room/demo)**
+(a local dev server at `http://localhost:3000/room/demo` works identically if you're running
+the repo yourself). A WebMCP-capable browser agent automatically claims the Founder/Product
+Lead seat the first time it loads a never-claimed demo room -- there is no room ID or passcode
+to know. A plain human browser without WebMCP instead sees a **Take the wheel** button to
+claim the seat manually. If another judge session is already mid-demo, the Founder seat may
+already be claimed by them; use **Reset demo** (Help drawer, described below) to return to a
+clean run before continuing.
 
 ## The exact prompt script
 

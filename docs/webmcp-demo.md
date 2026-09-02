@@ -9,15 +9,33 @@ the production two-person WebMCP flow that both `/room/demo` and every normal ro
 
 Primary references: [Chrome WebMCP documentation](https://developer.chrome.com/docs/ai/webmcp), [Chrome 149 DevTools WebMCP inspector](https://developer.chrome.com/blog/new-in-devtools-149), [WebMCP tool security](https://developer.chrome.com/docs/ai/webmcp/secure-tools), and the [current WebMCP draft](https://webmachinelearning.github.io/webmcp/).
 
-WebMCP is experimental. Chrome 149 introduced the origin trial and DevTools support. The current imperative API is `document.modelContext.registerTool(definition, { signal })`; aborting the signal unregisters the tool. `executeTool()` receives an input object, and the page tool returns a serialized string result.
+## For judges: the fast path
+
+- **Easiest:** open [3d-office-webmcp.vercel.app/room/demo](https://3d-office-webmcp.vercel.app/room/demo)
+  in **ChatGPT's in-app browser** (WebMCP support is built in) and just talk to it -- no flags,
+  no setup.
+- **Alternative:** the same production URL in **Chrome 149+** with WebMCP enabled (exact flags
+  below), so you can also watch the live tool catalog in DevTools.
+- **Where to see the tools:** DevTools → Application → **WebMCP** panel (Chrome path only)
+  shows every currently registered tool, its schema, and its invocation history, live.
+- **One-line smoke test:** ask your agent *"What is this room deciding, and what does the
+  team care about?"* -- it should call `get_meeting_context`, a real registered tool, and you
+  should see the answer reflect the room's actual current state, not a canned reply.
+
+For the full deterministic judge script (exact prompts, expected tool calls, what to watch for
+visually), see [`judge-demo.md`](judge-demo.md). Everything below this point is deeper Chrome
+setup and verification detail for technical reviewers, not required for a first pass.
 
 ## Chrome setup
+
+WebMCP is experimental. Chrome 149 introduced the origin trial and DevTools support. The current imperative API is `document.modelContext.registerTool(definition, { signal })`; aborting the signal unregisters the tool. `executeTool()` receives an input object, and the page tool returns a serialized string result.
 
 1. Use Chrome 149 or newer (Canary is recommended while WebMCP remains experimental).
 2. Open `chrome://flags/#enable-webmcp-testing` and enable WebMCP testing.
 3. For the built-in DevTools inspector, also enable `chrome://flags/#devtools-webmcp-support`.
 4. Relaunch Chrome.
-5. Start Quorum locally and open the application in a normal top-level tab.
+5. Open [3d-office-webmcp.vercel.app](https://3d-office-webmcp.vercel.app/) (or `npm run dev`
+   and `http://localhost:3000` for a local build) in a normal top-level tab.
 6. Open DevTools, select **Application**, then open the **WebMCP** section. It shows registered tools, schemas, invocation history, status, and returned payloads.
 7. Alternatively, install Google's Model Context Tool Inspector extension and use its agent-style chat to run the natural-language prompts below.
 

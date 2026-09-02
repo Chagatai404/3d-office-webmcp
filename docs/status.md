@@ -2,6 +2,22 @@
 
 Last updated: 2026-08-31 (Slice 1 / Reliability Cleanup implementation).
 
+## Current state, in one paragraph
+
+This is an implementation history, kept in the order each slice landed — read
+top-to-bottom for chronology, not for "what's true today." As of the state
+this file describes: the canonical contract has no `Vote` type; `Alignment` is
+the informative, non-binding signal, and `DecisionPolicy` (`owner_decides` /
+`equal_authority_consensus`) determines who actually approves. Final approval
+is explicit, per required approver, and bound to an exact decision hash. The
+3D room ships with authored `.glb` assets, not placeholder geometry. Roughly
+40 WebMCP tools register dynamically by route/authority/phase/policy. For a
+judge-facing summary of what's shipped, read the root [`README.md`](../README.md)
+instead of this file; sections below that mention "voting" as a live mechanic
+are describing the superseded model this repository replaced, not current
+behavior — see the "Alignment and policy-aware finalization (Slice 4)" section
+below for exactly what changed and why.
+
 ## Core platform
 
 The backend/core workstream is considered integrated in this snapshot:
@@ -88,9 +104,7 @@ model:
   unframed interior pose instead of leaving the small welcome-framed 3D card
   hanging over the join form.
 
-See [`backend-integration.md`](backend-integration.md) and
-[`workstreams/core-platform-completed.md`](workstreams/core-platform-completed.md)
-for the detailed record.
+See [`backend-integration.md`](backend-integration.md) for the detailed record.
 
 ## Product UX reset
 
@@ -109,9 +123,9 @@ The canonical direction is now:
 - one focused 3D workspace at a time;
 - smooth camera transitions between the table and dedicated planning/evaluation
   boards;
-- procedural placeholder geometry until Blender MCP assets are ready.
-
-See [`product-ux.md`](product-ux.md).
+- committed, authored `.glb` room assets (`public/models/meeting-room/`), not
+  procedural placeholder geometry — this shipped; see the "3D room" section of
+  the root [`README.md`](../README.md).
 
 ## Cleanup completed in this reorganization
 

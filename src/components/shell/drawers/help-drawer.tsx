@@ -41,6 +41,23 @@ export function HelpDrawer() {
       </div>
 
       {isDemo ? <DemoGuidance /> : null}
+
+      <div className="decision-section">
+        <h3 className="panel-subheading">3D asset credits</h3>
+        <p className="drawer-note">
+          Participant avatars: &ldquo;Ultimate Modular Women Pack&rdquo; and &ldquo;Ultimate
+          Modular Men Pack&rdquo; by Quaternius. Meeting-room props: &ldquo;The Office
+          Pack&rdquo; by dook. Both licensed{" "}
+          <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">
+            CC-BY
+          </a>{" "}
+          via{" "}
+          <a href="https://poly.pizza" target="_blank" rel="noreferrer">
+            Poly Pizza
+          </a>
+          .
+        </p>
+      </div>
     </DrawerShell>
   );
 }
