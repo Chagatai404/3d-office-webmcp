@@ -4,7 +4,7 @@ A shared decision room where several people, each with their own authority and
 their own browser agent, negotiate a real decision together — and where the
 final call still belongs to a specific accountable human.
 
-**Agents negotiate. Humans decide.**
+**Agents negotiate. People decide.**
 
 Real decisions rarely have one decision-maker. A release, a pricing change, a
 vendor pick, a launch call — an engineer, a designer, a growth lead, and a
@@ -114,6 +114,21 @@ campaign timing, and privacy.
   judge a deterministic, single-session way to see the whole lifecycle.
 
 See [`docs/judge-demo.md`](docs/judge-demo.md) for the exact prompt sequence.
+
+**Creating and joining real rooms is fully functional, not just the seeded
+demo.** Click **Create a meeting** on the [live app](https://quorummeet.vercel.app/)
+(or ask your agent to call `create_meeting`) to start a genuine multi-user
+room with your own title, brief, and decision policy. It returns a real
+invite link and one-time passcode — share those with a second browser (or a
+friend) and use `join_meeting` to request a seat, then `admit_participant` to
+let them in. This is the same owner/participant flow the seeded demo exercises
+solo; judges are welcome to try it with a second person or browser if they
+want to see two independent, differently-authenticated sessions negotiate
+against a shared room instead of one judge steering a single deterministic
+seat. Exact prompts for both roles are in
+[`docs/webmcp-demo.md`](docs/webmcp-demo.md#owner-prompt-script) (owner) and
+[`docs/webmcp-demo.md`](docs/webmcp-demo.md#participant-prompt-script)
+(participant).
 
 ## WebMCP implementation
 

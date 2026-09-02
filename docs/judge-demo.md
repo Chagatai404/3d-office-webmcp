@@ -4,7 +4,7 @@ The canonical, deterministic hackathon demonstration. One human judge, their own
 agent, and the real production WebMCP catalog -- nothing here is a UI animation pretending
 backend work happened.
 
-> **Agents deliberate. Humans intervene. Leaders decide.**
+> **Agents negotiate. People decide.**
 
 Bring any WebMCP-capable browser agent: ChatGPT's in-app browser (WebMCP support built in)
 is the easiest path, or Chrome 149+ with WebMCP enabled (exact flags in
@@ -136,6 +136,26 @@ If two judges open it at the same time, the second one sees the first judge's li
 as a read-only spectator until the Founder seat is next reset. This is a disclosed,
 deliberate scope decision, not a bug -- production rooms created through the normal Create
 Meeting flow do not share this limitation; each is fully isolated.
+
+## Optional: try a real room, not just the demo
+
+`/room/demo` exists to give one judge a deterministic solo path through the whole lifecycle,
+but creating and joining rooms is fully functional production behavior, not a demo-only
+affordance. If you want to see two independent, differently-authenticated sessions negotiate
+against a shared room instead of one judge steering a single seat:
+
+1. From the [live app](https://quorummeet.vercel.app/), click **Create a meeting** (or ask your
+   agent to call `create_meeting`) with your own title and brief. You get back a real invite
+   link and one-time passcode.
+2. Open that invite link in a second browser (or hand it to someone else), and have that
+   session call `join_meeting` -- it creates a waiting request, never an automatic seat.
+3. Back in the owner session, call `get_waiting_participants` then `admit_participant` to let
+   the second session in.
+4. From there the same tools from the prompt script above apply, now genuinely split across two
+   authenticated sessions instead of one.
+
+Exact prompts for both roles: `docs/webmcp-demo.md`'s "Owner prompt script" and "Participant
+prompt script" sections.
 
 ## Real Chrome WebMCP inspector
 

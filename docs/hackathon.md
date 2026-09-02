@@ -10,7 +10,7 @@ Devpost copy is in [`devpost-submission.md`](devpost-submission.md).
 
 - [x] Working live URL — [quorummeet.vercel.app](https://quorummeet.vercel.app/)
 - [x] Public GitHub repository
-- [ ] License visibly detected by GitHub's **About** sidebar (manual check — see
+- [x] License visibly detected by GitHub's **About** sidebar (manual check — see
       "Requires external verification" below; the `LICENSE` file itself is present and correct)
 - [x] README rewritten for judges (this pass)
 - [x] WebMCP implementation clearly discoverable (README "WebMCP implementation" section, plus
@@ -43,9 +43,11 @@ administration, and an advisory expert, all built on the imperative
 function: the catalog itself encodes the room's rules.
 
 **Execution.** The app is deployed and reachable, the deterministic `/room/demo` route lets any
-judge exercise the entire lifecycle solo, and the same domain operations back manual UI clicks,
-WebMCP tool calls, and the Security Expert's actions — there is no separate, weaker "WebMCP-only"
-code path. Authority is derived server-side from the authenticated session on every mutation, not
+judge exercise the entire lifecycle solo, and creating/joining real rooms (`create_meeting` /
+`join_meeting`, a real invite link and passcode, owner admission) is fully functional production
+behavior a judge can try directly, not a demo-only affordance. The same domain operations back
+manual UI clicks, WebMCP tool calls, and the Security Expert's actions — there is no separate,
+weaker "WebMCP-only" code path. Authority is derived server-side from the authenticated session on every mutation, not
 from tool arguments. `tests/webmcp/` covers the tool catalog, participant-authority boundaries,
 prompt-injection resistance, and tool-selection evals; Playwright covers live registration and
 stale-tool-reference rejection across multiple simulated browsers.
