@@ -291,6 +291,31 @@ export class ApiRoomClient implements RoomClient {
     return this.readAction(roomId, "report", meetingReportSchema);
   }
 
+  async getMeetingReportPdf(roomId: string): Promise<ActionResult<{ blob: Blob; filename: string }>> {
+    const accessToken = await this.ensureAnonymousSession();
+    const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/report.pdf`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    const roomVersion = this.versions.get(roomId) ?? 0;
+    if (!response.ok) {
+      const parsed = actionResultSchema(z.unknown()).safeParse(await response.json().catch(() => null));
+      if (parsed.success && !parsed.data.ok) return parsed.data as ActionResult<{ blob: Blob; filename: string }>;
+      return {
+        ok: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: `The report PDF could not be loaded (HTTP ${response.status}).`,
+        },
+        roomVersion,
+      };
+    }
+    const blob = await response.blob();
+    const filename = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1]
+      ?? "meeting-decision-report.pdf";
+    return { ok: true, data: { blob, filename }, roomVersion, message: "Report PDF downloaded." };
+  }
+
   async startDemoScenario(
     roomId: string,
     input: StartDemoScenarioInput,

@@ -1200,6 +1200,15 @@ export interface RoomClient {
   /** Canonical human-facing report projection, available only after finalization. */
   getMeetingReport(roomId: string): Promise<ActionResult<MeetingReport>>;
 
+  /**
+   * The same finalized report, rendered to PDF by the server. This session's
+   * identity lives in browser storage and is sent as a bearer token, never a
+   * cookie, so this must be fetched the same authenticated way as every
+   * other request -- a plain same-origin `<a href>` navigation would carry
+   * no credential at all and the server would (correctly) refuse it.
+   */
+  getMeetingReportPdf?(roomId: string): Promise<ActionResult<{ blob: Blob; filename: string }>>;
+
   startDemoScenario(
     roomId: string,
     input: StartDemoScenarioInput,

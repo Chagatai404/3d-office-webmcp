@@ -57,6 +57,7 @@ class FakeRoomClient implements RoomClient {
   previewCalls = 0;
   recordCalls = 0;
   reportCalls = 0;
+  reportPdfCalls = 0;
   private readonly listeners = new Set<Listener>();
 
   constructor(seed: RoomState) {
@@ -141,6 +142,14 @@ class FakeRoomClient implements RoomClient {
       "Final meeting report loaded.",
       computeMeetingReport(this.state, decisionRecord(this.state)),
     );
+  };
+
+  getMeetingReportPdf = async (): Promise<ActionResult<{ blob: Blob; filename: string }>> => {
+    this.reportPdfCalls += 1;
+    return this.ok("Report PDF downloaded.", {
+      blob: new Blob(["%PDF-fake"], { type: "application/pdf" }),
+      filename: "demo-decision-report.pdf",
+    });
   };
 
   startDemoScenario: RoomClient["startDemoScenario"] = async () =>
@@ -899,16 +908,33 @@ describe("final decision report", () => {
     expect(byTestId("final-report").textContent).toContain("Concern");
   });
 
-  it("offers the PDF from the authenticated server endpoint", async () => {
+  it("downloads the PDF through an authenticated request, not a bare same-origin link", async () => {
     const client = new FakeRoomClient(roomInPhase("finalized"));
     await mount(client, <DecisionWorkspace tab="input" />);
 
-    const pdf = [...container.querySelectorAll("a")].find((anchor) =>
+    // A plain `<a href>` navigation carries no credential at all in this
+    // app -- the session lives in browser storage and travels as a bearer
+    // token, never a cookie -- so the control has to be a button that makes
+    // the same authenticated request as every other action on this page,
+    // not a link the browser could navigate to unauthenticated.
+    const pdfLink = [...container.querySelectorAll("a")].find((anchor) =>
       anchor.textContent?.includes("Download PDF"),
     );
-    // Same-origin and session-authenticated: no credential is ever in reach of
-    // this component, and the server decides who may have the file.
-    expect(pdf?.getAttribute("href")).toBe(`/api/rooms/${client.state.id}/report.pdf`);
+    expect(pdfLink).toBeUndefined();
+
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => "blob:fake-report-url");
+    URL.revokeObjectURL = vi.fn();
+    try {
+      await click(buttonNamed("Download PDF"));
+      expect(client.reportPdfCalls).toBe(1);
+      expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:fake-report-url");
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+    }
   });
 
   it("keeps provenance available without letting it crowd the report", async () => {

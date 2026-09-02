@@ -123,6 +123,9 @@ export interface RoomActions {
 
   getMeetingReport(): Promise<ActionResult<MeetingReport>>;
 
+  /** Same finalized report as `getMeetingReport`, rendered to PDF, authenticated the same way as every other request. */
+  getMeetingReportPdf(): Promise<ActionResult<{ blob: Blob; filename: string }>>;
+
   /** Reset/reseed the single shared demo room through the guarded demo API. */
   startDemoScenario(input: StartDemoScenarioInput): Promise<ActionResult>;
 
@@ -223,6 +226,18 @@ function unsupportedSourceAction<T>(roomVersion: number): ActionResult<T> {
     error: {
       code: "VALIDATION_ERROR",
       message: "Meeting source files are not available in this client.",
+      recovery: "Reload the room with the API-backed client and try again.",
+    },
+    roomVersion,
+  };
+}
+
+function unsupportedReportPdfAction(roomVersion: number): ActionResult<{ blob: Blob; filename: string }> {
+  return {
+    ok: false,
+    error: {
+      code: "VALIDATION_ERROR",
+      message: "The report PDF is not available in this client.",
       recovery: "Reload the room with the API-backed client and try again.",
     },
     roomVersion,
@@ -387,6 +402,11 @@ export function RoomProvider({
 
       getMeetingReport: () =>
         client.getMeetingReport(roomId),
+
+      getMeetingReportPdf: () =>
+        client.getMeetingReportPdf
+          ? client.getMeetingReportPdf(roomId)
+          : Promise.resolve(unsupportedReportPdfAction(room?.version ?? 0)),
 
       startDemoScenario: (input) =>
         client.startDemoScenario(roomId, input),

@@ -20,10 +20,13 @@ import { useRoom } from "./room-provider";
  * `MeetingReport`. The raw `DecisionRecord` is fetched only for the explicitly
  * expanded line-by-line provenance view; it never reconstructs report content.
  *
- * The PDF button points at the authenticated report endpoint (A9). It is a
- * plain same-origin link on purpose: the session cookie goes with it, the
- * server decides whether this caller may have it, and no service credential
- * is ever within reach of this file.
+ * The PDF button hits the same authenticated report endpoint (A9) as
+ * everything else on this page, via `getMeetingReportPdf` -- not a plain
+ * same-origin `<a href>`. This session's identity lives in browser storage
+ * and travels as a bearer token, never a cookie, so a bare link would reach
+ * the server with no credential at all and the server would (correctly)
+ * refuse it. The server-side authorization is unchanged either way: the
+ * same room-membership check `getMeetingReport` already relies on.
  */
 export function FinalReport() {
   const { room, actions } = useRoom();
@@ -32,6 +35,8 @@ export function FinalReport() {
   const [record, setRecord] = useState<DecisionRecord | null>(null);
   const [result, setResult] = useState<ActionResult<MeetingReport> | null>(null);
   const [pending, setPending] = useState(false);
+  const [pdfResult, setPdfResult] = useState<ActionResult<unknown> | null>(null);
+  const [pdfPending, setPdfPending] = useState(false);
 
   /* A finalized room exposes its report without being asked — B7's whole
      point is that the meeting ends in a shared artifact, not in a button
@@ -68,6 +73,30 @@ export function FinalReport() {
     setPending(false);
     setResult(next);
     if (next.ok) setReport(next.data);
+  }
+
+  /**
+   * A blob download rather than a plain link: this session's identity is a
+   * bearer token in browser storage, not a cookie, so the PDF has to be
+   * fetched with the same `Authorization` header every other request on
+   * this page already carries. The temporary object URL only ever lives in
+   * this tab and is revoked immediately after the save dialog opens.
+   */
+  async function downloadPdf() {
+    if (pdfPending) return;
+    setPdfPending(true);
+    const next = await actions.getMeetingReportPdf();
+    setPdfPending(false);
+    setPdfResult(next);
+    if (!next.ok) return;
+    const url = URL.createObjectURL(next.data.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = next.data.filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   if (!report) {
@@ -261,13 +290,14 @@ export function FinalReport() {
         <h3 className="panel-subheading" id="report-export-heading">
           Take it with you
         </h3>
-        <a className="button report-pdf" href={`/api/rooms/${report.roomId}/report.pdf`}>
-          Download PDF
-        </a>
+        <button className="button report-pdf" type="button" onClick={() => void downloadPdf()} disabled={pdfPending}>
+          {pdfPending ? "Preparing PDF…" : "Download PDF"}
+        </button>
         <p className="panel-note">
           The PDF is generated from this same record on the server, so its decision hash is the one
           above.
         </p>
+        <ActionFeedback result={pdfResult && !pdfResult.ok ? pdfResult : null} />
       </section>
 
       {/* Provenance is available, never in the way: the report is what was
