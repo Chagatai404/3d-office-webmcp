@@ -73,6 +73,12 @@ const fixtureReport: MeetingReport = {
   decisionHash: "hash-final-abc123",
   finalizedAt: "2026-08-30T02:00:01.000Z",
   provenanceSummary: { totalEvents: 4, byAction: { "room.created": 1, "proposal.submitted": 1, "approval.recorded": 1, "decision.finalized": 1 } },
+  activityLog: [
+    { roomVersion: 1, actorType: "participant", actorName: "Ata", summary: "Ata created the room.", createdAt: "2026-08-30T00:00:00.000Z" },
+    { roomVersion: 2, actorType: "participant", actorName: "Maya", summary: "Maya submitted a proposal.", createdAt: "2026-08-30T00:01:00.000Z" },
+    { roomVersion: 3, actorType: "participant", actorName: "Ata", summary: "Ata approved the final decision.", createdAt: "2026-08-30T02:00:00.000Z" },
+    { roomVersion: 4, actorType: "participant", actorName: "Ata", summary: "The final decision was finalized.", createdAt: "2026-08-30T02:00:01.000Z" },
+  ],
 };
 
 describe("generateMeetingReportPdf", () => {
@@ -101,9 +107,19 @@ describe("generateMeetingReportPdf", () => {
       ...fixtureReport,
       keyInputs: [], constraints: [], proposalsConsidered: [], concernsRaised: [], resolvedConcerns: [],
       acceptedTradeoffs: [], alignment: [], dissent: [], unresolvedWarnings: [], expertAdvice: [],
-      actionItems: [], owners: [], deadlines: [], approvals: [],
+      actionItems: [], owners: [], deadlines: [], approvals: [], activityLog: [],
     };
     const bytes = await generateMeetingReportPdf(empty);
     expect(bytes.length).toBeGreaterThan(500);
+  });
+
+  it("renders every activity log entry, in order, with its actor and room version", async () => {
+    const bytes = await generateMeetingReportPdf(fixtureReport);
+    const text = extractDecompressedText(bytes);
+    expect(text).toContain("Full Activity Log");
+    for (const entry of fixtureReport.activityLog) {
+      expect(text).toContain(entry.summary);
+      expect(text).toContain(`v${entry.roomVersion}`);
+    }
   });
 });

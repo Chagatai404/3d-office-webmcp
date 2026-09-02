@@ -18,6 +18,12 @@ const INK = rgb(0.1, 0.1, 0.12);
 const MUTED = rgb(0.4, 0.4, 0.45);
 const RULE = rgb(0.82, 0.82, 0.85);
 
+function formatTimestamp(isoTimestamp: string): string {
+  const parsed = new Date(isoTimestamp);
+  if (Number.isNaN(parsed.getTime())) return isoTimestamp;
+  return parsed.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+}
+
 function wrapLines(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
   const paragraphs = text.split(/\r?\n/);
   const lines: string[] = [];
@@ -256,11 +262,12 @@ export async function generateMeetingReportPdf(report: MeetingReport): Promise<U
   }
   w.spacer(10);
 
-  w.subheading("Provenance");
-  w.paragraph(`${report.provenanceSummary.totalEvents} recorded event${report.provenanceSummary.totalEvents === 1 ? "" : "s"}.`, { size: 9.5, color: MUTED });
-  const actionCounts = Object.entries(report.provenanceSummary.byAction).sort(([a], [b]) => a.localeCompare(b));
-  for (const [action, count] of actionCounts) {
-    w.bullet(`${action}: ${count}`);
+  w.subheading("Full Activity Log");
+  w.paragraph(`${report.provenanceSummary.totalEvents} recorded event${report.provenanceSummary.totalEvents === 1 ? "" : "s"}, in order.`, { size: 9.5, color: MUTED });
+  w.spacer(4);
+  if (report.activityLog.length === 0) w.emptyState("No activity was recorded.");
+  for (const entry of report.activityLog) {
+    w.bullet(`[v${entry.roomVersion}] ${formatTimestamp(entry.createdAt)} — ${entry.summary}`);
   }
   w.spacer(14);
   w.paragraph(`Decision hash: ${report.decisionHash}`, { size: 8.5, color: MUTED });

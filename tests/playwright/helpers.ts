@@ -73,7 +73,29 @@ export async function toolNames(page: Page) {
   );
 }
 
+/**
+ * A tool that was present a moment ago (an `expect.poll` on `toolNames`
+ * already confirmed it) can still be momentarily absent from the very next
+ * `getTools()` snapshot: React's registration effect unregisters the old
+ * tool set and re-registers the new one as two separate steps, and a
+ * capability-changing action (claiming a seat, admitting someone, a phase
+ * advance) can land in between them. This is the same "snapshot goes stale"
+ * timing `docs/webmcp-demo.md` documents for the real Chrome implementation,
+ * reproduced here by the test shim. A short retry rides out that gap without
+ * masking a tool that is genuinely never registered.
+ */
+async function hasTool(page: Page, name: string): Promise<boolean> {
+  return page.evaluate(
+    async (toolName) => (await document.modelContext!.getTools()).some((candidate) => candidate.name === toolName),
+    name,
+  );
+}
+
 export async function executeTool(page: Page, name: string, input: unknown) {
+  const deadline = Date.now() + 2000;
+  while (!(await hasTool(page, name)) && Date.now() < deadline) {
+    await page.waitForTimeout(100);
+  }
   return page.evaluate(async ({ toolName, toolInput }) => {
     const modelContext = document.modelContext!;
     const tool = (await modelContext.getTools()).find((candidate) => candidate.name === toolName);

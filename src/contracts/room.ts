@@ -464,6 +464,24 @@ export const activityEventSchema = z
   .strict();
 export type ActivityEvent = z.infer<typeof activityEventSchema>;
 
+/**
+ * One human-readable line of `MeetingReport.activityLog` (A8) -- the same
+ * projection `computeRoomUpdates` (`src/domain/rooms/room-updates.ts`) builds
+ * for `get_room_updates`, reused here so the report's full chronological
+ * account of every participant action is derived once, not reconstructed
+ * per consumer.
+ */
+export const reportActivityEntrySchema = z
+  .object({
+    roomVersion: z.number().int().nonnegative(),
+    actorType: actorTypeSchema,
+    actorName: z.string().nullable(),
+    summary: z.string().min(1),
+    createdAt: timestampSchema,
+  })
+  .strict();
+export type ReportActivityEntry = z.infer<typeof reportActivityEntrySchema>;
+
 export const claimSeatInputSchema = z
   .object({
     seatId: idSchema,
@@ -854,18 +872,20 @@ export const meetingReportSchema = z
     approvals: z.array(approvalSchema),
     decisionHash: z.string().min(1),
     finalizedAt: timestampSchema,
-    /**
-     * Deliberately concise -- an event-count-by-action summary, not the
-     * full audit trail. The full line-by-line history remains available
-     * from `get_decision_record` / `DecisionRecord.provenance` for anyone
-     * who wants it; a human-facing report is not the place to dump it.
-     */
+    /** An event-count-by-action summary, kept alongside `activityLog` for callers that only need volume, not narrative. */
     provenanceSummary: z
       .object({
         totalEvents: z.number().int().nonnegative(),
         byAction: z.record(z.string(), z.number().int().nonnegative()),
       })
       .strict(),
+    /**
+     * The full chronological, human-readable account of every recorded
+     * action in the room -- who did what and when, from creation through
+     * finalization. This is what makes the report a complete record of how
+     * the decision was reached, not just its outcome.
+     */
+    activityLog: z.array(reportActivityEntrySchema),
   })
   .strict();
 export type MeetingReport = z.infer<typeof meetingReportSchema>;

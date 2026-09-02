@@ -130,7 +130,20 @@ describe.sequential("A6: admission accepts an explicit role and decision role", 
     if (!position.ok) throw new Error(position.error.message);
     const ready = await markMyInputReady(owner.repository, room.roomId, ctx(owner, position.roomVersion));
     if (!ready.ok) throw new Error(ready.error.message);
-    const toProposals = await advanceRoomPhase(owner.repository, room.roomId, "proposals", ctx(owner, ready.roomVersion));
+
+    // Deniz was admitted straight to decision_maker, so she is now a
+    // required approver too (see `derive_owner_participant_authority`) and
+    // must publish a position and mark ready before Input can advance.
+    const denizPosition = await addParticipantPosition(
+      maya.repository, room.roomId,
+      { summary: "Fits within available capacity.", category: "outcome", priority: "high", constraints: [] },
+      ctx(maya, ready.roomVersion),
+    );
+    if (!denizPosition.ok) throw new Error(denizPosition.error.message);
+    const denizReady = await markMyInputReady(maya.repository, room.roomId, ctx(maya, denizPosition.roomVersion));
+    if (!denizReady.ok) throw new Error(denizReady.error.message);
+
+    const toProposals = await advanceRoomPhase(owner.repository, room.roomId, "proposals", ctx(owner, denizReady.roomVersion));
     if (!toProposals.ok) throw new Error(toProposals.error.message);
 
     snap = await snapshot(owner, room.roomId);

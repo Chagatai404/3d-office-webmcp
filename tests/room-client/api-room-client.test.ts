@@ -153,6 +153,7 @@ describe("ApiRoomClient canonical report", () => {
       decisionHash: "sha256:report",
       finalizedAt: "2026-09-01T00:00:00.000Z",
       provenanceSummary: { totalEvents: 0, byAction: {} },
+      activityLog: [],
     };
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       ok: true,

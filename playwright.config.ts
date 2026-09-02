@@ -24,6 +24,7 @@ export default defineConfig({
       ALLOW_DEMO_PHASE_TRANSITIONS: "true",
       ALLOW_DEMO_RESET: "true",
       E2E_ROOM_HARNESS: "true",
+      PLAYWRIGHT_DIST_DIR: ".next-e2e",
     },
     url: `${baseURL}/room/demo`,
     reuseExistingServer: false,
