@@ -182,6 +182,20 @@ test("equal_authority_consensus: freezing requires every active decision-maker's
   await expect(owner.getByTestId("positions")).toContainText("Ship a reduced onboarding scope on time.");
   await owner.getByTestId("mark-ready").click();
   await expect(owner.getByTestId("last-action")).toHaveText("Input marked ready.");
+
+  // Bob is now a required approver too (see `derive_owner_participant_authority`),
+  // so -- like the owner -- he must publish a position and mark ready before
+  // Input can advance.
+  await callTool(bob, "share_my_context", {
+    summary: "Support the reduced onboarding scope.",
+    category: "outcome",
+    priority: "high",
+    constraints: [],
+  });
+  await expect(bob.getByTestId("positions")).toContainText("Support the reduced onboarding scope.");
+  await bob.getByTestId("mark-ready").click();
+  await expect(bob.getByTestId("last-action")).toHaveText("Input marked ready.");
+
   await owner.getByTestId("advance-room-phase").click();
   await expect(owner.getByTestId("room-phase")).toHaveText("proposals");
   const proposal = await callTool(owner, "suggest_option", {

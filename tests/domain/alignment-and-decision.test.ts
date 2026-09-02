@@ -488,7 +488,20 @@ describe.sequential("policy-aware alignment and finalization", () => {
         mutation(owner.userId, policy.roomVersion),
       );
       if (!promoteAlice.ok) throw new Error(promoteAlice.error.message);
-      const { proposalId, version } = await advanceToVoting(created.roomId, promoteAlice.roomVersion);
+
+      // Alice is now a required approver (see `derive_owner_participant_authority`),
+      // so -- like the owner -- she must publish a position and mark ready
+      // before Input can advance.
+      const alicePosition = await addParticipantPosition(
+        alice.repository, created.roomId,
+        { summary: "Support a reduced onboarding scope.", category: "outcome", priority: "high", constraints: [] },
+        mutation(alice.userId, promoteAlice.roomVersion),
+      );
+      if (!alicePosition.ok) throw new Error(alicePosition.error.message);
+      const aliceReady = await markMyInputReady(alice.repository, created.roomId, mutation(alice.userId, alicePosition.roomVersion));
+      if (!aliceReady.ok) throw new Error(aliceReady.error.message);
+
+      const { proposalId, version } = await advanceToVoting(created.roomId, aliceReady.roomVersion);
       return { ...created, proposalId, version };
     }
 

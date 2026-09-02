@@ -299,6 +299,21 @@ describe.sequential("owner lifecycle: lock, removal, ownership transfer", () => 
       const oldOwner = room?.participants.find((p) => p.name === "Maya");
       expect(oldOwner).toMatchObject({ meetingRole: "participant", decisionRole: "decision_maker" });
 
+      // `required_for_approval` is not exposed on the client contract, but
+      // `advance_room_phase` requires at least one `kind = 'human'` row with
+      // it set to leave Input (see its guard: "The room has no participant
+      // whose approval is required."). `create_room` sets it for the
+      // creator; a transfer must carry it to the new owner or the room can
+      // become permanently unable to progress.
+      const requiredForApproval = await admin
+        .from("participants")
+        .select("id, required_for_approval")
+        .in("id", [created.aliceParticipantId, created.ownerParticipantId]);
+      expect(
+        requiredForApproval.data?.find((row) => row.id === created.aliceParticipantId)
+          ?.required_for_approval,
+      ).toBe(true);
+
       const events = await admin
         .from("audit_events")
         .select("action")
