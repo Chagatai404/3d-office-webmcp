@@ -28,3 +28,5 @@ next-env.d.ts
 /generated
 /public/models/_scratch
 *.blend1
+
+/demo-video

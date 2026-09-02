@@ -26,6 +26,7 @@ import {
   proposeParticipantTradeoff,
   raiseParticipantObjection,
   rejectJoinRequest,
+  resolveConcernAsOwner,
   resolveParticipantObjection,
   setDecisionPolicy,
   setParticipantDecisionRole,
@@ -710,6 +711,26 @@ export function createRoomWebMcpTools(context: RoomWebMcpContext): Record<string
           );
         }
         return resolveParticipantObjection(context.repository, context.roomId, input, await context.mutationContext());
+      }),
+    },
+
+    resolve_concern_as_owner: {
+      name: "resolve_concern_as_owner",
+      description:
+        "As the room owner, explicitly resolve an open concern raised by a different participant -- including one raised by a simulated colleague, who has no way to act for themselves. `resolve_my_concern` refuses this on purpose; this is the deliberate escape hatch for a concern its raiser cannot or will not close, so the room is never stuck on someone else's objection. This is a visible, audited override, not a quiet bypass: it requires a resolution note, and only works for the room owner while `decisionPolicy` is `owner_decides` -- under `equal_authority_consensus` no single participant holds this authority, so use `respond_to_concern` to propose something the raiser can accept instead.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          conflictId: { type: "string", minLength: 1 },
+          resolutionNote: { type: "string", minLength: 1 },
+        },
+        required: ["conflictId", "resolutionNote"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: false, untrustedContentHint: true },
+      execute: asClaimedParticipant(async (rawInput) => {
+        const input = resolveObjectionInputSchema.parse(rawInput);
+        return resolveConcernAsOwner(context.repository, context.roomId, input, await context.mutationContext());
       }),
     },
 

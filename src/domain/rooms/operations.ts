@@ -575,6 +575,50 @@ export async function resolveParticipantObjection(
 }
 
 /**
+ * The room's underlying resolution action already lets any active
+ * participant close any open concern -- `resolve_my_concern` narrows that
+ * to self-raised concerns only so no WebMCP tool call can quietly close
+ * someone else's objection on their behalf. This is the deliberate escape
+ * hatch for the one case that narrowing can deadlock: a concern raised by a
+ * participant who cannot or will not close it themselves (a simulated
+ * colleague with no response mechanism, someone who has left). It exists
+ * only where a single participant genuinely holds that authority -- the
+ * room owner under `owner_decides` -- because `equal_authority_consensus`
+ * has no such role: every decision-maker's objection there is meant to
+ * require their own consent, not a peer's override.
+ */
+export async function resolveConcernAsOwner(
+  repository: RoomRepository,
+  roomId: string,
+  input: ResolveObjectionInput,
+  context: MutationContext,
+): Promise<ActionResult> {
+  const parsed = resolveObjectionInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return failure("VALIDATION_ERROR", "Conflict resolution input is invalid.", context.expectedRoomVersion);
+  }
+  const room = await prepareMutation(repository, roomId, context, ["deliberation"]);
+  if ("ok" in room) return room;
+  if (room.decisionPolicy !== "owner_decides") {
+    return failure(
+      "NOT_AUTHORIZED",
+      "No single participant can override another's concern under equal_authority_consensus.",
+      room.version,
+      "Use `resolve_my_concern` on your own concerns, or `respond_to_concern` to propose a trade-off the raiser can accept.",
+    );
+  }
+  const self = room.participants.find((participant) => participant.id === room.selfParticipantId);
+  if (!self || self.id !== room.ownerParticipantId || self.meetingRole !== "owner") {
+    return failure(
+      "NOT_AUTHORIZED",
+      "Only the current room owner can override another participant's concern.",
+      room.version,
+    );
+  }
+  return repository.resolveObjection(roomId, parsed.data, context);
+}
+
+/**
  * A claimed human expresses or updates their own alignment on the active
  * proposal during the Alignment phase (internal phase enum: `voting`).
  *

@@ -140,6 +140,26 @@ export function IssuesWorkspace({ tab }: { tab: IssuesWorkspaceTab }) {
         </p>
 
         <ConflictList room={room} conflicts={theirConflicts} />
+
+        {/* The room lets any active participant resolve any open concern
+            explicitly -- raising and resolving are deliberately decoupled, so
+            a concern raised by someone unable or unwilling to close it
+            themselves (a simulated colleague, someone who has left, etc.)
+            never leaves the room stuck. That action belongs here, on the
+            raiser's own tab, not hidden behind a separate "Your input" tab. */}
+        {theirConflicts.length > 0 ? (
+          <ResolutionControls
+            fieldId={fieldId}
+            conflicts={theirConflicts}
+            self={self}
+            phase={room.phase}
+            resolutionNotes={resolutionNotes}
+            setResolutionNotes={setResolutionNotes}
+            resolutionPendingId={resolutionPendingId}
+            onResolve={handleResolve}
+            result={resolutionResult}
+          />
+        ) : null}
       </section>
     );
   }
@@ -273,59 +293,103 @@ export function IssuesWorkspace({ tab }: { tab: IssuesWorkspaceTab }) {
         <ActionFeedback result={tradeoffResult} />
       </form>
 
-      <section
-        className="decision-section"
-        aria-labelledby="resolution-heading"
-        data-testid="resolution-panel"
-      >
-        <h3 className="panel-subheading" id="resolution-heading">
-          Explicit objection resolution
-        </h3>
-        {openConflicts.length === 0 ? (
-          <p className="panel-empty">No open objections need resolution.</p>
-        ) : (
-          <ul className="decision-list">
-            {openConflicts.map((conflict) => (
-              <li
-                key={conflict.id}
-                className="decision-list-item"
-                data-board-item={conflict.id}
+      <ResolutionControls
+        fieldId={fieldId}
+        conflicts={openConflicts}
+        self={self}
+        phase={room.phase}
+        resolutionNotes={resolutionNotes}
+        setResolutionNotes={setResolutionNotes}
+        resolutionPendingId={resolutionPendingId}
+        onResolve={handleResolve}
+        result={resolutionResult}
+      />
+    </section>
+  );
+}
+
+/**
+ * Explicit resolution is deliberately not scoped to the concern's raiser:
+ * the room lets any active participant close any open concern, so this
+ * renders identically whether it is reached from the viewer's own tab (all
+ * open concerns) or from another participant's tab (just theirs) -- see
+ * `resolve_participant_objection` in the Supabase migrations for the
+ * server-side rule this mirrors.
+ */
+function ResolutionControls({
+  fieldId,
+  conflicts,
+  self,
+  phase,
+  resolutionNotes,
+  setResolutionNotes,
+  resolutionPendingId,
+  onResolve,
+  result,
+}: {
+  fieldId: string;
+  conflicts: readonly Conflict[];
+  self: unknown;
+  phase: string;
+  resolutionNotes: Record<string, string>;
+  setResolutionNotes: (updater: (current: Record<string, string>) => Record<string, string>) => void;
+  resolutionPendingId: string | null;
+  onResolve: (conflictId: string) => void;
+  result: ActionResult<unknown> | null;
+}) {
+  return (
+    <section
+      className="decision-section"
+      aria-labelledby={`${fieldId}-resolution-heading`}
+      data-testid="resolution-panel"
+    >
+      <h3 className="panel-subheading" id={`${fieldId}-resolution-heading`}>
+        Explicit objection resolution
+      </h3>
+      {conflicts.length === 0 ? (
+        <p className="panel-empty">No open objections need resolution.</p>
+      ) : (
+        <ul className="decision-list">
+          {conflicts.map((conflict) => (
+            <li
+              key={conflict.id}
+              className="decision-list-item"
+              data-board-item={conflict.id}
+            >
+              <span className={conflict.severity === "blocking" ? "tag tag-risk" : "tag tag-warning"}>
+                {conflict.severity === "blocking" ? "Blocking" : "Warning"}
+              </span>
+              <p>{conflict.reason}</p>
+              <label htmlFor={`${fieldId}-${conflict.id}-resolution`}>Resolution note</label>
+              <textarea
+                id={`${fieldId}-${conflict.id}-resolution`}
+                rows={2}
+                value={resolutionNotes[conflict.id] ?? ""}
+                onChange={(event) =>
+                  setResolutionNotes((current) => ({
+                    ...current,
+                    [conflict.id]: event.target.value,
+                  }))
+                }
+              />
+              <button
+                className="button-quiet"
+                type="button"
+                disabled={
+                  !self ||
+                  phase !== "deliberation" ||
+                  resolutionPendingId !== null ||
+                  (resolutionNotes[conflict.id]?.trim() ?? "") === ""
+                }
+                onClick={() => onResolve(conflict.id)}
               >
-                <span className={conflict.severity === "blocking" ? "tag tag-risk" : "tag tag-warning"}>
-                  {conflict.severity === "blocking" ? "Blocking" : "Warning"}
-                </span>
-                <p>{conflict.reason}</p>
-                <label htmlFor={`${fieldId}-${conflict.id}-resolution`}>Resolution note</label>
-                <textarea
-                  id={`${fieldId}-${conflict.id}-resolution`}
-                  rows={2}
-                  value={resolutionNotes[conflict.id] ?? ""}
-                  onChange={(event) =>
-                    setResolutionNotes((current) => ({
-                      ...current,
-                      [conflict.id]: event.target.value,
-                    }))
-                  }
-                />
-                <button
-                  className="button-quiet"
-                  type="button"
-                  disabled={
-                    !self ||
-                    room.phase !== "deliberation" ||
-                    resolutionPendingId !== null ||
-                    (resolutionNotes[conflict.id]?.trim() ?? "") === ""
-                  }
-                  onClick={() => void handleResolve(conflict.id)}
-                >
-                  {resolutionPendingId === conflict.id ? "Resolving..." : "Resolve explicitly"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <ActionFeedback result={resolutionResult} />
-      </section>
+                {resolutionPendingId === conflict.id ? "Resolving..." : "Resolve explicitly"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ActionFeedback result={result} />
     </section>
   );
 }

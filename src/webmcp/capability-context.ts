@@ -143,6 +143,10 @@ export const TOOL_AVAILABILITY: Record<string, Predicate> = {
   raise_concern: asClaimedInPhase("deliberation"),
   respond_to_concern: asClaimedInPhase("deliberation"),
   resolve_my_concern: asClaimedInPhase("deliberation"),
+  // Owner-only, and only where a single participant genuinely holds this
+  // authority -- see `resolveConcernAsOwner` in src/domain/rooms/operations.ts.
+  resolve_concern_as_owner: (c) =>
+    asOwnerNotFinalized(c) && c.phase === "deliberation" && c.decisionPolicy === "owner_decides",
   express_my_alignment: asClaimedInPhase("voting"),
   approve_final_decision: (c) =>
     inRoom(c) && c.hasClaimedSeat && c.phase === "approval" && c.isRequiredApprover,
@@ -213,6 +217,7 @@ export const MUTATION_TOOL_NAMES: ReadonlySet<string> = new Set([
   "raise_concern",
   "respond_to_concern",
   "resolve_my_concern",
+  "resolve_concern_as_owner",
   "express_my_alignment",
   "approve_final_decision",
   "request_source_upload",
