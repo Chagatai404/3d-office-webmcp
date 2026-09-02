@@ -121,12 +121,38 @@ describe("computeMeetingReport", () => {
     expect(first).toMatch(/1 recorded dissent note/);
   });
 
-  it("summarizes provenance by action count instead of dumping the full trail", () => {
+  it("summarizes provenance by action count", () => {
     const room = buildRoomStateFixture({ phase: "finalized", participants: [owner, engineer], proposals: [finalProposal] });
     const report = computeMeetingReport(room, buildDecisionRecordFixture());
     expect(report.provenanceSummary.totalEvents).toBe(4);
     expect(report.provenanceSummary.byAction).toEqual({
       "room.created": 1, "proposal.submitted": 1, "approval.recorded": 1, "decision.finalized": 1,
+    });
+  });
+
+  it("builds a full, human-readable, chronological activity log from room activity", () => {
+    const record = buildDecisionRecordFixture();
+    const room = buildRoomStateFixture({
+      phase: "finalized",
+      participants: [owner, engineer],
+      proposals: [finalProposal],
+      activity: record.provenance,
+    });
+    const report = computeMeetingReport(room, record);
+
+    expect(report.activityLog).toHaveLength(4);
+    expect(report.activityLog.map((entry) => entry.summary)).toEqual([
+      "Ata created the room.",
+      "Maya submitted a proposal.",
+      "Ata approved the final decision.",
+      "The final decision was finalized.",
+    ]);
+    expect(report.activityLog[0]).toEqual({
+      roomVersion: 1,
+      actorType: "participant",
+      actorName: "Ata",
+      summary: "Ata created the room.",
+      createdAt: "2026-08-30T00:00:00.000Z",
     });
   });
 });

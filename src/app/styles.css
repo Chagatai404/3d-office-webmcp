@@ -749,8 +749,12 @@ select {
 
 .participant-status {
   margin: 0;
-  color: var(--muted-2);
+  color: var(--muted);
   font-size: 0.76rem;
+}
+
+.meeting-drawer-dark .participant-status {
+  color: rgba(241, 238, 231, 0.68);
 }
 
 .participant-tags {
@@ -1646,6 +1650,11 @@ select {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  /* `.chrome-toggle` floats independently in this same top-right corner (on
+     purpose -- it has to survive hiding this toolbar), so this row's own
+     last button never gets the corner to itself. Reserve its width plus a
+     little breathing room so the two never sit on top of each other. */
+  margin-right: 3.2rem;
 }
 
 .toolbar-agents {
@@ -1695,7 +1704,7 @@ select {
 
 .toolbar-attention-active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 .toolbar-sources {
@@ -1743,8 +1752,8 @@ select {
 .toolbar-help {
   display: grid;
   place-items: center;
-  width: 2.6rem;
-  height: 2.6rem;
+  width: 2.75rem;
+  height: 2.75rem;
   padding: 0;
   border: 0;
   border-radius: 0.9rem;
@@ -2980,6 +2989,14 @@ select {
   gap: 0.15rem;
   padding: 0.55rem 0.6rem;
   overflow-x: auto;
+  /* Matches `.board-panel-tabs`: a stray trackpad swipe or touch drag can
+     still scroll this row, but it reads as one tab bar rather than a bare
+     scroll pane with a visible track. */
+  scrollbar-width: none;
+}
+
+.workspace-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .workspace-tab {
@@ -3043,6 +3060,11 @@ select {
   border-top: 1px solid var(--border);
   background: rgba(246, 244, 238, 0.7);
   overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.meeting-controls::-webkit-scrollbar {
+  display: none;
 }
 
 .meeting-control-button {
@@ -3120,6 +3142,11 @@ select {
 @media (max-width: 48rem) {
   .meeting-toolbar {
     padding: 0.9rem;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-side {
+    flex-wrap: wrap;
   }
 
   .toolbar-chip,

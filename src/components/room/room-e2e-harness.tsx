@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ActionResult, DemoHumanRole, JoinRequest, RoomPhase } from "@/contracts/room";
+import type {
+  ActionResult,
+  DemoHumanRole,
+  JoinRequest,
+  MeetingSourceVisibility,
+  RoomPhase,
+} from "@/contracts/room";
 import {
   subscribeToUiConfirmation,
   type ConfirmationRequest,
@@ -23,6 +29,8 @@ export function RoomE2EHarness() {
   const [status, setStatus] = useState("Connected");
   const [soloRole, setSoloRole] = useState<DemoHumanRole>("product");
   const [webMcpConfirmation, setWebMcpConfirmation] = useState<ConfirmationRequest | null>(null);
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [sourceVisibility, setSourceVisibility] = useState<MeetingSourceVisibility>("shared_room");
 
   useEffect(
     () => subscribeToUiConfirmation((request) => setWebMcpConfirmation(request)),
@@ -79,7 +87,7 @@ export function RoomE2EHarness() {
           ? "approval"
           : null;
 
-  async function run(action: Promise<ActionResult>) {
+  async function run<T>(action: Promise<ActionResult<T>>) {
     setStatus("Saving…");
     try {
       const result = await action;
@@ -89,6 +97,12 @@ export function RoomE2EHarness() {
       setStatus(error instanceof Error ? error.message : "Action failed.");
       throw error;
     }
+  }
+
+  async function attachSource() {
+    if (!sourceFile) return;
+    await run(actions.uploadMeetingSource({ file: sourceFile, visibility: sourceVisibility }));
+    setSourceFile(null);
   }
 
   async function confirmWebMcpParticipantAction() {
@@ -427,12 +441,48 @@ export function RoomE2EHarness() {
         </button>
       ) : null}
 
+      {self && room.phase === "input" ? (
+        <section data-testid="source-upload">
+          <label>
+            Source file
+            <input
+              type="file"
+              data-testid="source-file"
+              onChange={(event) => setSourceFile(event.currentTarget.files?.[0] ?? null)}
+            />
+          </label>
+          <label>
+            Visibility
+            <select
+              data-testid="source-visibility"
+              value={sourceVisibility}
+              onChange={(event) => setSourceVisibility(event.target.value as MeetingSourceVisibility)}
+            >
+              <option value="shared_room">shared_room</option>
+              <option value="private_to_participant">private_to_participant</option>
+            </select>
+          </label>
+          <button type="button" data-testid="attach-source" onClick={() => void attachSource()}>
+            Attach source
+          </button>
+        </section>
+      ) : null}
+
       <section>
         <ul data-testid="positions">
           {room.positions.map((position) => <li key={position.id}>{position.summary}</li>)}
         </ul>
         <ul data-testid="constraints">
           {room.constraints.map((constraint) => <li key={constraint.id}>{constraint.text}</li>)}
+        </ul>
+        <ul data-testid="sources">
+          {room.sources.filter((source) => source.status !== "removed").map((source) => (
+            <li key={source.id}>
+              {source.filename}
+              <span data-testid={`source-status-${source.id}`}>{source.status}</span>
+              <span data-testid={`source-visibility-${source.id}`}>{source.visibility}</span>
+            </li>
+          ))}
         </ul>
         <ul data-testid="proposals">
           {room.proposals.map((proposal) => <li key={proposal.id}>{proposal.title}: {proposal.summary} ({proposal.status})</li>)}

@@ -1,4 +1,5 @@
 import type { DecisionPolicy, DecisionRecord, MeetingReport, RoomState } from "@/contracts/room";
+import { computeRoomUpdates } from "@/domain/rooms/room-updates";
 
 /**
  * A8: the single canonical final-report computation
@@ -81,5 +82,12 @@ export function computeMeetingReport(room: RoomState, record: DecisionRecord): M
     decisionHash: decision.decisionHash,
     finalizedAt: record.finalizedAt,
     provenanceSummary: { totalEvents: record.provenance.length, byAction },
+    activityLog: computeRoomUpdates(room, -1).map((update) => ({
+      roomVersion: update.roomVersion,
+      actorType: update.actorType,
+      actorName: update.actorName,
+      summary: update.summary,
+      createdAt: update.createdAt,
+    })),
   };
 }
