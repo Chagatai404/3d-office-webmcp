@@ -11,7 +11,7 @@ Primary references: [Chrome WebMCP documentation](https://developer.chrome.com/d
 
 ## For judges: the fast path
 
-- **Easiest:** open [3d-office-webmcp.vercel.app/room/demo](https://3d-office-webmcp.vercel.app/room/demo)
+- **Easiest:** open [quorummeet.vercel.app/room/demo](https://quorummeet.vercel.app/room/demo)
   in **ChatGPT's in-app browser** (WebMCP support is built in) and just talk to it -- no flags,
   no setup.
 - **Alternative:** the same production URL in **Chrome 149+** with WebMCP enabled (exact flags
@@ -34,7 +34,7 @@ WebMCP is experimental. Chrome 149 introduced the origin trial and DevTools supp
 2. Open `chrome://flags/#enable-webmcp-testing` and enable WebMCP testing.
 3. For the built-in DevTools inspector, also enable `chrome://flags/#devtools-webmcp-support`.
 4. Relaunch Chrome.
-5. Open [3d-office-webmcp.vercel.app](https://3d-office-webmcp.vercel.app/) (or `npm run dev`
+5. Open [quorummeet.vercel.app](https://quorummeet.vercel.app/) (or `npm run dev`
    and `http://localhost:3000` for a local build) in a normal top-level tab.
 6. Open DevTools, select **Application**, then open the **WebMCP** section. It shows registered tools, schemas, invocation history, status, and returned payloads.
 7. Alternatively, install Google's Model Context Tool Inspector extension and use its agent-style chat to run the natural-language prompts below.

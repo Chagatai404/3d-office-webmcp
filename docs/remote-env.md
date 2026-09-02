@@ -1,9 +1,9 @@
 # Remote Env Setup
 
-Use your `3d-office-webmcp` Supabase project.
+Use your `quorum` Supabase project.
 
 ```text
-Project: 3d-office-webmcp
+Project: quorum
 Project ref: PASTE_YOUR_PROJECT_REF
 URL: https://PASTE_YOUR_PROJECT_REF.supabase.co
 ```

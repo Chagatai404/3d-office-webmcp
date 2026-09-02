@@ -1,14 +1,10 @@
 # Quorum: Agent-Native Decision Rooms
 
-> The repository and live deployment keep the working slug `3d-office-webmcp`
-> (GitHub repo name, Vercel domain, `package.json` name) — only the product's
-> display name changed. Every link below still works unchanged.
-
 A shared decision room where several people, each with their own authority and
 their own browser agent, negotiate a real decision together — and where the
 final call still belongs to a specific accountable human.
 
-**Agents deliberate. Humans intervene. Leaders decide.**
+**Agents negotiate. Humans decide.**
 
 Real decisions rarely have one decision-maker. A release, a pricing change, a
 vendor pick, a launch call — an engineer, a designer, a growth lead, and a
@@ -20,12 +16,12 @@ identities, disagreements, or approval authority into one AI.
 
 ## Live demo
 
-- **App:** [3d-office-webmcp.vercel.app](https://3d-office-webmcp.vercel.app/)
-- **Judge route (deterministic):** [3d-office-webmcp.vercel.app/room/demo](https://3d-office-webmcp.vercel.app/room/demo)
+- **App:** [quorummeet.vercel.app](https://quorummeet.vercel.app/)
+- **Judge route (deterministic):** [quorummeet.vercel.app/room/demo](https://quorummeet.vercel.app/room/demo)
 
 ## Try it in under a minute
 
-1. Open the [judge route](https://3d-office-webmcp.vercel.app/room/demo).
+1. Open the [judge route](https://quorummeet.vercel.app/room/demo).
 2. Bring a WebMCP-capable browser agent to that page — either **ChatGPT's
    in-app browser** (WebMCP support built in) or **Chrome 149+** with WebMCP
    enabled (see [`docs/webmcp-demo.md`](docs/webmcp-demo.md) for exact flags).
@@ -303,6 +299,3 @@ Third-party 3D asset attribution (Poly Pizza, CC-BY) is in
 [`CREDITS.md`](CREDITS.md) and is also shown in-app, in the meeting room's
 Help drawer.
 
-Before submission, confirm on GitHub itself (not just this file) that the
-repository's **About** sidebar shows the detected license — this is a manual
-GitHub metadata check, not something this README can guarantee on its own.

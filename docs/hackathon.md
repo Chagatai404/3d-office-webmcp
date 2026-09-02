@@ -1,14 +1,14 @@
 # Hackathon submission checklist
 
 Final-pass control sheet for the OpenAI WebMCP Challenge submission of **Quorum: Agent-Native
-Decision Rooms** (repository/live URL slug: `3d-office-webmcp`). Canonical product/architecture
+Decision Rooms** (repository slug: `quorum-webmcp`; live URL: `quorummeet.vercel.app`). Canonical product/architecture
 background lives in [`../3d-office-webmcp-shared-context.md`](../3d-office-webmcp-shared-context.md)
 (historical — see its notice) and [`backend-integration.md`](backend-integration.md) (current).
 Devpost copy is in [`devpost-submission.md`](devpost-submission.md).
 
 ## 1. Submission requirements
 
-- [x] Working live URL — [3d-office-webmcp.vercel.app](https://3d-office-webmcp.vercel.app/)
+- [x] Working live URL — [quorummeet.vercel.app](https://quorummeet.vercel.app/)
 - [x] Public GitHub repository
 - [ ] License visibly detected by GitHub's **About** sidebar (manual check — see
       "Requires external verification" below; the `LICENSE` file itself is present and correct)

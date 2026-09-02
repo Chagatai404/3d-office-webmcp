@@ -115,9 +115,9 @@ reads, not decoration layered on top of a form.
 
 ## Links
 
-- **Live app:** https://3d-office-webmcp.vercel.app/
-- **Judge demo (deterministic):** https://3d-office-webmcp.vercel.app/room/demo
-- **GitHub repo:** https://github.com/Chagatai404/3d-office-webmcp
+- **Live app:** https://quorummeet.vercel.app/
+- **Judge demo (deterministic):** https://quorummeet.vercel.app/room/demo
+- **GitHub repo:** https://github.com/Chagatai404/quorum-webmcp
 - **YouTube demo:** `TODO: ADD FINAL PUBLIC YOUTUBE URL`
 
 ## Suggested Devpost tagline

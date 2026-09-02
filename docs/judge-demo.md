@@ -49,7 +49,7 @@ findings, while the Growth deadline stays visible as context.
 
 ## Before you start
 
-Open **[3d-office-webmcp.vercel.app/room/demo](https://3d-office-webmcp.vercel.app/room/demo)**
+Open **[quorummeet.vercel.app/room/demo](https://quorummeet.vercel.app/room/demo)**
 (a local dev server at `http://localhost:3000/room/demo` works identically if you're running
 the repo yourself). A WebMCP-capable browser agent automatically claims the Founder/Product
 Lead seat the first time it loads a never-claimed demo room -- there is no room ID or passcode
